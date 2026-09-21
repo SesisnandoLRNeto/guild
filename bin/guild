@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# guild: talk to one quartermaster, ship with a party of adventurers.
+# State lives in $GUILD_HOME (default ~/.guild). Sessions live in the tmux session "guild".
+set -euo pipefail
+
+GUILD_HOME="${GUILD_HOME:-$HOME/.guild}"
+GUILD_REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+SESSION="guild"
+QUESTS="$GUILD_HOME/quests"
+# Under ~/Workspace so new worktrees inherit Claude folder trust (no trust prompt per quest).
+WORKTREES="${GUILD_WORKTREES:-$HOME/Workspace/.guild-worktrees}"
+EVENTS="$GUILD_HOME/events.log"
+mkdir -p "$QUESTS" "$WORKTREES" "$GUILD_HOME/local"
+touch "$EVENTS"
+
+die() { echo "guild: $*" >&2; exit 1; }
+now() { date +%Y-%m-%dT%H:%M:%S; }
+qdir() { echo "$QUESTS/$1"; }
+need_quest() { [ -d "$(qdir "$1")" ] || die "no quest '$1'"; }
+current_quest() { echo "${1:-${GUILD_QUEST:-}}"; }
+
+usage() {
+  cat <<'EOF'
+guild up [dir]                      start or attach the guild tmux session (quartermaster in window "qm")
+guild quest <slug> --repo PATH [--base REF] [--harness claude|codex] [--model M] [--brief FILE]
+                                    create a worktree + branch quest/<slug> and launch an adventurer
+                                    (brief is read from stdin when --brief is not given)
+guild roster                        list quests and their state
+guild status <slug> <state> [note]  set state: working|blocked|needs-decision|done|failed|stopped
+guild wait [timeout-seconds]        block until a new event arrives, then print it (default 1800s)
+guild peek <slug> [lines]           show the last lines of an adventurer's screen
+guild send <slug> <message>         type a message into an adventurer's session
+guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
+guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
+EOF
+}
+
+event() { # slug state note
+  printf '%s\t%s\t%s\t%s\n' "$(now)" "$1" "$2" "${3:-}" >> "$EVENTS"
+}
+
+cmd_up() {
+  local dir="${1:-$HOME}"
+  if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    tmux new-session -d -s "$SESSION" -n qm -c "$dir" \
+      "GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster; exec \$SHELL"
+  fi
+  if [ -n "${TMUX:-}" ]; then tmux switch-client -t "$SESSION"; else tmux attach -t "$SESSION"; fi
+}
+
+# Resolve git identity + gh user from the repo's remote owner via local/identities.json.
+identity_for() { # repo -> prints "name|email|gh_user" or empty
+  local url owner
+  url=$(git -C "$1" remote get-url origin 2>/dev/null || true)
+  owner=$(echo "$url" | sed -E 's#^.*[:/]([^/]+)/[^/]+$#\1#')
+  python3 - "$GUILD_HOME/local/identities.json" "$owner" <<'PY'
+import json, sys, os
+path, owner = sys.argv[1], sys.argv[2]
+if not os.path.exists(path): sys.exit(0)
+ids = json.load(open(path))
+i = ids.get(owner) or ids.get("*")
+if i: print(f"{i.get('name','')}|{i.get('email','')}|{i.get('gh_user','')}")
+PY
+}
+
+# Claude asks "trust this folder?" for every new git checkout. A worktree is a copy of a repo the
+# guildmaster chose, so it gets the same trust, but only if that repo (or a parent folder) is trusted.
+inherit_trust() { # repo worktree
+  python3 - "$1" "$2" <<'PY'
+import json, os, sys, tempfile
+repo, wt = sys.argv[1], sys.argv[2]
+path = os.path.expanduser("~/.claude.json")
+if not os.path.exists(path): sys.exit(0)
+d = json.load(open(path))
+projects = d.setdefault("projects", {})
+p = repo
+while True:
+    if projects.get(p, {}).get("hasTrustDialogAccepted"):
+        break
+    parent = os.path.dirname(p)
+    if parent == p:
+        print(f"guild: {repo} is not trusted in Claude; the adventurer will ask once", file=sys.stderr)
+        sys.exit(0)
+    p = parent
+projects.setdefault(wt, {})["hasTrustDialogAccepted"] = True
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path))
+with os.fdopen(fd, "w") as f:
+    json.dump(d, f, indent=2)
+os.replace(tmp, path)
+PY
+}
+
+cmd_quest() {
+  local slug="${1:-}"; shift || true
+  [ -n "$slug" ] || die "quest needs a slug"
+  [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
+  local repo="" base="" harness="claude" model="" brief=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --base) base="$2"; shift 2 ;;
+      --harness) harness="$2"; shift 2 ;;
+      --model) model="$2"; shift 2 ;;
+      --brief) brief="$2"; shift 2 ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
+  [ -n "$repo" ] || die "quest needs --repo"
+  repo="$(cd "$repo" && git rev-parse --show-toplevel)" || die "not a git repo: $repo"
+  local q; q="$(qdir "$slug")"
+  [ -e "$q" ] && die "quest '$slug' already exists"
+  tmux has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+
+  if [ -z "$base" ]; then
+    git -C "$repo" fetch -q origin 2>/dev/null || true
+    base=$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD || true)
+    [ -n "$base" ] || base=$(git -C "$repo" symbolic-ref -q --short HEAD || echo HEAD)
+  fi
+  local wt="$WORKTREES/$(basename "$repo")-$slug"
+  git -C "$repo" worktree add -q -b "quest/$slug" "$wt" "$base"
+  inherit_trust "$repo" "$wt"
+
+  mkdir -p "$q"
+  if [ -n "$brief" ]; then cp "$brief" "$q/brief.md"; else cat > "$q/brief.md"; fi
+  [ -s "$q/brief.md" ] || die "empty brief"
+
+  local ident name="" email="" ghu=""
+  ident=$(identity_for "$repo")
+  [ -n "$ident" ] && IFS='|' read -r name email ghu <<< "$ident"
+
+  python3 - "$q/meta.json" <<PY
+import json
+json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "quest/$slug",
+           "base": "$base", "harness": "$harness", "model": "$model",
+           "identity": "$email", "gh_user": "$ghu", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
+PY
+
+  sed -e "s#{{SLUG}}#$slug#g" -e "s#{{QDIR}}#$q#g" -e "s#{{BASE}}#$base#g" -e "s#{{REPO}}#$repo#g" \
+    "$GUILD_REPO/prompts/adventurer.md" > "$q/prompt.md"
+
+  { echo "#!/usr/bin/env bash"
+    echo "cd '$wt'"
+    echo "export GUILD_QUEST='$slug' GUILD_HOME='$GUILD_HOME'"
+    [ -n "$name" ] && echo "export GIT_AUTHOR_NAME='$name' GIT_COMMITTER_NAME='$name'"
+    [ -n "$email" ] && echo "export GIT_AUTHOR_EMAIL='$email' GIT_COMMITTER_EMAIL='$email'"
+    [ -n "$ghu" ] && echo "export GH_TOKEN=\"\$(gh auth token --user '$ghu')\""
+    case "$harness" in
+      claude)
+        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \\"
+        echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
+        echo "  'Start the quest. Your brief is in $q/brief.md'" ;;
+      codex)
+        echo "codex ${model:+-m '$model'} \"\$(cat '$q/prompt.md')\"" ;;
+      *) die "unknown harness $harness" ;;
+    esac
+    echo "exec \$SHELL"
+  } > "$q/launch.sh"
+  chmod +x "$q/launch.sh"
+
+  printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
+  event "$slug" working "launched ($harness${model:+ $model}) in $wt"
+  tmux new-window -d -t "$SESSION" -n "$slug" "bash '$q/launch.sh'"
+  echo "quest $slug: $harness${model:+/$model} on $(basename "$repo") [$base] identity=${email:-git default}"
+}
+
+cmd_roster() {
+  printf '%-28s %-22s %-18s %-15s %s\n' QUEST REPO HARNESS STATE NOTE
+  local d
+  for d in "$QUESTS"/*/; do
+    [ -f "$d/meta.json" ] || continue
+    python3 - "$d" <<'PY'
+import json, sys, os
+d = sys.argv[1]
+m = json.load(open(os.path.join(d, "meta.json")))
+state, note, _ = (open(os.path.join(d, "status")).read().rstrip("\n").split("\t") + ["", "", ""])[:3]
+h = m["harness"] + ("/" + m["model"] if m.get("model") else "")
+print(f'{m["slug"]:<28} {os.path.basename(m["repo"]):<22} {h:<18} {state:<15} {note[:70]}')
+PY
+  done
+}
+
+cmd_status() {
+  local slug="$1" state="$2" note="${3:-}"
+  need_quest "$slug"
+  case "$state" in working|blocked|needs-decision|done|failed|stopped) ;; *) die "bad state $state" ;; esac
+  printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
+  event "$slug" "$state" "$note"
+}
+
+cmd_wait() {
+  local timeout="${1:-1800}" cursor_file="$GUILD_HOME/.wait-cursor" cursor size waited=0
+  cursor=$(cat "$cursor_file" 2>/dev/null || echo 0)
+  while :; do
+    size=$(wc -c < "$EVENTS" | tr -d ' ')
+    if [ "$size" -gt "$cursor" ]; then
+      tail -c +"$((cursor + 1))" "$EVENTS"
+      echo "$size" > "$cursor_file"
+      return 0
+    fi
+    [ "$waited" -ge "$timeout" ] && { echo "wait: no events in ${timeout}s"; return 0; }
+    sleep 2; waited=$((waited + 2))
+  done
+}
+
+cmd_peek() { need_quest "$1"; tmux capture-pane -p -t "$SESSION:$1" -S "-${2:-40}"; }
+
+cmd_send() {
+  need_quest "$1"
+  tmux send-keys -t "$SESSION:$1" -l "$2"
+  sleep 0.3
+  tmux send-keys -t "$SESSION:$1" Enter
+  printf 'working\t%s\t%s\n' "resumed after message" "$(now)" > "$(qdir "$1")/status"
+  event "$1" message "guildmaster: ${2:0:80}"
+}
+
+cmd_trial() {
+  local slug; slug=$(current_quest)
+  [ -n "$slug" ] || die "trial must run inside a quest (GUILD_QUEST not set)"
+  need_quest "$slug"
+  local result="${1:-}" note="${2:-}" sha
+  case "$result" in
+    pass) ;;
+    skip) [ -n "$note" ] || die "skip needs a reason, e.g. guild trial skip \"spec only, no code\"" ;;
+    *) die "usage: guild trial pass [note] | skip <reason>" ;;
+  esac
+  sha=$(git rev-parse HEAD)
+  python3 -c "import json,sys;json.dump({'sha':sys.argv[1],'result':sys.argv[2],'note':sys.argv[3],'at':sys.argv[4]},open(sys.argv[5],'w'),indent=2)" \
+    "$sha" "$result" "$note" "$(now)" "$(qdir "$slug")/trial.json"
+  event "$slug" "trial-$result" "${note:-$sha}"
+  echo "trial $result recorded for $sha"
+}
+
+cmd_close() {
+  local slug="$1" force="${2:-}"
+  need_quest "$slug"
+  local q wt repo
+  q="$(qdir "$slug")"
+  wt=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['worktree'])")
+  repo=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['repo'])")
+  if [ -d "$wt" ] && [ -n "$(git -C "$wt" status --porcelain)" ] && [ "$force" != "--force" ]; then
+    die "worktree $wt has uncommitted changes; use --force to drop them"
+  fi
+  tmux kill-window -t "$SESSION:$slug" 2>/dev/null || true
+  [ -d "$wt" ] && git -C "$repo" worktree remove ${force:+--force} "$wt"
+  python3 - "$wt" <<'PY'
+import json, os, sys, tempfile
+path = os.path.expanduser("~/.claude.json")
+if os.path.exists(path):
+    d = json.load(open(path))
+    if d.get("projects", {}).pop(sys.argv[1], None) is not None:
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path))
+        with os.fdopen(fd, "w") as f:
+            json.dump(d, f, indent=2)
+        os.replace(tmp, path)
+PY
+  mkdir -p "$QUESTS/_archive"
+  mv "$q" "$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
+  event "$slug" closed ""
+  echo "closed $slug (branch quest/$slug kept in $repo)"
+}
+
+case "${1:-}" in
+  up) shift; cmd_up "$@" ;;
+  quest) shift; cmd_quest "$@" ;;
+  roster) cmd_roster ;;
+  status) shift; [ $# -ge 2 ] || die "usage: guild status <slug> <state> [note]"; cmd_status "$@" ;;
+  wait) shift; cmd_wait "$@" ;;
+  peek) shift; [ $# -ge 1 ] || die "usage: guild peek <slug> [lines]"; cmd_peek "$@" ;;
+  send) shift; [ $# -ge 2 ] || die "usage: guild send <slug> <message>"; cmd_send "$@" ;;
+  trial) shift; cmd_trial "$@" ;;
+  close) shift; [ $# -ge 1 ] || die "usage: guild close <slug> [--force]"; cmd_close "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *) die "unknown command $1 (see guild help)" ;;
+esac

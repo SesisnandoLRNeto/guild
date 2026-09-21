@@ -1,0 +1,21 @@
+{
+  "_note": "The quartermaster picks the first rule whose 'when' fits the quest, else 'default'. Keep 'why' so future you knows the reason. Copy to ~/.guild/local/dispatch.json and edit there.",
+  "rules": [
+    {
+      "when": "New feature or UI work where quality of design matters",
+      "use": [{ "harness": "claude", "model": "claude-fable-5-1" }],
+      "why": "Best at product and UI judgment; worth the quota for new features"
+    },
+    {
+      "when": "Hard planning, architecture, or an ambiguous investigation",
+      "use": [{ "harness": "claude", "model": "opus" }],
+      "why": "Deep reasoning for work where the path is not clear yet"
+    },
+    {
+      "when": "Simple bug fix whose root cause and expected behavior are already known",
+      "use": [{ "harness": "claude", "model": "sonnet" }],
+      "why": "Well defined work does not need the biggest model"
+    }
+  ],
+  "default": [{ "harness": "claude", "model": "opus" }]
+}

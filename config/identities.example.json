@@ -1,0 +1,5 @@
+{
+  "_note": "Map a GitHub remote owner (org or user) to the git identity and gh account a quest uses. '*' is the fallback. Copy to ~/.guild/local/identities.json and edit there. Never commit real work identities to a public repo.",
+  "your-work-org": { "name": "Your Name", "email": "you@work.example", "gh_user": "you-work" },
+  "*": { "name": "yourhandle", "email": "you@personal.example", "gh_user": "yourhandle" }
+}
