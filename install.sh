@@ -8,10 +8,12 @@ CLAUDE="$HOME/.claude"
 mkdir -p "$GUILD_HOME/local" "$GUILD_HOME/quests" "$CLAUDE/agents" "$CLAUDE/skills"
 chmod +x "$REPO"/bin/* "$REPO"/hooks/*.sh
 
-# CLI on PATH: first writable dir already on PATH
-for d in "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin; do
-  if [[ ":$PATH:" == *":$d:"* ]] && [ -w "$d" ]; then ln -sf "$REPO/bin/guild" "$d/guild"; echo "cli    -> $d/guild"; break; fi
-done
+# CLI: always your own ~/.local/bin, so the link never lands in a shared prefix.
+BIN="$HOME/.local/bin"
+mkdir -p "$BIN"
+ln -sf "$REPO/bin/guild" "$BIN/guild"
+echo "cli    -> $BIN/guild"
+[[ ":$PATH:" == *":$BIN:"* ]] || echo "       ! $BIN is not on your PATH; add it to your shell profile"
 
 ln -sf "$REPO/agents/quartermaster.md" "$CLAUDE/agents/quartermaster.md"; echo "agent  -> ~/.claude/agents/quartermaster.md"
 for s in "$REPO"/skills/*/; do
