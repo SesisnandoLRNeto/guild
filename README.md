@@ -73,7 +73,7 @@ Terminal text cannot show a UI change or three variants side by side. So an adve
 
 - **Left pane**: every quest grouped by repo, with a colored state dot, its model, and the last events. It refreshes every 2 seconds.
 - **Right pane**: the quartermaster. The only session you talk to.
-- **One tab per quest**, plus a `deck` tab running [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) when it is installed. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
+- **One tab per quest**, plus a `deck` tab running [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) when it is installed. The deck speaks tmux, so from that tab you can mirror, jump to or type into any adventurer's pane. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
 - **Status bar** on the right: how many quests are working, how many wait on you, how many boards are open.
 
 ### Keys
@@ -111,4 +111,3 @@ Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspa
 ## Roadmap
 
 - More harnesses: Codex and OpenRouter models, with routing rules
-- claude-deck on a tmux backend, so the deck can drive guild sessions on any terminal
