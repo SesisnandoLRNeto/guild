@@ -24,7 +24,7 @@ If you end a turn without a report, the quartermaster is told that you stopped w
 ## How to finish a code quest
 
 1. Keep the change minimal and follow the style of the code around it. Commit with clear messages. Never add Co-Authored-By lines.
-2. Run the `trial` skill. It reviews the change, runs the checks and records the result. `gh pr create` is blocked until the trial passes for your current HEAD.
+2. Run the trial before the PR: review the change (an adversarial review of your own diff), run the project's checks, then record it with `guild trial pass "<summary>"`. Under Claude Code the `trial` skill does this for you. `gh pr create` stays blocked until the trial passed for your current HEAD, whatever harness you are.
 3. A trial may be skipped only when the brief says so, or when the change has no code (docs, specs). Use `guild trial skip "<reason>"` and add `Trial: skipped - <reason>` to the PR body.
 4. Push the branch and open the PR with `gh pr create`. The PR body has four parts: **Intent**, **What changed**, **Risk** (low, medium or high, with one line on why), and **Testing** (what you ran and the evidence).
 5. Report `done` with the PR url. Do not merge. The guildmaster reviews every PR.

@@ -25,7 +25,7 @@ current_quest() { echo "${1:-${GUILD_QUEST:-}}"; }
 usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
-guild quest <slug> --repo PATH [--base REF] [--harness claude|codex] [--model M] [--brief FILE]
+guild quest <slug> --repo PATH [--base REF] [--harness claude|openrouter|codex] [--model M] [--brief FILE]
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
@@ -139,6 +139,8 @@ os.replace(tmp, path)
 PY
 }
 
+harness_bin() { case "$1" in codex) echo codex ;; *) echo claude ;; esac; }
+
 cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
@@ -155,6 +157,8 @@ cmd_quest() {
     esac
   done
   [ -n "$repo" ] || die "quest needs --repo"
+  case "$harness" in claude|openrouter|codex) ;; *) die "unknown harness $harness (claude, openrouter or codex)" ;; esac
+  command -v "$(harness_bin "$harness")" >/dev/null || die "$(harness_bin "$harness") is not installed"
   repo="$(cd "$repo" && git rev-parse --show-toplevel)" || die "not a git repo: $repo"
   local q; q="$(qdir "$slug")"
   [ -e "$q" ] && die "quest '$slug' already exists"
@@ -194,14 +198,27 @@ PY
     [ -n "$name" ] && echo "export GIT_AUTHOR_NAME='$name' GIT_COMMITTER_NAME='$name'"
     [ -n "$email" ] && echo "export GIT_AUTHOR_EMAIL='$email' GIT_COMMITTER_EMAIL='$email'"
     [ -n "$ghu" ] && echo "export GH_TOKEN=\"\$(gh auth token --user '$ghu')\""
+    # The gh shim gates `gh pr create` for every harness, not only the ones with hooks.
+    echo "export PATH='$GUILD_REPO/bin/shims':\$PATH"
     case "$harness" in
       claude)
         echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \\"
         echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
         echo "  'Start the quest. Your brief is in $q/brief.md'" ;;
+      openrouter)
+        # Claude Code speaks its own protocol to OpenRouter's Anthropic-compatible endpoint.
+        # ANTHROPIC_API_KEY must be empty, or Claude Code goes to Anthropic instead.
+        [ -f "$GUILD_HOME/local/env" ] && echo "set -a; . '$GUILD_HOME/local/env'; set +a"
+        echo "[ -n \"\${OPENROUTER_API_KEY:-}\" ] || { echo 'guild: no OPENROUTER_API_KEY (put it in $GUILD_HOME/local/env)'; exec \$SHELL; }"
+        echo "export ANTHROPIC_BASE_URL='https://openrouter.ai/api' ANTHROPIC_AUTH_TOKEN=\"\$OPENROUTER_API_KEY\" ANTHROPIC_API_KEY=''"
+        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \\"
+        echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
+        echo "  'Start the quest. Your brief is in $q/brief.md'" ;;
       codex)
-        echo "codex ${model:+-m '$model'} \"\$(cat '$q/prompt.md')\"" ;;
-      *) die "unknown harness $harness" ;;
+        # workspace-write keeps Codex inside the worktree; --add-dir lets it report to guild.
+        echo "codex -C '$wt' --add-dir '$GUILD_HOME' -s workspace-write -a never ${model:+-m '$model'} \\"
+        echo "  \"\$(cat '$q/prompt.md')"$'\n\n'"Start the quest. Your brief is in $q/brief.md\"" ;;
+      *) die "unknown harness $harness (claude, openrouter or codex)" ;;
     esac
     echo "exec \$SHELL"
   } > "$q/launch.sh"

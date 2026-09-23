@@ -1,5 +1,10 @@
 {
   "_note": "The quartermaster picks the first rule whose 'when' fits the quest, else 'default'. Keep 'why' so future you knows the reason. Copy to ~/.guild/local/dispatch.json and edit there.",
+  "_harnesses": {
+    "claude": "Claude Code on your Anthropic plan. Model: opus, sonnet, haiku, or a full id like claude-fable-5-1.",
+    "openrouter": "Claude Code pointed at OpenRouter, so any model it serves can run a quest. Model: an OpenRouter id, like moonshotai/kimi-k2-thinking, deepseek/deepseek-chat, or ~anthropic/claude-sonnet-latest. Needs OPENROUTER_API_KEY in ~/.guild/local/env.",
+    "codex": "OpenAI Codex CLI, on your ChatGPT or API account. Model: gpt-5.6-codex and friends. Runs sandboxed to the worktree."
+  },
   "rules": [
     {
       "when": "New feature or UI work where quality of design matters",
@@ -10,6 +15,16 @@
       "when": "Hard planning, architecture, or an ambiguous investigation",
       "use": [{ "harness": "claude", "model": "opus" }],
       "why": "Deep reasoning for work where the path is not clear yet"
+    },
+    {
+      "when": "The task needs generating or editing images",
+      "use": [{ "harness": "codex", "model": "gpt-5.6-codex" }],
+      "why": "Codex has native image generation; Claude does not"
+    },
+    {
+      "when": "Long, mechanical work: renames, migrations, test scaffolding, large sweeps",
+      "use": [{ "harness": "openrouter", "model": "moonshotai/kimi-k2-thinking" }],
+      "why": "Keeps the Anthropic quota for work that needs judgment"
     },
     {
       "when": "Simple bug fix whose root cause and expected behavior are already known",

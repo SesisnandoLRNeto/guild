@@ -30,7 +30,7 @@ guild up ~/Workspace
 | Command | What it does |
 |---|---|
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
-| `guild quest <slug> --repo PATH [--model M] [--harness claude\|codex] < brief` | Worktree + branch `quest/<slug>` + adventurer window |
+| `guild quest <slug> --repo PATH [--model M] [--harness claude\|openrouter\|codex] < brief` | Worktree + branch `quest/<slug>` + adventurer window |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
@@ -48,6 +48,30 @@ Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the 
 ## The war table
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+
+## Harnesses: who runs a quest
+
+A quest can run on three harnesses. The quartermaster picks one from `~/.guild/local/dispatch.json`, or you name it.
+
+| Harness | What it is | Model looks like | Needs |
+|---|---|---|---|
+| `claude` | Claude Code on your Anthropic plan (default) | `opus`, `sonnet`, `claude-fable-5-1` | nothing |
+| `openrouter` | Claude Code pointed at OpenRouter's Anthropic-compatible endpoint, so any model it serves can run a quest | `moonshotai/kimi-k2-thinking`, `deepseek/deepseek-chat`, `~anthropic/claude-sonnet-latest` | `OPENROUTER_API_KEY` in `~/.guild/local/env` |
+| `codex` | The OpenAI Codex CLI on your ChatGPT or API account | `gpt-5.6-codex` | `npm i -g @openai/codex`, then `codex login` once |
+
+```sh
+guild quest big-rename --repo ~/code/app --harness openrouter --model moonshotai/kimi-k2-thinking < brief.md
+guild quest app-icons  --repo ~/code/app --harness codex --model gpt-5.6-codex < brief.md
+```
+
+Why bother: the work that needs judgment gets your Anthropic quota, and the long mechanical sweeps go somewhere cheaper. Codex also generates images, which Claude does not.
+
+**How the harnesses differ**
+
+- Context is not shared between them. The quartermaster holds it and writes a brief per quest; the reports come back as files. That is the whole protocol, so any CLI agent can play.
+- `openrouter` is still Claude Code, so it keeps the hooks, the trial gate and calm mode. Guild sets `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and an empty `ANTHROPIC_API_KEY` for that quest only, never for your normal sessions.
+- `codex` runs with `-s workspace-write -a never`, so it works unattended, writes only inside its worktree, and can still report to `~/.guild`. It has no stop hook, so a Codex adventurer that goes quiet is not reported on its own: the quartermaster notices it in the roster and peeks.
+- The trial gate does not depend on hooks. Guild puts a `gh` shim first on every quest's PATH, so `gh pr create` is blocked on any harness until the trial passed for the current commit.
 
 ## The cockpit
 
@@ -110,4 +134,4 @@ Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspa
 
 ## Roadmap
 
-- More harnesses: Codex and OpenRouter models, with routing rules
+- A second layer of orchestrators, so one quartermaster is not the only liaison when the fleet grows

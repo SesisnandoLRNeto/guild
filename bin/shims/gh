@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# The trial gate for every harness.
+#
+# Claude Code sessions get a PreToolUse hook, but Codex and other harnesses have no such
+# hook. Guild puts this directory first on a quest's PATH, so `gh pr create` passes
+# through the same gate whatever is driving the quest. Every other gh command is
+# forwarded untouched.
+set -euo pipefail
+
+real_gh=""
+self="$(cd "$(dirname "$0")" && pwd)"
+IFS=: read -ra dirs <<< "$PATH"
+for d in "${dirs[@]}"; do
+  [ "$(cd "$d" 2>/dev/null && pwd)" = "$self" ] && continue
+  if [ -x "$d/gh" ]; then real_gh="$d/gh"; break; fi
+done
+[ -n "$real_gh" ] || { echo "guild: gh is not installed" >&2; exit 127; }
+
+is_pr_create=0
+prev=""
+for arg in "$@"; do
+  [ "$prev" = "pr" ] && [ "$arg" = "create" ] && is_pr_create=1
+  prev="$arg"
+done
+
+if [ "$is_pr_create" = 1 ] && [ -n "${GUILD_QUEST:-}" ]; then
+  trial="${GUILD_HOME:-$HOME/.guild}/quests/$GUILD_QUEST/trial.json"
+  head=$(git rev-parse HEAD 2>/dev/null || echo "")
+  if [ ! -f "$trial" ]; then
+    echo "guild: blocked. No trial for this quest yet. Run the trial, or if the guildmaster allowed it: guild trial skip \"<reason>\"." >&2
+    exit 2
+  fi
+  read -r sha result note < <(python3 -c "import json;t=json.load(open('$trial'));print(t['sha'],t['result'],t['note'])")
+  if [ "$sha" != "$head" ]; then
+    echo "guild: blocked. The trial ran on ${sha:0:8} but HEAD is ${head:0:8}. Run the trial again for the new commits." >&2
+    exit 2
+  fi
+  if [ "$result" = "skip" ] && ! printf '%s\0' "$@" | grep -qz "Trial: skipped"; then
+    echo "guild: blocked. The trial was skipped ($note). Put a line 'Trial: skipped - $note' in the PR body." >&2
+    exit 2
+  fi
+fi
+
+exec "$real_gh" "$@"

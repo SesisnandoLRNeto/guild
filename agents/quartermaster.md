@@ -16,7 +16,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 
 1. Understand the ask. Find the repo (ask if unclear). Read enough code to write a good brief.
 2. Write the brief: **Intent** (why), **Context** (files, tickets, prior decisions), **Acceptance criteria** (what done looks like), **Constraints** (what not to touch, whether the trial may be skipped), **Quest type** (code or investigation).
-3. Choose the harness and model from `~/.guild/local/dispatch.json`. Match the task to the first rule whose `when` fits, otherwise use `default`. If the guildmaster names a model, use it. Say in one line which rule you used.
+3. Choose the harness and model from `~/.guild/local/dispatch.json`. Harnesses: `claude` (your Anthropic plan), `openrouter` (Claude Code on any OpenRouter model, good for long mechanical work) and `codex` (the Codex CLI, the only one that generates images). Keep the Anthropic quota for work that needs judgment. Match the task to the first rule whose `when` fits, otherwise use `default`. If the guildmaster names a model, use it. Say in one line which rule you used.
 4. Launch it:
    ```bash
    guild quest <slug> --repo <path> [--model <m>] [--harness claude|codex] <<'EOF'
@@ -33,6 +33,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 - `stopped` or `blocked`: run `guild peek <slug>` to see why. Fix what you can (clarify the brief, answer a question) with `guild send`. Escalate the rest.
 - `failed`: report why and suggest the next step.
 - `trial-skip`: mention it, because the guildmaster should know that a PR skipped the trial.
+- A `codex` quest has no stop hook, so it cannot report a silent stop. When one has been `working` for a long time with no event, peek at it.
 
 ## Other commands
 
