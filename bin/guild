@@ -49,7 +49,7 @@ guild log [slug] [--since 7d] [--repo NAME]
 guild retro [--since 14d]           the facts a retro needs: overridden calls, skipped trials, stalls, spend
 guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
-guild edit [slug]                   open nvim on a quest's worktree, in its own cockpit tab
+guild edit [slug|path]              your editor with the file tree: a quest, a folder, or your work root
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
 EOF
 }
@@ -131,20 +131,31 @@ cmd_doctor() { GUILD_TMUX_SOCKET="$SOCKET" GUILD_REPO="$GUILD_REPO" python3 "$GU
 
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
 
-# nvim on a quest's worktree, in its own tab. Inside the cockpit, Ctrl-g e does this for
-# the quest whose tab you are looking at.
+# Your editor, the way you already use it: the file tree on the left, any file you want.
+# Takes a quest slug, a path, or nothing (then GUILD_EDIT_ROOT, else ~/Workspace).
 cmd_edit() {
-  local slug; slug=$(current_quest "${1:-}")
-  [ -n "$slug" ] || die "usage: guild edit <slug>"
-  need_quest "$slug"
-  local wt win
-  wt=$(python3 -c "import json;print(json.load(open('$(qdir "$slug")/meta.json'))['worktree'])")
-  win="edit:$slug"
+  local target="${1:-}" dir="" win="edit" editor="${EDITOR:-nvim}"
+  if [ -z "$target" ]; then
+    dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
+  elif [ -d "$(qdir "$target")" ]; then
+    dir=$(python3 -c "import json;print(json.load(open('$(qdir "$target")/meta.json'))['worktree'])")
+    win="edit:$target"
+  elif [ -d "$target" ]; then
+    dir="$(cd "$target" && pwd)"
+    win="edit:$(basename "$dir")"
+  else
+    die "guild edit takes a quest slug, a directory, or nothing"
+  fi
+  tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
   if tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$win"; then
     tm select-window -t "$SESSION:$win"
-  else
-    tm new-window -t "$SESSION" -n "$win" -c "$wt" "${EDITOR:-nvim} .; exec \$SHELL"
+    return
   fi
+  local cmd="$editor ."
+  case "$editor" in *vim) cmd="$editor -c 'silent! Neotree show' ." ;; esac   # the tree, like LazyVim opens it
+  tm new-window -t "$SESSION" -n "$win" -c "$dir" "$cmd; exec \$SHELL"
+  tm select-window -t "$SESSION:$win"
+  echo "editing $dir in tab $win"
 }
 
 # Resolve git identity + gh user from the repo's remote owner via local/identities.json.

@@ -47,7 +47,7 @@ guild up ~/Workspace
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
 | `guild calm on\|off\|status` | Draw a blue bird instead of tool calls in guild sessions |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
-| `guild edit [slug]` | Open `$EDITOR` (nvim by default) on a quest's worktree, in its own tab |
+| `guild edit [slug\|path]` | Your editor with the file tree: a quest's worktree, any folder, or your work root |
 
 Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
@@ -178,7 +178,7 @@ The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does 
 | `Alt-Left` / `Alt-Right` | Previous or next tab |
 | `Alt-h` / `Alt-l` | Move between the sidebar and the quartermaster |
 | `Ctrl-g` `w` | Pick a quest from a list |
-| `Ctrl-g` `e` | nvim on the current quest's worktree, in its own tab |
+| `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
 | `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |
 
