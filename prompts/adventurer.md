@@ -17,6 +17,8 @@ Use the `guild` CLI. The quartermaster wakes up on each report.
 - `guild status {{SLUG}} failed "<why>"`, when the quest cannot be done.
 - `guild status {{SLUG}} done "<PR url or one-line result>"`, when you finish.
 
+When a choice is the guildmaster's (several designs, a trade-off, an unclear requirement) and words alone would not settle it, put it on the war table: use the `war-table` skill, which opens a local page with the options and sends the answer back to you.
+
 If you end a turn without a report, the quartermaster is told that you stopped without saying why.
 
 ## How to finish a code quest

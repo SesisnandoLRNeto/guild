@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board</title>
+<style>
+  /* Starter for a war table page. Copy it, keep the tokens, replace the content.
+     Rules: one file, relative image paths, no CDNs, works in a 900px frame. */
+  :root { color-scheme: dark light;
+    --bg: #0f1117; --card: #161922; --line: #242835; --text: #e6e8ef; --dim: #9aa3b8;
+    --accent: #7aa2f7; --ok: #7dcfa0; --bad: #f7768e; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7fa; --card: #fff; --line: #e2e5ec; --text: #1b1f2a; --dim: #5c6478; --accent: #3a63c8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 56px; background: var(--bg); color: var(--text);
+         font: 15px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 16px; margin: 32px 0 10px; }
+  p.lead { color: var(--dim); margin: 0 0 24px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  figure img { width: 100%; display: block; background: #000; }
+  figcaption { padding: 8px 10px; font-size: 13px; }
+  figcaption .why { color: var(--dim); font-size: 12px; }
+  .tag { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; }
+  .pass { color: var(--ok); } .fail { color: var(--bad); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .note { border-left: 3px solid var(--accent); background: var(--card); padding: 10px 14px; border-radius: 0 8px 8px 0; }
+</style>
+</head>
+<body>
+
+<h1>Title of the decision or the feature</h1>
+<p class="lead">One line: what the guildmaster is looking at and what happens next.</p>
+
+<h2>Options</h2>
+<div class="grid">
+  <figure>
+    <img src="shots/today.png" alt="today">
+    <figcaption><span class="tag">today</span><div>Current state</div><div class="why">What is wrong with it.</div></figcaption>
+  </figure>
+  <figure>
+    <img src="shots/a.png" alt="option A">
+    <figcaption><span class="tag">option a</span><div>Name</div><div class="why">Trade-off in one line.</div></figcaption>
+  </figure>
+</div>
+
+<h2>Numbers</h2>
+<table>
+  <tr><th>Measure</th><th>Before</th><th>After</th><th>How measured</th></tr>
+  <tr><td>Example</td><td>—</td><td>—</td><td>—</td></tr>
+</table>
+
+<h2>Already ruled out</h2>
+<ul><li>What you tried and why it lost.</li></ul>
+
+<div class="note">Answer in the panel on the right. Add notes or drop screenshots there.</div>
+
+</body>
+</html>

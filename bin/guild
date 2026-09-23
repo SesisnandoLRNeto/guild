@@ -31,6 +31,10 @@ guild wait [timeout-seconds]        block until a new event arrives, then print 
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
 guild send <slug> <message>         type a message into an adventurer's session
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
+guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--id ID]
+                                    put a war table up for the guildmaster and open it in the browser
+guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
+guild board list | guild board url   boards and their state, or the war table address
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
 EOF
 }
@@ -230,6 +234,20 @@ cmd_trial() {
   echo "trial $result recorded for $sha"
 }
 
+# War table. Inside a quest the slug is implicit, so `guild board open --html page.html` is enough.
+cmd_board() {
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    open|wait)
+      local slug; slug=$(current_quest)
+      [ -n "$slug" ] || die "guild board $sub must run inside a quest (GUILD_QUEST not set)"
+      need_quest "$slug"
+      python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$slug" "$@" ;;
+    list|url) python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$@" ;;
+    *) die "usage: guild board open|wait|list|url" ;;
+  esac
+}
+
 cmd_close() {
   local slug="$1" force="${2:-}"
   need_quest "$slug"
@@ -268,6 +286,7 @@ case "${1:-}" in
   peek) shift; [ $# -ge 1 ] || die "usage: guild peek <slug> [lines]"; cmd_peek "$@" ;;
   send) shift; [ $# -ge 2 ] || die "usage: guild send <slug> <message>"; cmd_send "$@" ;;
   trial) shift; cmd_trial "$@" ;;
+  board) shift; cmd_board "$@" ;;
   close) shift; [ $# -ge 1 ] || die "usage: guild close <slug> [--force]"; cmd_close "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command $1 (see guild help)" ;;

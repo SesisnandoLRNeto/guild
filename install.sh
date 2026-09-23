@@ -21,7 +21,7 @@ done
 # Per-session settings (loaded with --settings only by guild sessions, never globally)
 cat > "$GUILD_HOME/worker-settings.json" <<EOF
 {
-  "permissions": { "allow": ["Bash(guild status:*)", "Bash(guild trial:*)"] },
+  "permissions": { "allow": ["Bash(guild status:*)", "Bash(guild trial:*)", "Bash(guild board:*)"] },
   "hooks": {
     "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "$REPO/hooks/pr-gate.sh" }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "$REPO/hooks/worker-stop.sh" }] }]
