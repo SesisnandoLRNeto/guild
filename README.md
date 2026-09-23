@@ -36,7 +36,6 @@ guild up ~/Workspace
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
-
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
