@@ -39,12 +39,19 @@ guild up ~/Workspace
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
+| `guild calm on\|off\|status` | Draw a blue bird instead of tool calls in guild sessions |
 
 Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
 ## The war table
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+
+## Calm mode: the blue bird
+
+While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a blue bird gliding across two rows of sky where the spinner was, and tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/bird` toggles it inside a session.
+
+It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Verified on Claude Code 2.1.280; the API may change between releases.
 
 ## The trial
 
@@ -57,4 +64,3 @@ Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspa
 ## Roadmap
 
 - More harnesses: Codex and OpenRouter models, with routing rules
-- A calm mode: a small bird instead of the thinking stream

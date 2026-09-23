@@ -35,6 +35,7 @@ guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--as
                                     put a war table up for the guildmaster and open it in the browser
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
+guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
 EOF
 }
@@ -43,11 +44,25 @@ event() { # slug state note
   printf '%s\t%s\t%s\t%s\n' "$(now)" "$1" "$2" "${3:-}" >> "$EVENTS"
 }
 
+# Calm mode is opt-in: it rides on an early-access Claude Code surface, so guild turns it
+# on only for its own sessions, and only after `guild calm on`.
+calm_on() { [ "$(cat "$GUILD_HOME/calm" 2>/dev/null | tr -d '[:space:]')" = "on" ]; }
+calm_env() { calm_on && printf 'CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GUILD_CALM=1 '; }
+
+cmd_calm() {
+  case "${1:-status}" in
+    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the bird instead of tool calls (/bird toggles it inside a session)" ;;
+    off) echo off > "$GUILD_HOME/calm"; echo "calm off: guild sessions draw normally again" ;;
+    status) calm_on && echo on || echo off ;;
+    *) die "usage: guild calm on|off|status" ;;
+  esac
+}
+
 cmd_up() {
   local dir="${1:-$HOME}"
   if ! tmux has-session -t "$SESSION" 2>/dev/null; then
     tmux new-session -d -s "$SESSION" -n qm -c "$dir" \
-      "GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster; exec \$SHELL"
+      "$(calm_env)GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster; exec \$SHELL"
   fi
   if [ -n "${TMUX:-}" ]; then tmux switch-client -t "$SESSION"; else tmux attach -t "$SESSION"; fi
 }
@@ -145,6 +160,7 @@ PY
   { echo "#!/usr/bin/env bash"
     echo "cd '$wt'"
     echo "export GUILD_QUEST='$slug' GUILD_HOME='$GUILD_HOME'"
+    calm_on && echo "export CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GUILD_CALM=1"
     [ -n "$name" ] && echo "export GIT_AUTHOR_NAME='$name' GIT_COMMITTER_NAME='$name'"
     [ -n "$email" ] && echo "export GIT_AUTHOR_EMAIL='$email' GIT_COMMITTER_EMAIL='$email'"
     [ -n "$ghu" ] && echo "export GH_TOKEN=\"\$(gh auth token --user '$ghu')\""
@@ -287,6 +303,7 @@ case "${1:-}" in
   send) shift; [ $# -ge 2 ] || die "usage: guild send <slug> <message>"; cmd_send "$@" ;;
   trial) shift; cmd_trial "$@" ;;
   board) shift; cmd_board "$@" ;;
+  calm) shift; cmd_calm "$@" ;;
   close) shift; [ $# -ge 1 ] || die "usage: guild close <slug> [--force]"; cmd_close "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command $1 (see guild help)" ;;

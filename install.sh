@@ -35,6 +35,9 @@ cat > "$GUILD_HOME/qm-settings.json" <<EOF
 EOF
 echo "settings -> $GUILD_HOME/{worker,qm}-settings.json"
 
+# The calm mod loads as a skills-dir plugin; it stays inert unless `guild calm on`.
+ln -sfn "$REPO/mods/guild-calm" "$CLAUDE/skills/guild-calm"; echo "mod    -> ~/.claude/skills/guild-calm (enable with: guild calm on)"
+
 for f in dispatch identities; do
   [ -f "$GUILD_HOME/local/$f.json" ] || { cp "$REPO/config/$f.example.json" "$GUILD_HOME/local/$f.json"; echo "config -> $GUILD_HOME/local/$f.json (edit it)"; }
 done

@@ -1,0 +1,4 @@
+{
+  "description": "guild calm: the working row draws a blue bird and tool rows stop drawing. Loads only when CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 and GUILD_CALM=1, and is a complete no-op otherwise.",
+  "modules": ["./register.ts"]
+}
