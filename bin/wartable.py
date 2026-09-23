@@ -242,7 +242,8 @@ def cmd_open(args):
     port = ensure_server()
     url = f"http://127.0.0.1:{port}/b/{quest}/{board}/"
     record(quest, "needs-decision", f"war table ready: {args.get('title') or board} -> {url}")
-    if not args.get("no_open"):
+    # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
+    if not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
         subprocess.run(["open", url], check=False)
     print(url)
     print(f"board id: {board}")

@@ -14,6 +14,7 @@ export GUILD_HOME="$HOME/.guild"
 export GUILD_WORKTREES="$TMP/worktrees"
 export GUILD_TMUX_SOCKET="guild-test"
 export GUILD_BOARD_PORT="4899"
+export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
 export PATH="$TMP/stub:$PATH"
 mkdir -p "$HOME" "$GUILD_HOME/local" "$GUILD_WORKTREES" "$TMP/stub"
 
