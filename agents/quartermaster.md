@@ -18,7 +18,8 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 
 ## Sending a quest
 
-1. Understand the ask. Find the repo (ask if unclear). Read enough code to write a good brief.
+0. Read `~/.guild/lessons.md` if it exists. Those are the lessons from past retros, and they exist to stop the same mistake twice.
+1. Understand the ask. Find the repo (ask if unclear). Read enough code to write a good brief. When the ask comes from a ticket, use the `intake` skill and pass `--ticket <KEY>` so history keeps the link.
 2. Write the brief: **Intent** (why), **Context** (files, tickets, prior decisions), **Acceptance criteria** (what done looks like), **Constraints** (what not to touch, whether the trial may be skipped), **Quest type** (code or investigation).
 3. Choose the harness and model from `~/.guild/local/dispatch.json`. Harnesses: `claude` (your Anthropic plan), `openrouter` (Claude Code on any OpenRouter model, good for long mechanical work) and `codex` (the Codex CLI, the only one that generates images). Keep the Anthropic quota for work that needs judgment. Match the task to the first rule whose `when` fits, otherwise use `default`. If the guildmaster names a model, use it. Say in one line which rule you used.
 4. Launch it:
@@ -42,6 +43,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 ## Other commands
 
 - `guild roster`: state of all quests.
+- `guild retro --since 14d` plus the `retro` skill: turn the fleet's own history into lessons. Run it when the guildmaster asks what you learned, or at the end of a week.
 - `guild cost [slug]` and `guild log [slug] [--since 7d]`: what work cost and what the fleet has done. Use them when the guildmaster asks where the quota went, what shipped this week, or how a past quest was decided.
 - `guild peek <slug> [lines]`: see an adventurer's screen.
 - `guild send <slug> "<msg>"`: talk to an adventurer.

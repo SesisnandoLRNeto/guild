@@ -265,6 +265,116 @@ def show_one(matches, slug):
                 print(f"  {DIM}{parts[0][5:16]}{RESET} {parts[2]:<16} {DIM}{parts[3][:70]}{RESET}")
 
 
+def decisions_of(q):
+    """Every answered board: what was asked, what was suggested, what the guildmaster picked."""
+    out = []
+    boards = os.path.join(q["dir"], "boards")
+    if not os.path.isdir(boards):
+        return out
+    for b in sorted(os.listdir(boards)):
+        bd = os.path.join(boards, b)
+        dec, meta_p, q_p = (os.path.join(bd, n) for n in ("decision.json", "board.json", "decisions.json"))
+        if not os.path.exists(dec) or not os.path.exists(meta_p):
+            continue
+        answer = json.load(open(dec))
+        title = json.load(open(meta_p)).get("title", b)
+        asked = json.load(open(q_p)).get("questions", []) if os.path.exists(q_p) else []
+        for question in asked or [{"id": "", "title": title, "recommended": None}]:
+            picked = answer.get("answers", {}).get(question.get("id"), "")
+            out.append({"question": question.get("title", title),
+                        "recommended": question.get("recommended"),
+                        "picked": picked,
+                        "overruled": bool(question.get("recommended") and picked
+                                          and picked != question.get("recommended")),
+                        "message": answer.get("message", "")})
+    return out
+
+
+def cmd_retro(args):
+    """The facts a retro needs. An agent turns these into lessons; this only counts."""
+    cutoff = since_cutoff(args.get("since") or "14d")
+    rows = [load(d) for d in quest_dirs()]
+    rows = [r for r in rows if not cutoff or (created_at(r) or datetime.min) >= cutoff]
+    rows.sort(key=lambda r: r["meta"].get("created", ""))
+
+    events = os.path.join(GUILD_HOME, "events.log")
+    lines = open(events).read().splitlines() if os.path.exists(events) else []
+
+    report = {"window": args.get("since") or "14d", "quests": [], "totals": {}}
+    for q in rows:
+        slug = q["slug"]
+        mine = [l.split("\t") for l in lines if f"\t{slug}\t" in l]
+        report["quests"].append({
+            "slug": slug,
+            "ticket": q["meta"].get("ticket", ""),
+            "repo": os.path.basename(q["meta"].get("repo", "")),
+            "harness": q["meta"].get("harness", ""),
+            "model": q["meta"].get("model", ""),
+            "state": q["state"],
+            "cost": round(q["cost"], 3),
+            "duration": duration(q),
+            "messages": q.get("messages", 0),
+            "trial": q["trial"],
+            "brief_lines": len(open(os.path.join(q["dir"], "brief.md")).read().splitlines())
+            if os.path.exists(os.path.join(q["dir"], "brief.md")) else 0,
+            "decisions": decisions_of(q),
+            "stalls": sum(1 for e in mine if len(e) > 2 and e[2] == "stopped"),
+            "escalations": sum(1 for e in mine if len(e) > 2 and e[2] == "needs-decision"),
+            "revived": sum(1 for e in mine if len(e) > 3 and "revived" in e[3]),
+        })
+
+    quests = report["quests"]
+    decisions = [d for q in quests for d in q["decisions"]]
+    report["totals"] = {
+        "quests": len(quests),
+        "cost": round(sum(q["cost"] for q in quests), 3),
+        "by_model": {m: round(sum(q["cost"] for q in quests if q["model"] == m), 3)
+                     for m in sorted({q["model"] for q in quests if q["model"]})},
+        "finished": sum(1 for q in quests if q["state"] == "done"),
+        "failed": sum(1 for q in quests if q["state"] == "failed"),
+        "trials_skipped": sum(1 for q in quests if q["trial"] == "skip"),
+        "trials_passed": sum(1 for q in quests if q["trial"] == "pass"),
+        "decisions": len(decisions),
+        "recommendation_overruled": sum(1 for d in decisions if d["overruled"]),
+        "stalls": sum(q["stalls"] for q in quests),
+        "escalations": sum(q["escalations"] for q in quests),
+    }
+    if args.get("json"):
+        print(json.dumps(report, indent=2))
+        return
+
+    t = report["totals"]
+    print(f"{BOLD}retro, last {report['window']}{RESET}")
+    print(f"  {t['quests']} quests, {t['finished']} done, {t['failed']} failed, {money(t['cost'])}")
+    print(f"  trials: {t['trials_passed']} passed, {t['trials_skipped']} skipped")
+    print(f"  decisions: {t['decisions']}, your call differed from the recommendation {t['recommendation_overruled']} time(s)")
+    print(f"  friction: {t['escalations']} escalations, {t['stalls']} silent stops")
+    if t["by_model"]:
+        print("  spend by model: " + ", ".join(f"{m} {money(c)}" for m, c in t["by_model"].items()))
+    print()
+    for q in quests:
+        flags = []
+        if q["trial"] == "skip":
+            flags.append("trial skipped")
+        if q["stalls"]:
+            flags.append(f"{q['stalls']} silent stop(s)")
+        if q["escalations"] > 1:
+            flags.append(f"{q['escalations']} escalations")
+        if any(d["overruled"] for d in q["decisions"]):
+            flags.append("recommendation overruled")
+        if q["brief_lines"] and q["brief_lines"] < 3:
+            flags.append("very short brief")
+        mark = COLORS.get(q["state"], "")
+        print(f"  {mark}{q['slug'][:28]:<30}{RESET} {q['model'][:14]:<15} {money(q['cost']):>8} "
+              f"{DIM}{', '.join(flags) or 'clean'}{RESET}")
+        for d in q["decisions"]:
+            if d["overruled"]:
+                print(f"    {DIM}asked: {d['question'][:60]}{RESET}")
+                print(f"    {DIM}suggested {d['recommended']}, you chose {d['picked']}"
+                      f"{' - ' + d['message'][:40] if d['message'] else ''}{RESET}")
+    print(f"\n{DIM}Turn this into lessons with the retro skill; they land in ~/.guild/lessons.md{RESET}")
+
+
 def cmd_costs(args):
     """Cost per quest as JSON, cached, for the cockpit. Reading every log is too slow for a 2s refresh."""
     cache = os.path.join(GUILD_HOME, ".cost-cache.json")
@@ -320,7 +430,8 @@ def main():
             key = None
         else:
             args["slug"] = token
-    return {"cost": cmd_cost, "log": cmd_log, "costs": cmd_costs, "snapshot": cmd_snapshot}[cmd](args)
+    return {"cost": cmd_cost, "log": cmd_log, "retro": cmd_retro, "costs": cmd_costs,
+            "snapshot": cmd_snapshot}[cmd](args)
 
 
 if __name__ == "__main__":

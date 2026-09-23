@@ -40,6 +40,7 @@ guild up ~/Workspace
 | `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
 | `guild cost [slug]` | Tokens, replies, time and dollars per quest |
 | `guild log [slug] [--since 7d] [--repo NAME]` | History: what ran, what it decided, what it cost |
+| `guild retro [--since 14d]` | The facts a retro needs: overruled calls, skipped trials, stalls, spend |
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
@@ -80,7 +81,35 @@ The live cost of each quest also shows in the cockpit sidebar and the total sits
 
 Prices live in `~/.guild/local/pricing.json` (per million tokens, input, output, cache write, cache read). A model that is not in that file is priced with the default and flagged as estimated, so add new models as they ship. On a subscription nothing is billed per token: the dollars are what the same work would have cost on the API, which is still the honest way to compare two quests.
 
-## After a restart
+## The learning loop
+
+History is only useful if it changes the next quest.
+
+```
+guild retro --since 14d
+```
+
+It counts the things worth learning from: **where your call differed from the agent's recommendation**, trials that were skipped, quests that escalated more than once or stopped silently, very short briefs, and spend per model. The `retro` skill turns that into three to five lessons in `~/.guild/lessons.md`, each with its evidence and what to do differently.
+
+The quartermaster reads that file before writing any brief, so a lesson written on Friday changes Monday's work. A lesson that stops showing up in the evidence gets removed.
+
+## From ticket to quest
+
+Your work starts in a tracker, not in a terminal. The `intake` skill queries your open tickets live (Jira through its MCP tools), sorts them into ready, needs-you and not-code, proposes a shortlist, and after your yes creates the quests:
+
+```sh
+guild quest work-api-null-fix --repo ~/code/work-api --ticket PMC2-1023 < brief.md
+```
+
+The key is stored with the quest, so `guild log` and `guild retro` can show which ticket the work came from. Nothing is ever posted back to the tracker without your word.
+
+## Tests
+
+```sh
+./test/run.sh      # 59 checks, about 5 seconds, no model calls
+```
+
+The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table (including a path traversal attempt), the trial gate in both forms, cost arithmetic against a synthetic session log, the retro counters, revive, close, and doctor. It also runs in CI on every push.
 
 Close the terminal, reboot, or kill tmux: nothing is lost.
 
