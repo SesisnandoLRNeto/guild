@@ -55,6 +55,9 @@ cp "$REPO/config/dispatch.example.json" "$GUILD_HOME/local/dispatch.json"
 REPO_A="$TMP/repo-a"
 mkdir -p "$REPO_A" && git -C "$REPO_A" init -q -b main
 git -C "$REPO_A" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+printf 'node_modules/\n' > "$REPO_A/.gitignore"
+git -C "$REPO_A" add .gitignore
+git -C "$REPO_A" -c user.email=t@t -c user.name=t commit -q -m "ignore build output"
 git -C "$REPO_A" remote add origin "git@github.com:TestOrg/repo-a.git"
 echo 25 > "$REPO_A/.java-version"   # untracked on purpose: that is the case that used to break
 
@@ -65,14 +68,16 @@ section "quests"
 out=$(echo "do a thing" | "$GUILD" quest alpha --repo "$REPO_A" --model sonnet --ticket ABC-1 2>&1)
 has "quest is created" "$out" "quest alpha"
 [ -f "$GUILD_HOME/quests/alpha/brief.md" ] && ok "brief is stored" || bad "brief is stored"
-[ -d "$GUILD_WORKTREES/repo-a-alpha" ] && ok "worktree exists" || bad "worktree exists"
+WT=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/meta.json'))['worktree'])")
+[ -d "$WT" ] && ok "worktree exists" || bad "worktree exists" "$WT"
+has "it comes from the pool" "$WT" "/pool/repo-a-"
 is "branch is quest/alpha" "$(git -C "$REPO_A" branch --list quest/alpha --format '%(refname:short)')" "quest/alpha"
 is "ticket is recorded" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/meta.json'))['ticket'])")" "ABC-1"
 has "work identity comes from the remote owner" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "work@example.com"
 has "gh account matches the owner" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "work-acct"
 has "the shim is first on PATH" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "bin/shims"
 has "a window is opened for it" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W')" "alpha"
-is "an untracked toolchain pin is carried into the worktree" "$(cat "$GUILD_WORKTREES/repo-a-alpha/.java-version" 2>/dev/null)" "25"
+is "an untracked toolchain pin is carried into the worktree" "$(cat "$WT/.java-version" 2>/dev/null)" "25"
 
 out=$(echo x | "$GUILD" quest alpha --repo "$REPO_A" 2>&1); has "a duplicate slug is refused" "$out" "already exists"
 out=$(echo x | "$GUILD" quest beta --repo "$REPO_A" --harness nope 2>&1); has "an unknown harness is refused" "$out" "unknown harness"
@@ -117,7 +122,6 @@ hasnt "the server refuses path traversal" "$out" "root:"
 
 # ── the trial gate ────────────────────────────────────────────────────────────
 section "trial gate"
-WT="$GUILD_WORKTREES/repo-a-alpha"
 export GUILD_QUEST=alpha
 run_shim() { (cd "$WT" && PATH="$REPO/bin/shims:$PATH" gh "$@" 2>&1); }
 has "other gh commands pass through" "$(run_shim --version)" "REAL GH"
@@ -174,6 +178,7 @@ has "an orphan quest is revived" "$out" "revived alpha"
 has "its window is back" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W')" "alpha"
 has "the revived launch continues instead of restarting" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "continue"
 
+mkdir -p "$WT/node_modules" && echo cached > "$WT/node_modules/dep.txt"   # ignored build output
 echo "work in progress" > "$WT/unsaved.txt"
 out=$("$GUILD" close alpha 2>&1); has "a dirty worktree is protected" "$out" "uncommitted"
 [ -d "$GUILD_HOME/quests/alpha" ] && ok "a protected quest stays live" || bad "a protected quest stays live"
@@ -182,6 +187,31 @@ out=$("$GUILD" close alpha 2>&1); has "a dirty worktree is protected" "$out" "un
 archived=$(ls "$GUILD_HOME/quests/_archive" | head -1)
 [ -f "$GUILD_HOME/quests/_archive/$archived/ledger.json" ] && ok "its cost is frozen on close" || bad "its cost is frozen on close"
 has "history keeps the frozen cost" "$("$GUILD" cost)" '$14.70'
+
+section "worktree pool"
+[ -d "$WT" ] && ok "closing returns the slot instead of deleting it" || bad "closing returns the slot instead of deleting it"
+is "the build cache survives" "$(cat "$WT/node_modules/dep.txt" 2>/dev/null)" "cached"
+is "tracked leftovers are gone" "$([ -e "$WT/unsaved.txt" ] && echo present || echo gone)" "gone"
+is "the slot holds no branch" "$(git -C "$WT" symbolic-ref -q --short HEAD || echo detached)" "detached"
+has "the pool lists it as free" "$("$GUILD" pool list)" "free"
+
+out=$(echo "second quest" | "$GUILD" quest beta --repo "$REPO_A" --model sonnet 2>&1)
+has "the next quest reuses the warm slot" "$out" "reused"
+WT2=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/beta/meta.json'))['worktree'])")
+is "it is the same slot" "$WT2" "$WT"
+is "and it is still warm" "$(cat "$WT2/node_modules/dep.txt" 2>/dev/null)" "cached"
+is "on the new quest branch" "$(git -C "$WT2" symbolic-ref --short HEAD)" "quest/beta"
+has "the pool now lists it busy" "$("$GUILD" pool list)" "busy"
+
+out=$(echo "isolated" | "$GUILD" quest gamma --repo "$REPO_A" --fresh --model sonnet 2>&1)
+WT3=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/gamma/meta.json'))['worktree'])")
+hasnt "--fresh stays out of the pool" "$WT3" "/pool/"
+"$GUILD" close gamma --force >/dev/null 2>&1
+[ -d "$WT3" ] && bad "a fresh worktree is removed on close" || ok "a fresh worktree is removed on close"
+
+out=$("$GUILD" pool drop 2>&1); has "a busy slot is not dropped" "$out" "in use"
+"$GUILD" close beta --force >/dev/null 2>&1
+out=$("$GUILD" pool drop 2>&1); has "a free slot can be dropped" "$out" "dropped"
 
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"

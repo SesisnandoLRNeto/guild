@@ -37,6 +37,7 @@ guild up ~/Workspace
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
+| `guild pool list\|drop [repo]` | The warm worktree slots quests start from |
 | `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
 | `guild cost [slug]` | Tokens, replies, time and dollars per quest |
 | `guild log [slug] [--since 7d] [--repo NAME]` | History: what ran, what it decided, what it cost |

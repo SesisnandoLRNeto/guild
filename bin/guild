@@ -26,7 +26,7 @@ usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
 guild quest <slug> --repo PATH [--base REF] [--harness claude|openrouter|codex] [--model M]
-                   [--brief FILE] [--ticket KEY]
+                   [--brief FILE] [--ticket KEY] [--fresh]
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
@@ -41,6 +41,7 @@ guild board wait <id> [--timeout S]  block until the guildmaster answers that bo
 guild board list | guild board url   boards and their state, or the war table address
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
                                     put the question on the war table as a page and open it (inside a quest)
+guild pool list|drop [repo]          the warm worktree pool quests are started from
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
 guild doctor                        check the setup: tools, config, identities, orphans
 guild cost [slug] [--active]        what each quest spent (tokens, replies, time, dollars)
@@ -216,11 +217,98 @@ carry_toolchain() { # repo worktree
   return 0
 }
 
+# A worktree pool, so a quest does not start from a cold checkout.
+#
+# A fresh worktree has no node_modules, no target/, no build cache, so the first build in
+# every quest pays for everything again, in minutes and in tokens. Slots are reused
+# instead: on close a slot is cleaned of tracked changes but keeps its ignored files, so
+# the next quest on that repo starts warm. `git clean -fd` (no -x) is exactly that line:
+# untracked files go, ignored build output stays.
+POOL_MAX="${GUILD_POOL_MAX:-4}"
+SLOT_IS_NEW=""
+
+pool_root() { echo "$WORKTREES/pool"; }
+
+# Is a slot taken? It is, when a quest that has not been archived points at it.
+slot_busy() { # path
+  python3 - "$QUESTS" "$1" <<'PY'
+import json, os, sys
+quests, path = sys.argv[1], sys.argv[2]
+for slug in os.listdir(quests) if os.path.isdir(quests) else []:
+    meta = os.path.join(quests, slug, "meta.json")
+    if slug == "_archive" or not os.path.exists(meta):
+        continue
+    try:
+        if json.load(open(meta)).get("worktree") == path:
+            print("busy")
+            break
+    except (OSError, ValueError):
+        continue
+PY
+}
+
+# A slot for this repo: a free one if there is one, a new one while under the cap.
+acquire_slot() { # repo -> prints path, or nothing when the pool is full
+  local repo="$1" name n path
+  name=$(basename "$repo")
+  mkdir -p "$(pool_root)"
+  for path in "$(pool_root)/$name-"*; do
+    [ -d "$path" ] || continue
+    [ -n "$(slot_busy "$path")" ] && continue
+    git -C "$path" rev-parse --git-dir >/dev/null 2>&1 || continue
+    echo "$path"
+    return 0
+  done
+  n=$(ls -d "$(pool_root)/$name-"* 2>/dev/null | wc -l | tr -d ' ')
+  [ "$n" -ge "$POOL_MAX" ] && return 0
+  path="$(pool_root)/$name-$((n + 1))"
+  git -C "$repo" worktree add -q --detach "$path" HEAD || return 0
+  SLOT_IS_NEW=1
+  echo "$path"
+}
+
+# Point a slot at this quest's branch, with a clean tree but its caches intact.
+prepare_slot() { # worktree branch base
+  git -C "$1" checkout -q -B "$2" "$3" || return 1
+  git -C "$1" reset -q --hard "$3"
+  git -C "$1" clean -qfd            # untracked go, ignored build output stays
+}
+
+# Back to the pool: no branch held, no leftovers, caches kept.
+release_slot() { # worktree
+  git -C "$1" checkout -q --detach 2>/dev/null || true
+  git -C "$1" reset -q --hard 2>/dev/null || true
+  git -C "$1" clean -qfd 2>/dev/null || true
+}
+
+cmd_pool() {
+  case "${1:-list}" in
+    list)
+      printf '%-44s %s\n' SLOT STATE
+      local path
+      for path in "$(pool_root)"/*; do
+        [ -d "$path" ] || continue
+        printf '%-44s %s\n' "$(basename "$path")" "$([ -n "$(slot_busy "$path")" ] && echo busy || echo free)"
+      done ;;
+    drop)
+      local path repo
+      for path in "$(pool_root)"/*; do
+        [ -d "$path" ] || continue
+        [ -n "${2:-}" ] && case "$(basename "$path")" in "${2:-}"-*) ;; *) continue ;; esac
+        [ -n "$(slot_busy "$path")" ] && { echo "skipped $(basename "$path"): in use"; continue; }
+        repo=$(git -C "$path" rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's#/\.git$##')
+        git -C "$repo" worktree remove --force "$path" 2>/dev/null || rm -rf "$path"
+        echo "dropped $(basename "$path")"
+      done ;;
+    *) die "usage: guild pool list|drop [repo-name]" ;;
+  esac
+}
+
 cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
-  local repo="" base="" harness="claude" model="" brief="" ticket=""
+  local repo="" base="" harness="claude" model="" brief="" ticket="" fresh=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -229,6 +317,7 @@ cmd_quest() {
       --model) model="$2"; shift 2 ;;
       --brief) brief="$2"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
+      --fresh) fresh=1; shift ;;
       *) die "unknown option $1" ;;
     esac
   done
@@ -245,8 +334,22 @@ cmd_quest() {
     base=$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD || true)
     [ -n "$base" ] || base=$(git -C "$repo" symbolic-ref -q --short HEAD || echo HEAD)
   fi
-  local wt="$WORKTREES/$(basename "$repo")-$slug"
-  git -C "$repo" worktree add -q -b "quest/$slug" "$wt" "$base"
+  local wt=""
+  if [ -z "$fresh" ]; then
+    wt=$(acquire_slot "$repo")
+    if [ -n "$wt" ]; then
+      prepare_slot "$wt" "quest/$slug" "$base" || die "could not prepare the pooled worktree $wt"
+      if [ -n "$SLOT_IS_NEW" ]; then
+        echo "worktree: new pool slot $(basename "$wt")"
+      else
+        echo "worktree: reused $(basename "$wt"), build cache kept"
+      fi
+    fi
+  fi
+  if [ -z "$wt" ]; then          # --fresh, or the pool is full
+    wt="$WORKTREES/$(basename "$repo")-$slug"
+    git -C "$repo" worktree add -q -b "quest/$slug" "$wt" "$base"
+  fi
   inherit_trust "$repo" "$wt"
   carry_toolchain "$repo" "$wt"
 
@@ -262,7 +365,8 @@ cmd_quest() {
 import json
 json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "quest/$slug",
            "base": "$base", "harness": "$harness", "model": "$model",
-           "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
+           "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
+           "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
 
   sed -e "s#{{SLUG}}#$slug#g" -e "s#{{QDIR}}#$q#g" -e "s#{{BASE}}#$base#g" -e "s#{{REPO}}#$repo#g" \
@@ -452,7 +556,12 @@ cmd_close() {
   # The session logs stay on disk, but freeze the numbers now so history never drifts.
   python3 "$GUILD_REPO/bin/ledger.py" snapshot "$slug" >/dev/null 2>&1 || true
   tm kill-window -t "$SESSION:$slug" 2>/dev/null || true
-  [ -d "$wt" ] && git -C "$repo" worktree remove ${force:+--force} "$wt"
+  if [ -d "$wt" ]; then
+    case "$wt" in
+      "$(pool_root)"/*) release_slot "$wt"; echo "worktree returned to the pool, cache kept" ;;
+      *) git -C "$repo" worktree remove ${force:+--force} "$wt" ;;
+    esac
+  fi
   python3 - "$wt" <<'PY'
 import json, os, sys, tempfile
 path = os.path.expanduser("~/.claude.json")
@@ -483,6 +592,7 @@ case "${1:-}" in
   ask) shift; cmd_ask "$@" ;;
   calm) shift; cmd_calm "$@" ;;
   revive) shift; cmd_revive "$@" ;;
+  pool) shift; cmd_pool "$@" ;;
   doctor) shift; cmd_doctor "$@" ;;
   cost) shift; cmd_cost "$@" ;;
   log) shift; cmd_log "$@" ;;
