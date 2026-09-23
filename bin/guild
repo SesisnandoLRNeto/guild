@@ -42,6 +42,9 @@ guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend i
                                     put the question on the war table as a page and open it (inside a quest)
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
 guild doctor                        check the setup: tools, config, identities, orphans
+guild cost [slug] [--active]        what each quest spent (tokens, replies, time, dollars)
+guild log [slug] [--since 7d] [--repo NAME]
+                                    the history: quests, decisions, trials, cost; one slug tells its whole story
 guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
 guild edit [slug]                   open nvim on a quest's worktree, in its own cockpit tab
@@ -116,6 +119,9 @@ cmd_revive() {
   [ "$revived" = 0 ] && echo "nothing to revive"
   return 0
 }
+
+cmd_cost() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" cost "$@"; }
+cmd_log()  { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" log "$@"; }
 
 cmd_doctor() { GUILD_TMUX_SOCKET="$SOCKET" GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/doctor.py" "$@"; }
 
@@ -412,6 +418,8 @@ cmd_close() {
   if [ -d "$wt" ] && [ -n "$(git -C "$wt" status --porcelain)" ] && [ "$force" != "--force" ]; then
     die "worktree $wt has uncommitted changes; use --force to drop them"
   fi
+  # The session logs stay on disk, but freeze the numbers now so history never drifts.
+  python3 "$GUILD_REPO/bin/ledger.py" snapshot "$slug" >/dev/null 2>&1 || true
   tm kill-window -t "$SESSION:$slug" 2>/dev/null || true
   [ -d "$wt" ] && git -C "$repo" worktree remove ${force:+--force} "$wt"
   python3 - "$wt" <<'PY'
@@ -445,6 +453,8 @@ case "${1:-}" in
   calm) shift; cmd_calm "$@" ;;
   revive) shift; cmd_revive "$@" ;;
   doctor) shift; cmd_doctor "$@" ;;
+  cost) shift; cmd_cost "$@" ;;
+  log) shift; cmd_log "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   edit) shift; cmd_edit "$@" ;;
   close) shift; [ $# -ge 1 ] || die "usage: guild close <slug> [--force]"; cmd_close "$@" ;;

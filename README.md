@@ -38,6 +38,8 @@ guild up ~/Workspace
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
 | `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
+| `guild cost [slug]` | Tokens, replies, time and dollars per quest |
+| `guild log [slug] [--since 7d] [--repo NAME]` | History: what ran, what it decided, what it cost |
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
@@ -61,6 +63,22 @@ guild ask "Ship the chooser now or after the icons?" \
 The agent then blocks on `guild board wait <id>` until you answer, and picks up your choice, your notes and your screenshots.
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+
+## Costs and history
+
+Claude Code writes a session log per working directory. A quest owns its worktree, so those are its logs: guild reads the token usage from them and prices it.
+
+```
+guild cost                     # every quest, most expensive first
+guild log --since 7d           # what ran this week, with trial result and decisions
+guild log pay-rate-fix         # one quest's whole story
+```
+
+`guild log <slug>` prints the brief, the harness and identity, how long it ran, tokens in and out, cache reads and writes, the trial result, every war table decision with what you picked, and the last events.
+
+The live cost of each quest also shows in the cockpit sidebar and the total sits in the status bar. When a quest closes, its numbers are frozen into `ledger.json` next to the archived quest, so history never drifts.
+
+Prices live in `~/.guild/local/pricing.json` (per million tokens, input, output, cache write, cache read). A model that is not in that file is priced with the default and flagged as estimated, so add new models as they ship. On a subscription nothing is billed per token: the dollars are what the same work would have cost on the API, which is still the honest way to compare two quests.
 
 ## After a restart
 

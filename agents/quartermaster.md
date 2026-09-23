@@ -42,6 +42,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 ## Other commands
 
 - `guild roster`: state of all quests.
+- `guild cost [slug]` and `guild log [slug] [--since 7d]`: what work cost and what the fleet has done. Use them when the guildmaster asks where the quota went, what shipped this week, or how a past quest was decided.
 - `guild peek <slug> [lines]`: see an adventurer's screen.
 - `guild send <slug> "<msg>"`: talk to an adventurer.
 - `guild board list`: boards waiting for the guildmaster. Tell an adventurer to use the `war-table` skill when a choice needs visuals (designs, before and after, several variants), or at the end of a feature for the wrap-up report.

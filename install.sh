@@ -51,7 +51,7 @@ ENV
   echo "config -> $GUILD_HOME/local/env (put your OpenRouter key here)"
 fi
 
-for f in dispatch identities; do
+for f in dispatch identities pricing; do
   [ -f "$GUILD_HOME/local/$f.json" ] || { cp "$REPO/config/$f.example.json" "$GUILD_HOME/local/$f.json"; echo "config -> $GUILD_HOME/local/$f.json (edit it)"; }
 done
 echo "done. Start with: guild up"

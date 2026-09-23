@@ -26,6 +26,21 @@ COLORS = {
 MARKS = {"needs-decision": "*", "blocked": "!", "failed": "!", "stopped": "?", "done": "+"}
 
 
+def costs():
+    """{slug: dollars} from the ledger, which keeps its own cache."""
+    repo = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    try:
+        out = subprocess.run([sys.executable, os.path.join(repo, "bin", "ledger.py"), "costs"],
+                             capture_output=True, text=True, timeout=20).stdout
+        return json.loads(out)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return {}
+
+
+def money(c):
+    return f"${c:,.2f}" if c >= 1 else f"${c:.3f}"
+
+
 def read_quests():
     out = []
     if not os.path.isdir(QUESTS):
@@ -53,7 +68,7 @@ def mark_tabs(quests):
                         "@guildstate", mark], capture_output=True)
 
 
-def draw(quests, width):
+def draw(quests, width, spend=None):
     lines = [f"{BOLD}fleet{RESET}", ""]
     by_repo = {}
     for q in quests:
@@ -67,7 +82,9 @@ def draw(quests, width):
             board = f" {COLORS['needs-decision']}[board]{RESET}" if q["boards"] else ""
             lines.append(f"  {color}●{RESET} {q['slug'][:width - 6]}{board}")
             model = q.get("model") or q.get("harness", "")
-            lines.append(f"    {DIM}{model} · {q['state']}{RESET}")
+            price = (spend or {}).get(q["slug"])
+            tail = f" · {money(price)}" if price else ""
+            lines.append(f"    {DIM}{model} · {q['state']}{tail}{RESET}")
     lines += ["", f"{BOLD}recent{RESET}", ""]
     try:
         tail = open(EVENTS).read().splitlines()[-7:]
@@ -90,11 +107,14 @@ def count_line():
     live = sum(1 for q in quests if q["state"] in ("working", "stopped"))
     waiting = sum(1 for q in quests if q["state"] in ("needs-decision", "blocked", "failed"))
     boards = sum(q["boards"] for q in quests)
+    spent = sum(costs().values())
     parts = [f"{live} working"]
     if waiting:
         parts.append(f"{waiting} waiting on you")
     if boards:
         parts.append(f"{boards} board{'s' if boards > 1 else ''}")
+    if spent:
+        parts.append(money(spent))
     return " · ".join(parts)
 
 
@@ -108,7 +128,8 @@ def main():
             ["tput", "cols"], capture_output=True, text=True).stdout.strip() or 30)
         quests = read_quests()
         mark_tabs(quests)
-        sys.stdout.write("\033[H\033[2J" + "\n".join(draw(quests, width)) + "\n")
+        spend = costs()
+        sys.stdout.write("\033[H\033[2J" + "\n".join(draw(quests, width, spend)) + "\n")
         sys.stdout.flush()
         time.sleep(interval)
 
