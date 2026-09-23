@@ -202,6 +202,20 @@ PY
 
 harness_bin() { case "$1" in codex) echo codex ;; *) echo claude ;; esac; }
 
+# Version managers (jenv, nvm, asdf, pyenv) read a pin file from the working directory.
+# Those files are often untracked, so a fresh worktree would not have one, and the manager
+# would walk up and use some parent's pin instead: a quest on a Java 25 repo would build
+# with whatever ~/ says. Copy the pins the main checkout uses, when the worktree lacks them.
+TOOLCHAIN_PINS=".java-version .nvmrc .node-version .tool-versions .python-version .ruby-version .sdkmanrc"
+
+carry_toolchain() { # repo worktree
+  local f
+  for f in $TOOLCHAIN_PINS; do
+    [ -f "$1/$f" ] && [ ! -e "$2/$f" ] && cp "$1/$f" "$2/$f" && echo "toolchain: $f -> $(cat "$2/$f" | tr -d '\n')"
+  done
+  return 0
+}
+
 cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
@@ -234,6 +248,7 @@ cmd_quest() {
   local wt="$WORKTREES/$(basename "$repo")-$slug"
   git -C "$repo" worktree add -q -b "quest/$slug" "$wt" "$base"
   inherit_trust "$repo" "$wt"
+  carry_toolchain "$repo" "$wt"
 
   mkdir -p "$q"
   if [ -n "$brief" ]; then cp "$brief" "$q/brief.md"; else cat > "$q/brief.md"; fi

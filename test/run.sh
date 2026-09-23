@@ -55,6 +55,7 @@ REPO_A="$TMP/repo-a"
 mkdir -p "$REPO_A" && git -C "$REPO_A" init -q -b main
 git -C "$REPO_A" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
 git -C "$REPO_A" remote add origin "git@github.com:TestOrg/repo-a.git"
+echo 25 > "$REPO_A/.java-version"   # untracked on purpose: that is the case that used to break
 
 tmux -L "$GUILD_TMUX_SOCKET" new-session -d -s guild -n qm "sleep 600"
 
@@ -70,6 +71,7 @@ has "work identity comes from the remote owner" "$(cat "$GUILD_HOME/quests/alpha
 has "gh account matches the owner" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "work-acct"
 has "the shim is first on PATH" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "bin/shims"
 has "a window is opened for it" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W')" "alpha"
+is "an untracked toolchain pin is carried into the worktree" "$(cat "$GUILD_WORKTREES/repo-a-alpha/.java-version" 2>/dev/null)" "25"
 
 out=$(echo x | "$GUILD" quest alpha --repo "$REPO_A" 2>&1); has "a duplicate slug is refused" "$out" "already exists"
 out=$(echo x | "$GUILD" quest beta --repo "$REPO_A" --harness nope 2>&1); has "an unknown harness is refused" "$out" "unknown harness"
