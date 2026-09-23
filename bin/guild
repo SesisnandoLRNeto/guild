@@ -40,6 +40,8 @@ guild board wait <id> [--timeout S]  block until the guildmaster answers that bo
 guild board list | guild board url   boards and their state, or the war table address
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
                                     put the question on the war table as a page and open it (inside a quest)
+guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
+guild doctor                        check the setup: tools, config, identities, orphans
 guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
 guild edit [slug]                   open nvim on a quest's worktree, in its own cockpit tab
@@ -70,16 +72,52 @@ cmd_calm() {
 cmd_up() {
   local dir="${1:-$HOME}"
   if ! tm has-session -t "$SESSION" 2>/dev/null; then
+    local sid resume=""
+    if [ -s "$GUILD_HOME/qm-session" ]; then
+      sid=$(cat "$GUILD_HOME/qm-session")
+      resume="--resume '$sid'"          # same conversation as before the restart
+    else
+      # First reign: claude must be told the id, or there is nothing to resume later.
+      sid=$(uuidgen | tr 'A-Z' 'a-z')
+      echo "$sid" > "$GUILD_HOME/qm-session"
+      resume="--session-id '$sid'"
+    fi
+    local qm="$(calm_env)GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
     tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" "guild watch; exec \$SHELL"
+    # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
-      "$(calm_env)GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster; exec \$SHELL"
+      "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
     tm select-layout -t "$SESSION:qm" main-vertical
     command -v claude-deck >/dev/null && tm new-window -d -t "$SESSION" -n deck "claude-deck; exec \$SHELL"
     tm select-window -t "$SESSION:qm"
     tm select-pane -t "$SESSION:qm.1"
+    cmd_revive >/dev/null 2>&1 || true   # quests that outlived the last session get their windows back
   fi
   if [ -n "${TMUX:-}" ]; then tm switch-client -t "$SESSION"; else tm attach -t "$SESSION"; fi
 }
+
+# A quest survives a restart on disk, but its tmux window does not. Revive relaunches the
+# harness in the same worktree and tells it to continue where it stopped.
+cmd_revive() {
+  local only="${1:-}" revived=0 slug state
+  tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+  for d in "$QUESTS"/*/; do
+    [ -f "$d/meta.json" ] || continue
+    slug=$(basename "$d")
+    [ -n "$only" ] && [ "$only" != "$slug" ] && continue
+    state=$(cut -f1 "$d/status" 2>/dev/null)
+    case "$state" in working|needs-decision|blocked|stopped) ;; *) continue ;; esac
+    tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$slug" && continue
+    tm new-window -d -t "$SESSION" -n "$slug" "GUILD_RESUME=1 bash '$d/launch.sh'"
+    event "$slug" "$state" "window revived after a restart"
+    echo "revived $slug ($state)"
+    revived=$((revived + 1))
+  done
+  [ "$revived" = 0 ] && echo "nothing to revive"
+  return 0
+}
+
+cmd_doctor() { GUILD_TMUX_SOCKET="$SOCKET" GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/doctor.py" "$@"; }
 
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
 
@@ -202,22 +240,25 @@ PY
     [ -n "$ghu" ] && echo "export GH_TOKEN=\"\$(gh auth token --user '$ghu')\""
     # The gh shim gates `gh pr create` for every harness, not only the ones with hooks.
     echo "export PATH='$GUILD_REPO/bin/shims':\$PATH"
+    echo 'resume=""; [ "${GUILD_RESUME:-}" = 1 ] && resume="--continue"'
+    echo 'first="Start the quest."; [ "${GUILD_RESUME:-}" = 1 ] && first="You were interrupted by a restart. Check what you already did (git log, git status, the quest status), then carry on."'
     case "$harness" in
       claude)
-        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \\"
+        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \$resume \\"
         echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
-        echo "  'Start the quest. Your brief is in $q/brief.md'" ;;
+        echo "  \"\$first Your brief is in $q/brief.md\"" ;;
       openrouter)
         # Claude Code speaks its own protocol to OpenRouter's Anthropic-compatible endpoint.
         # ANTHROPIC_API_KEY must be empty, or Claude Code goes to Anthropic instead.
         [ -f "$GUILD_HOME/local/env" ] && echo "set -a; . '$GUILD_HOME/local/env'; set +a"
         echo "[ -n \"\${OPENROUTER_API_KEY:-}\" ] || { echo 'guild: no OPENROUTER_API_KEY (put it in $GUILD_HOME/local/env)'; exec \$SHELL; }"
         echo "export ANTHROPIC_BASE_URL='https://openrouter.ai/api' ANTHROPIC_AUTH_TOKEN=\"\$OPENROUTER_API_KEY\" ANTHROPIC_API_KEY=''"
-        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \\"
+        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \$resume \\"
         echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
-        echo "  'Start the quest. Your brief is in $q/brief.md'" ;;
+        echo "  \"\$first Your brief is in $q/brief.md\"" ;;
       codex)
         # workspace-write keeps Codex inside the worktree; --add-dir lets it report to guild.
+        echo '[ "${GUILD_RESUME:-}" = 1 ] && exec codex resume --last'
         echo "codex -C '$wt' --add-dir '$GUILD_HOME' -s workspace-write -a never ${model:+-m '$model'} \\"
         echo "  \"\$(cat '$q/prompt.md')"$'\n\n'"Start the quest. Your brief is in $q/brief.md\"" ;;
       *) die "unknown harness $harness (claude, openrouter or codex)" ;;
@@ -402,6 +443,8 @@ case "${1:-}" in
   board) shift; cmd_board "$@" ;;
   ask) shift; cmd_ask "$@" ;;
   calm) shift; cmd_calm "$@" ;;
+  revive) shift; cmd_revive "$@" ;;
+  doctor) shift; cmd_doctor "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   edit) shift; cmd_edit "$@" ;;
   close) shift; [ $# -ge 1 ] || die "usage: guild close <slug> [--force]"; cmd_close "$@" ;;

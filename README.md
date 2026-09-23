@@ -36,6 +36,8 @@ guild up ~/Workspace
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
+| `guild revive [slug]` | Bring an active quest's window back after a restart |
+| `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
@@ -59,6 +61,14 @@ guild ask "Ship the chooser now or after the icons?" \
 The agent then blocks on `guild board wait <id>` until you answer, and picks up your choice, your notes and your screenshots.
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+
+## After a restart
+
+Close the terminal, reboot, or kill tmux: nothing is lost.
+
+- The quartermaster keeps its Claude session id in `~/.guild/qm-session`, so the next `guild up` **resumes the same conversation** instead of waking up with an empty head. If that session log is gone, it starts a fresh one under a new id.
+- Active quests get their windows back automatically (`guild revive` does it on its own during `guild up`). Each adventurer is relaunched in its worktree with `--continue`, and is told it was interrupted, so it checks `git log` and its own status before carrying on. A Codex quest resumes with `codex resume --last`.
+- `guild doctor` reports anything left behind: quests with no window, finished quests still holding a worktree, boards waiting on you, broken identities, missing tools.
 
 ## Harnesses: who runs a quest
 
