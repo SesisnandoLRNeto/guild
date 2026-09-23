@@ -16,7 +16,7 @@ Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate
 
 ## Install
 
-Needs `tmux`, `git`, `gh`, `python3`, and Claude Code.
+Needs `tmux`, `git`, `gh`, `python3` and Claude Code. Optional: `nvim` (or set `$EDITOR`) for `guild edit`, and [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) for the `deck` tab.
 
 ```sh
 git clone https://github.com/SesisnandoLRNeto/guild ~/Workspace/guild
@@ -40,12 +40,59 @@ guild up ~/Workspace
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild calm on\|off\|status` | Draw a blue bird instead of tool calls in guild sessions |
+| `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
+| `guild edit [slug]` | Open `$EDITOR` (nvim by default) on a quest's worktree, in its own tab |
 
 Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
 ## The war table
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+
+## The cockpit
+
+`guild up` builds the whole workspace in tmux:
+
+```
+┌─ sidebar ────────┬─ quartermaster ─────────────────────────────┐
+│ fleet            │                                             │
+│                  │  > ship the pay rate change                 │
+│  crowdgen-api    │                                             │
+│  ● pay-rate      │  Quest pay-rate is on opus. Two others are   │
+│    opus·working  │  still running. I will report back.          │
+│  crowdgen-front  │                                             │
+│  ● layouts [board]│                                            │
+│    fable·waiting │                                             │
+│                  │                                             │
+│ recent           │                                             │
+│  07:14 done      │                                             │
+│   docs: PR #12   │                                             │
+└──────────────────┴─────────────────────────────────────────────┘
+ guild   0 qm   1 deck   2 pay-rate   3 layouts*    2 working · 1 waiting on you
+```
+
+- **Left pane**: every quest grouped by repo, with a colored state dot, its model, and the last events. It refreshes every 2 seconds.
+- **Right pane**: the quartermaster. The only session you talk to.
+- **One tab per quest**, plus a `deck` tab running [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) when it is installed. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
+- **Status bar** on the right: how many quests are working, how many wait on you, how many boards are open.
+
+### Keys
+
+The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does not fire here.
+
+| Key | What |
+|---|---|
+| `Ctrl-g` then `0`…`9` | Jump to a tab |
+| `Alt-Left` / `Alt-Right` | Previous or next tab |
+| `Alt-h` / `Alt-l` | Move between the sidebar and the quartermaster |
+| `Ctrl-g` `w` | Pick a quest from a list |
+| `Ctrl-g` `e` | nvim on the current quest's worktree, in its own tab |
+| `Ctrl-g` `g` | Open the war table in the browser |
+| `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |
+
+### It does not touch your tmux
+
+The cockpit runs on its own tmux server, socket `guild`, with `config/guild.tmux.conf`. Your normal `tmux` keeps its own server, config, keys and sessions. Attach by hand with `tmux -L guild attach -t guild`, and kill everything with `tmux -L guild kill-server`.
 
 ## Calm mode: the blue bird
 
@@ -64,3 +111,4 @@ Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspa
 ## Roadmap
 
 - More harnesses: Codex and OpenRouter models, with routing rules
+- claude-deck on a tmux backend, so the deck can drive guild sessions on any terminal

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # guild: talk to one quartermaster, ship with a party of adventurers.
-# State lives in $GUILD_HOME (default ~/.guild). Sessions live in the tmux session "guild".
+# State lives in $GUILD_HOME (default ~/.guild). Sessions live in its own tmux server (socket "guild").
 set -euo pipefail
 
 GUILD_HOME="${GUILD_HOME:-$HOME/.guild}"
 GUILD_REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 SESSION="guild"
+# Guild runs its own tmux server, so its config and keys never touch your normal tmux.
+SOCKET="${GUILD_TMUX_SOCKET:-guild}"
+tm() { tmux -L "$SOCKET" "$@"; }
 QUESTS="$GUILD_HOME/quests"
 # Under ~/Workspace so new worktrees inherit Claude folder trust (no trust prompt per quest).
 WORKTREES="${GUILD_WORKTREES:-$HOME/Workspace/.guild-worktrees}"
@@ -21,7 +24,7 @@ current_quest() { echo "${1:-${GUILD_QUEST:-}}"; }
 
 usage() {
   cat <<'EOF'
-guild up [dir]                      start or attach the guild tmux session (quartermaster in window "qm")
+guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
 guild quest <slug> --repo PATH [--base REF] [--harness claude|codex] [--model M] [--brief FILE]
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
@@ -36,6 +39,8 @@ guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--as
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
 guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
+guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
+guild edit [slug]                   open nvim on a quest's worktree, in its own cockpit tab
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
 EOF
 }
@@ -58,13 +63,38 @@ cmd_calm() {
   esac
 }
 
+# The cockpit: window "qm" holds the sidebar and the quartermaster, every quest gets its
+# own tab, and claude-deck gets one too when it is installed.
 cmd_up() {
   local dir="${1:-$HOME}"
-  if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-    tmux new-session -d -s "$SESSION" -n qm -c "$dir" \
+  if ! tm has-session -t "$SESSION" 2>/dev/null; then
+    tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" "guild watch; exec \$SHELL"
+    tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
       "$(calm_env)GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster; exec \$SHELL"
+    tm select-layout -t "$SESSION:qm" main-vertical
+    command -v claude-deck >/dev/null && tm new-window -d -t "$SESSION" -n deck "claude-deck; exec \$SHELL"
+    tm select-window -t "$SESSION:qm"
+    tm select-pane -t "$SESSION:qm.1"
   fi
-  if [ -n "${TMUX:-}" ]; then tmux switch-client -t "$SESSION"; else tmux attach -t "$SESSION"; fi
+  if [ -n "${TMUX:-}" ]; then tm switch-client -t "$SESSION"; else tm attach -t "$SESSION"; fi
+}
+
+cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
+
+# nvim on a quest's worktree, in its own tab. Inside the cockpit, Ctrl-g e does this for
+# the quest whose tab you are looking at.
+cmd_edit() {
+  local slug; slug=$(current_quest "${1:-}")
+  [ -n "$slug" ] || die "usage: guild edit <slug>"
+  need_quest "$slug"
+  local wt win
+  wt=$(python3 -c "import json;print(json.load(open('$(qdir "$slug")/meta.json'))['worktree'])")
+  win="edit:$slug"
+  if tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$win"; then
+    tm select-window -t "$SESSION:$win"
+  else
+    tm new-window -t "$SESSION" -n "$win" -c "$wt" "${EDITOR:-nvim} .; exec \$SHELL"
+  fi
 }
 
 # Resolve git identity + gh user from the repo's remote owner via local/identities.json.
@@ -128,7 +158,7 @@ cmd_quest() {
   repo="$(cd "$repo" && git rev-parse --show-toplevel)" || die "not a git repo: $repo"
   local q; q="$(qdir "$slug")"
   [ -e "$q" ] && die "quest '$slug' already exists"
-  tmux has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+  tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
 
   if [ -z "$base" ]; then
     git -C "$repo" fetch -q origin 2>/dev/null || true
@@ -179,11 +209,15 @@ PY
 
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
-  tmux new-window -d -t "$SESSION" -n "$slug" "bash '$q/launch.sh'"
+  tm new-window -d -t "$SESSION" -n "$slug" "bash '$q/launch.sh'"
   echo "quest $slug: $harness${model:+/$model} on $(basename "$repo") [$base] identity=${email:-git default}"
 }
 
 cmd_roster() {
+  if [ "${1:-}" = "--count" ]; then
+    python3 "$GUILD_REPO/bin/watch.py" --count
+    return
+  fi
   printf '%-28s %-22s %-18s %-15s %s\n' QUEST REPO HARNESS STATE NOTE
   local d
   for d in "$QUESTS"/*/; do
@@ -222,13 +256,13 @@ cmd_wait() {
   done
 }
 
-cmd_peek() { need_quest "$1"; tmux capture-pane -p -t "$SESSION:$1" -S "-${2:-40}"; }
+cmd_peek() { need_quest "$1"; tm capture-pane -p -t "$SESSION:$1" -S "-${2:-40}"; }
 
 cmd_send() {
   need_quest "$1"
-  tmux send-keys -t "$SESSION:$1" -l "$2"
+  tm send-keys -t "$SESSION:$1" -l "$2"
   sleep 0.3
-  tmux send-keys -t "$SESSION:$1" Enter
+  tm send-keys -t "$SESSION:$1" Enter
   printf 'working\t%s\t%s\n' "resumed after message" "$(now)" > "$(qdir "$1")/status"
   event "$1" message "guildmaster: ${2:0:80}"
 }
@@ -274,7 +308,7 @@ cmd_close() {
   if [ -d "$wt" ] && [ -n "$(git -C "$wt" status --porcelain)" ] && [ "$force" != "--force" ]; then
     die "worktree $wt has uncommitted changes; use --force to drop them"
   fi
-  tmux kill-window -t "$SESSION:$slug" 2>/dev/null || true
+  tm kill-window -t "$SESSION:$slug" 2>/dev/null || true
   [ -d "$wt" ] && git -C "$repo" worktree remove ${force:+--force} "$wt"
   python3 - "$wt" <<'PY'
 import json, os, sys, tempfile
@@ -296,7 +330,7 @@ PY
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   quest) shift; cmd_quest "$@" ;;
-  roster) cmd_roster ;;
+  roster) shift; cmd_roster "$@" ;;
   status) shift; [ $# -ge 2 ] || die "usage: guild status <slug> <state> [note]"; cmd_status "$@" ;;
   wait) shift; cmd_wait "$@" ;;
   peek) shift; [ $# -ge 1 ] || die "usage: guild peek <slug> [lines]"; cmd_peek "$@" ;;
@@ -304,6 +338,8 @@ case "${1:-}" in
   trial) shift; cmd_trial "$@" ;;
   board) shift; cmd_board "$@" ;;
   calm) shift; cmd_calm "$@" ;;
+  watch) shift; cmd_watch "$@" ;;
+  edit) shift; cmd_edit "$@" ;;
   close) shift; [ $# -ge 1 ] || die "usage: guild close <slug> [--force]"; cmd_close "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command $1 (see guild help)" ;;
