@@ -236,12 +236,15 @@ def cmd_open(args):
     if args.get("decisions"):
         subprocess.run(["cp", os.path.abspath(args["decisions"]), os.path.join(d, "decisions.json")], check=True)
     json.dump({"id": board, "quest": quest, "title": args.get("title") or board,
-               "subtitle": args.get("subtitle", ""), "created": now()},
+               "subtitle": args.get("subtitle", ""), "wrapup": bool(args.get("wrapup")), "created": now()},
               open(os.path.join(d, "board.json"), "w"), indent=2)
 
     port = ensure_server()
     url = f"http://127.0.0.1:{port}/b/{quest}/{board}/"
-    record(quest, "needs-decision", f"war table ready: {args.get('title') or board} -> {url}")
+    if args.get("wrapup"):
+        record(quest, "working", f"wrap-up ready: {args.get('title') or board} -> {url}")
+    else:
+        record(quest, "needs-decision", f"war table ready: {args.get('title') or board} -> {url}")
     # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
     if not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
         subprocess.run(["open", url], check=False)

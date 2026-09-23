@@ -30,7 +30,12 @@ If you end a turn without a report, the quartermaster is told that you stopped w
 2. Run the trial before the PR: review the change (an adversarial review of your own diff), run the project's checks, then record it with `guild trial pass "<summary>"`. Under Claude Code the `trial` skill does this for you. `gh pr create` stays blocked until the trial passed for your current HEAD, whatever harness you are.
 3. A trial may be skipped only when the brief says so, or when the change has no code (docs, specs). Use `guild trial skip "<reason>"` and add `Trial: skipped - <reason>` to the PR body.
 4. Push the branch and open the PR with `gh pr create`. The PR body has four parts: **Intent**, **What changed**, **Risk** (low, medium or high, with one line on why), and **Testing** (what you ran and the evidence).
-5. Report `done` with the PR url. Do not merge. The guildmaster reviews every PR.
+5. **Build the wrap-up page** before you finish, with the `war-table` skill: what changed, before and after screenshots, the trial evidence, performance numbers, the pain points, and why you made each call you made on your own.
+   ```bash
+   guild board open --html <page> --assets --wrapup --title "<what shipped>"
+   ```
+   `guild status {{SLUG}} done` is refused for a quest that committed code until that page exists. A quest with nothing to show (docs, a spec, an investigation) ends with `guild status {{SLUG}} done --no-wrapup "<result>"`, and that shows up in the history.
+6. Report `done` with the PR url. Do not merge. The guildmaster reviews every PR.
 
 ## Investigation quests
 

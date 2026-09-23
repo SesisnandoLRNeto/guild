@@ -30,13 +30,16 @@ guild quest <slug> --repo PATH [--base REF] [--harness claude|openrouter|codex] 
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
-guild status <slug> <state> [note]  set state: working|blocked|needs-decision|done|failed|stopped
+guild status <slug> <state> [note] [--no-wrapup]
+                                    set state: working|blocked|needs-decision|done|failed|stopped
+                                    (a code quest needs a wrap-up board before done; --no-wrapup opts out)
 guild wait [timeout-seconds]        block until a new event arrives, then print it (default 1800s)
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
 guild send <slug> <message>         type a message into an adventurer's session
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
-guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--id ID]
+guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup]
                                     put a war table up for the guildmaster and open it in the browser
+                                    (--wrapup marks it as the quest's end-of-work report)
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
@@ -434,6 +437,34 @@ PY
   done
 }
 
+# Has this quest actually committed code? A report is only owed when something changed.
+quest_committed() { # slug
+  local q wt base
+  q="$(qdir "$1")"
+  wt=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('worktree',''))" 2>/dev/null)
+  base=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('base',''))" 2>/dev/null)
+  [ -d "$wt" ] || return 0
+  [ -n "$(git -C "$wt" log --oneline "$base..HEAD" 2>/dev/null | head -1)" ] && echo committed
+  return 0
+}
+
+# A board marked as the quest's wrap-up (guild board open --wrapup).
+wrapup_of() { # slug
+  python3 - "$(qdir "$1")/boards" <<'PY'
+import json, os, sys
+root = sys.argv[1]
+if os.path.isdir(root):
+    for b in sorted(os.listdir(root)):
+        meta = os.path.join(root, b, "board.json")
+        try:
+            if json.load(open(meta)).get("wrapup"):
+                print(b)
+                break
+        except (OSError, ValueError):
+            continue
+PY
+}
+
 # Is there a board for this quest that the guildmaster has not answered yet?
 open_board() { # slug
   python3 - "$(qdir "$1")/boards" <<'PY'
@@ -448,11 +479,25 @@ PY
 }
 
 cmd_status() {
-  local slug="$1" state="$2" note="${3:-}"
+  local slug="$1" state="$2"; shift 2
+  local note=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-wrapup) export GUILD_NO_WRAPUP=1; shift ;;
+      *) note="$1"; shift ;;
+    esac
+  done
   need_quest "$slug"
   case "$state" in working|blocked|needs-decision|done|failed|stopped) ;; *) die "bad state $state" ;; esac
   # Every decision reaches the guildmaster as a page on the war table, never as a line of
   # terminal text. Without a board, guild builds one from the question itself.
+  # Did this quest change code? Then "done" owes the guildmaster a wrap-up page.
+  if [ "$state" = done ] && [ -z "${GUILD_NO_WRAPUP:-}" ] && [ -z "$(wrapup_of "$slug")" ] && [ -n "$(quest_committed "$slug")" ]; then
+    die "this quest changed code, so 'done' needs a wrap-up board: build the page (war-table skill) and run
+     guild board open --html <page> --assets --wrapup --title \"<what shipped>\"
+     Nothing to show (docs, spec, an investigation)? Then: guild status $slug done --no-wrapup \"<result>\""
+  fi
+
   local board=""
   [ "$state" = needs-decision ] && board=$(open_board "$slug")
   # A decision already on a board keeps that board's title when no note is given.
@@ -465,6 +510,7 @@ cmd_status() {
     GUILD_QUEST="$slug" python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$note"
     return
   fi
+  [ "$state" = done ] && [ -n "${GUILD_NO_WRAPUP:-}" ] && note="$note (no wrap-up)"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
 }

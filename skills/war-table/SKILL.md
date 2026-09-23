@@ -67,7 +67,7 @@ Write `decisions.json` beside the page and pass `--decisions`:
 - A short "what I already ruled out and why".
 - Numbers when they exist: bundle size, query count, render time, token cost.
 
-**Wrap-up report** (after the trial, before or with the PR)
+**Wrap-up report** (after the trial, before or with the PR). Open it with `--wrapup`, which marks it as the quest's report and leaves the quest working instead of waiting on a decision. A code quest cannot report `done` without one.
 - **What changed**: one paragraph, then the file list with one line each.
 - **Before and after**: screenshots in pairs, same viewport and same data. Use the Chrome tools to take them.
 - **Evidence**: the trial's testing table, with results.

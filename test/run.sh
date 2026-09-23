@@ -140,6 +140,25 @@ is "the claude hook agrees with the shim" "$?" "2"
 unset GUILD_QUEST
 
 # ── the ledger ────────────────────────────────────────────────────────────────
+section "wrap-up gate"
+# alpha has commits by now, so "done" owes a report.
+out=$("$GUILD" status alpha done "shipped it" 2>&1); has "a code quest cannot just say done" "$out" "wrap-up board"
+hasnt "and it did not become done" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+out=$("$GUILD" status alpha done "docs only" --no-wrapup 2>&1)
+is "--no-wrapup is an explicit way out" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+has "and it is recorded" "$(cut -f2 "$GUILD_HOME/quests/alpha/status")" "no wrap-up"
+
+"$GUILD" status alpha working "back to it" >/dev/null
+cat > "$TMP/wrap.html" <<'HTML'
+<!doctype html><meta charset=utf-8><h1>What changed</h1><p>before and after</p>
+HTML
+out=$(GUILD_QUEST=alpha "$GUILD" board open --html "$TMP/wrap.html" --wrapup --title "alpha shipped" --no-open 2>&1)
+has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
+is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
+"$GUILD" status alpha done "shipped it" >/dev/null 2>&1
+is "with a wrap-up, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+"$GUILD" status alpha working "carrying on" >/dev/null   # later sections need it live
+
 section "ledger"
 # A synthetic session log with round numbers: sonnet 5 at $2/$10/$2.50/$0.20 per M.
 proj="$HOME/.claude/projects/$(echo "$WT" | sed 's#/#-#g; s#\.#-#g')"

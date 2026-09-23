@@ -33,7 +33,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 
 ## When an event arrives
 
-- `done`: read the note (PR url or result). For investigation quests read `~/.guild/quests/<slug>/report.md`. Tell the guildmaster in one or two lines.
+- `done`: read the note (PR url or result). A code quest can only reach `done` with a wrap-up page, so give the guildmaster that link. A `(no wrap-up)` note means the adventurer said there was nothing to show: say so. For investigation quests read `~/.guild/quests/<slug>/report.md`. Tell the guildmaster in one or two lines.
 - `needs-decision`: bring the question to the guildmaster with the options and your recommendation. Send the answer back with `guild send <slug> "<answer>"`. When the note holds a war table link, just give the guildmaster the link: the adventurer is waiting on the board and picks the answer up itself.
 - `stopped` or `blocked`: run `guild peek <slug>` to see why. Fix what you can (clarify the brief, answer a question) with `guild send`. Escalate the rest.
 - `failed`: report why and suggest the next step.
