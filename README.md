@@ -39,6 +39,7 @@ guild up ~/Workspace
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
+| `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
 | `guild calm on\|off\|status` | Draw a blue bird instead of tool calls in guild sessions |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug]` | Open `$EDITOR` (nvim by default) on a quest's worktree, in its own tab |
@@ -46,6 +47,16 @@ guild up ~/Workspace
 Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
 ## The war table
+
+**Every decision becomes a page.** An adventurer cannot escalate with a line of terminal text: `guild status <slug> needs-decision` either finds a board waiting for you, or builds one from the question and opens it. The short way is one command:
+
+```sh
+guild ask "Ship the chooser now or after the icons?" \
+  --option "now=Ship now: users get it this week, two releases" \
+  --option "later=Wait for the icons: one release, four days later" --recommend later
+```
+
+The agent then blocks on `guild board wait <id>` until you answer, and picks up your choice, your notes and your screenshots.
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
 

@@ -38,6 +38,8 @@ guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--as
                                     put a war table up for the guildmaster and open it in the browser
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
+guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
+                                    put the question on the war table as a page and open it (inside a quest)
 guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
 guild edit [slug]                   open nvim on a quest's worktree, in its own cockpit tab
@@ -250,12 +252,56 @@ PY
   done
 }
 
+# Is there a board for this quest that the guildmaster has not answered yet?
+open_board() { # slug
+  python3 - "$(qdir "$1")/boards" <<'PY'
+import os, sys
+root = sys.argv[1]
+if os.path.isdir(root):
+    for b in sorted(os.listdir(root)):
+        if os.path.exists(os.path.join(root, b, "board.json")) and not os.path.exists(os.path.join(root, b, "decision.json")):
+            print(b)
+            break
+PY
+}
+
 cmd_status() {
   local slug="$1" state="$2" note="${3:-}"
   need_quest "$slug"
   case "$state" in working|blocked|needs-decision|done|failed|stopped) ;; *) die "bad state $state" ;; esac
+  # Every decision reaches the guildmaster as a page on the war table, never as a line of
+  # terminal text. Without a board, guild builds one from the question itself.
+  local board=""
+  [ "$state" = needs-decision ] && board=$(open_board "$slug")
+  # A decision already on a board keeps that board's title when no note is given.
+  if [ "$state" = needs-decision ] && [ -n "$board" ] && [ -z "$note" ]; then
+    note="war table: $(python3 -c "import json;print(json.load(open('$(qdir "$slug")/boards/$board/board.json')).get('title',''))")"
+  fi
+  if [ "$state" = needs-decision ] && [ -z "$board" ]; then
+    [ -n "$note" ] || die "needs-decision needs the question as its note"
+    echo "guild: no board for this decision, putting the question on the war table" >&2
+    GUILD_QUEST="$slug" python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$note"
+    return
+  fi
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
+}
+
+cmd_ask() {
+  local slug; slug=$(current_quest)
+  if [ -z "$slug" ]; then
+    # The quartermaster asks too. Its boards live under a quest of its own.
+    slug="quartermaster"
+    if [ ! -d "$(qdir "$slug")" ]; then
+      mkdir -p "$(qdir "$slug")"
+      echo '{"slug": "quartermaster", "repo": "the fleet", "harness": "claude", "model": ""}' > "$(qdir "$slug")/meta.json"
+      printf 'working\tthe fleet\t%s\n' "$(now)" > "$(qdir "$slug")/status"
+    fi
+  fi
+  need_quest "$slug"
+  [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]'
+  local question="$1"; shift
+  python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$question" "$@"
 }
 
 cmd_wait() {
@@ -354,6 +400,7 @@ case "${1:-}" in
   send) shift; [ $# -ge 2 ] || die "usage: guild send <slug> <message>"; cmd_send "$@" ;;
   trial) shift; cmd_trial "$@" ;;
   board) shift; cmd_board "$@" ;;
+  ask) shift; cmd_ask "$@" ;;
   calm) shift; cmd_calm "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   edit) shift; cmd_edit "$@" ;;

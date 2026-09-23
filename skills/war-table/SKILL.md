@@ -12,6 +12,21 @@ Use it for two things:
 1. **Decision board**, when a choice is the guildmaster's to make: several designs, a trade-off, an ambiguous requirement, anything that changes intent or scope.
 2. **Wrap-up report**, at the end of a feature, after the trial: what changed, what it looks like now, what it cost, what still hurts.
 
+## The short way
+
+A plain decision needs no HTML at all:
+
+```bash
+guild ask "Ship the chooser now or after the icons?" \
+  --detail "The icons quest is still running; shipping first means two releases." \
+  --option "now=Ship now: users get it this week, two releases" \
+  --option "later=Wait for the icons: one release, about four days later" \
+  --recommend later
+guild board wait <id> --timeout 3600
+```
+
+Guild builds the page, opens it and waits. Use the long way below when the decision needs pictures: variants, before and after, a diagram, numbers.
+
 ## How to run one
 
 ```bash

@@ -245,6 +245,93 @@ def cmd_open(args):
     if not args.get("no_open"):
         subprocess.run(["open", url], check=False)
     print(url)
+    print(f"board id: {board}")
+    print(f"now wait for the answer: guild board wait {board} --timeout 3600")
+
+
+
+ASK_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>__TITLE__</title>
+<style>
+ :root { color-scheme: dark light;
+   --bg:#0f1117; --card:#161922; --line:#242835; --text:#e6e8ef; --dim:#9aa3b8; --accent:#7aa2f7; }
+ @media (prefers-color-scheme: light) {
+   :root { --bg:#f6f7fa; --card:#fff; --line:#e2e5ec; --text:#1b1f2a; --dim:#5c6478; --accent:#3a63c8; } }
+ * { box-sizing:border-box; }
+ body { margin:0; padding:32px 36px 56px; background:var(--bg); color:var(--text);
+   font:15px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+ h1 { font-size:22px; margin:0 0 10px; max-width:70ch; }
+ p.detail { color:var(--dim); margin:0 0 26px; max-width:70ch; white-space:pre-wrap; }
+ .opt { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
+   border-radius:10px; padding:14px 16px; margin-bottom:10px; max-width:70ch; }
+ .opt .id { font-family:ui-monospace,monospace; font-size:11px; color:var(--accent);
+   text-transform:uppercase; letter-spacing:.06em; }
+ .opt .label { font-weight:600; margin:2px 0 4px; }
+ .opt .why { color:var(--dim); font-size:14px; white-space:pre-wrap; }
+ .opt.suggested { border-left-color:#e0af68; }
+ .opt.suggested .id { color:#e0af68; }
+ .hint { color:var(--dim); font-size:13px; margin-top:28px; border-top:1px solid var(--line); padding-top:14px; }
+</style></head><body>
+<h1>__QUESTION__</h1>
+__DETAIL__
+__OPTIONS__
+<p class="hint">Answer in the panel on the right. You can add notes or drop screenshots there.</p>
+</body></html>
+"""
+
+
+def _esc(text):
+    return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def cmd_ask(args):
+    """Turn a plain question into a board: page, decision file, browser, all in one call."""
+    question = args["question"]
+    options = []
+    raw = args.get("option") or []
+    if isinstance(raw, str):
+        raw = [raw]
+    for item in raw:
+        # "id=Label" or "id=Label: why this one"
+        ident, _, rest = item.partition("=")
+        label, _, why = rest.partition(":")
+        options.append({"id": ident.strip(), "label": label.strip() or ident.strip(), "why": why.strip()})
+
+    blocks = []
+    for o in options:
+        suggested = " suggested" if o["id"] == args.get("recommend") else ""
+        why = f'<div class="why">{_esc(o["why"])}</div>' if o["why"] else ""
+        blocks.append(f'<div class="opt{suggested}"><div class="id">{_esc(o["id"])}'
+                      f'{" · suggested" if suggested else ""}</div>'
+                      f'<div class="label">{_esc(o["label"])}</div>{why}</div>')
+    detail = f'<p class="detail">{_esc(args["detail"])}</p>' if args.get("detail") else ""
+    page = (ASK_PAGE.replace("__TITLE__", _esc(args.get("title") or question[:60]))
+            .replace("__QUESTION__", _esc(question))
+            .replace("__DETAIL__", detail)
+            .replace("__OPTIONS__", "\n".join(blocks)))
+
+    question_id = "choice"
+    decisions = {"questions": [{
+        "id": question_id,
+        "title": question,
+        "detail": args.get("detail", ""),
+        "type": "single" if options else "text",
+        "recommended": args.get("recommend"),
+        "options": [{"id": o["id"], "label": o["label"], "why": o["why"]} for o in options],
+    }]}
+
+    tmp = os.path.join(GUILD_HOME, ".ask-tmp")
+    os.makedirs(tmp, exist_ok=True)
+    page_path, dec_path = os.path.join(tmp, "page.html"), os.path.join(tmp, "decisions.json")
+    with open(page_path, "w") as f:
+        f.write(page)
+    with open(dec_path, "w") as f:
+        json.dump(decisions, f, indent=2)
+
+    args["html"], args["decisions"] = page_path, dec_path
+    args.setdefault("title", question[:60])
+    cmd_open(args)
 
 
 def cmd_wait(args):
@@ -273,15 +360,25 @@ def main():
     for token in rest:
         if token.startswith("--"):
             key = token[2:].replace("-", "_")
-            args[key] = True
+            if not isinstance(args.get(key), list):  # keep what a repeated flag collected
+                args[key] = True
         elif key:
-            args[key] = token
+            if key == "option":
+                if not isinstance(args.get("option"), list):
+                    args["option"] = []
+                args["option"].append(token)
+            else:
+                args[key] = token
             key = None
         else:
             positional.append(token)
     if cmd == "open":
         args["quest"] = positional[0]
         return cmd_open(args)
+    if cmd == "ask":
+        args["quest"] = positional[0]
+        args["question"] = positional[1]
+        return cmd_ask(args)
     if cmd == "wait":
         args["quest"], args["id"] = positional[0], positional[1]
         return cmd_wait(args)

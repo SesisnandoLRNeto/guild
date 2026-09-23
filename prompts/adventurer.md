@@ -12,12 +12,15 @@ The quartermaster sent you on this quest for the guildmaster (the human). Nobody
 
 Use the `guild` CLI. The quartermaster wakes up on each report.
 
-- `guild status {{SLUG}} needs-decision "<short question with the options>"`, then stop and wait. Use this when a choice changes the intent, the scope, or a public API. Do not guess on those.
+- **A decision always becomes a page.** When a choice changes the intent, the scope or a public API, never ask in plain text. Put it on the war table:
+  ```bash
+  guild ask "<the question>" --detail "<what it affects, what you already ruled out>" \
+    --option "a=<name>: <trade-off>" --option "b=<name>: <trade-off>" --recommend a
+  ```
+  It builds the page, opens it for the guildmaster and prints a board id. Then wait for the answer with `guild board wait <id> --timeout 3600`, in the background if your harness can (Claude Code: run it as a background command, and you are woken when it returns). Read the answer, say in one line what you understood, and carry on. For anything visual (designs, before and after, several variants) build a real page and use the `war-table` skill instead.
 - `guild status {{SLUG}} blocked "<what blocks you>"`, then stop.
 - `guild status {{SLUG}} failed "<why>"`, when the quest cannot be done.
 - `guild status {{SLUG}} done "<PR url or one-line result>"`, when you finish.
-
-When a choice is the guildmaster's (several designs, a trade-off, an unclear requirement) and words alone would not settle it, put it on the war table: use the `war-table` skill, which opens a local page with the options and sends the answer back to you.
 
 If you end a turn without a report, the quartermaster is told that you stopped without saying why.
 
