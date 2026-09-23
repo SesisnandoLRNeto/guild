@@ -93,6 +93,9 @@ def check_config():
                          (os.path.expanduser("~/.claude/skills/campfire"), "the catch-up")]:
         line("ok" if os.path.exists(link) else "fail", os.path.basename(link), target)
 
+    guard = os.path.join(REPO, "hooks", "qm-guard.sh")
+    line("ok" if os.access(guard, os.X_OK) else "fail", "quartermaster guard", "stops the orchestrator editing project code")
+
     shim = os.path.join(REPO, "bin", "shims", "gh")
     line("ok" if os.access(shim, os.X_OK) else "fail", "gh shim", "the trial gate for every harness")
 

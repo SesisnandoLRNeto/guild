@@ -32,7 +32,10 @@ cat > "$GUILD_HOME/worker-settings.json" <<EOF
 EOF
 cat > "$GUILD_HOME/qm-settings.json" <<EOF
 {
-  "permissions": { "allow": ["Bash(guild:*)"] }
+  "permissions": { "allow": ["Bash(guild:*)"] },
+  "hooks": {
+    "PreToolUse": [{ "matcher": "Edit|Write|NotebookEdit|MultiEdit", "hooks": [{ "type": "command", "command": "$REPO/hooks/qm-guard.sh" }] }]
+  }
 }
 EOF
 echo "settings -> $GUILD_HOME/{worker,qm}-settings.json"

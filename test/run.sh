@@ -159,6 +159,15 @@ is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/que
 is "with a wrap-up, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
 "$GUILD" status alpha working "carrying on" >/dev/null   # later sections need it live
 
+section "quartermaster guard"
+guard() { echo "$1" | GUILD_HOME="$GUILD_HOME" "$REPO/hooks/qm-guard.sh" >/dev/null 2>&1; echo $?; }
+is "a write into a repo is refused" "$(guard '{"tool_name":"Write","tool_input":{"file_path":"'"$REPO_A"'/src/X.java"}}')" "2"
+is "editing guild itself is refused too" "$(guard '{"tool_name":"Edit","tool_input":{"file_path":"'"$REPO"'/bin/guild"}}')" "2"
+is "guild state stays writable" "$(guard '{"tool_name":"Edit","tool_input":{"file_path":"'"$GUILD_HOME"'/local/dispatch.json"}}')" "0"
+is "other tools are untouched" "$(guard '{"tool_name":"Bash","tool_input":{"command":"guild roster"}}')" "0"
+is "reads are untouched" "$(guard '{"tool_name":"Read","tool_input":{"file_path":"'"$REPO_A"'/src/X.java"}}')" "0"
+is "malformed input never blocks" "$(guard 'not json')" "0"
+
 section "ledger"
 # A synthetic session log with round numbers: sonnet 5 at $2/$10/$2.50/$0.20 per M.
 proj="$HOME/.claude/projects/$(echo "$WT" | sed 's#/#-#g; s#\.#-#g')"
