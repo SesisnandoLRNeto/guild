@@ -20,6 +20,7 @@ try: print(json.load(sys.stdin).get("transcript_path") or "")
 except ValueError: print("")' <<<"$input")
 fired=$(date +%Y-%m-%dT%H:%M:%S)
 grace="${GUILD_STOP_GRACE:-120}"
+guild_bin="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/bin/guild"
 
 (
   sleep "$grace"
@@ -34,7 +35,8 @@ grace="${GUILD_STOP_GRACE:-120}"
 print(1 if time.time() - os.path.getmtime(sys.argv[1]) < float(sys.argv[2]) - 2 else 0)' "$transcript" "$grace")
     [ "$moved" = 1 ] && exit 0
   fi
-  guild status "$slug" stopped "turn ended without a report; peek to see why"
+  # its own copy of guild, not whatever is on PATH (in CI, or before install.sh, nothing is)
+  "$guild_bin" status "$slug" stopped "turn ended without a report; peek to see why"
 ) >/dev/null 2>&1 &
 disown
 exit 0
