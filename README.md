@@ -30,7 +30,7 @@ guild up ~/Workspace
 | Command | What it does |
 |---|---|
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
-| `guild quest <slug> --repo PATH [--model M] [--harness claude\|openrouter\|codex] < brief` | Worktree + branch `quest/<slug>` + adventurer window |
+| `guild quest <slug> --repo PATH [--ticket KEY] [--model M] [--harness claude\|openrouter\|codex] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>` |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
@@ -111,6 +111,61 @@ The key is stored with the quest, so `guild log` and `guild retro` can show whic
 ```
 
 The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table (including a path traversal attempt), the trial gate in both forms, cost arithmetic against a synthetic session log, the retro counters, revive, close, and doctor. It also runs in CI on every push.
+
+Close the terminal, reboot, or kill tmux: nothing is lost.
+
+- The quartermaster keeps its Claude session id in `~/.guild/qm-session`, so the next `guild up` **resumes the same conversation** instead of waking up with an empty head. If that session log is gone, it starts a fresh one under a new id.
+- Active quests get their windows back automatically (`guild revive` does it on its own during `guild up`). Each adventurer is relaunched in its worktree with `--continue`, and is told it was interrupted, so it checks `git log` and its own status before carrying on. A Codex quest resumes with `codex resume --last`.
+- `guild doctor` reports anything left behind: quests with no window, finished quests still holding a worktree, boards waiting on you, broken identities, missing tools.
+
+## Running a phase of tickets
+
+A phase is not "start seven quests". Tickets depend on each other, and a quest that starts before its dependency is merged writes against a schema that does not exist yet.
+
+**Before the first quest**
+
+1. `guild doctor` — green, and the repo's owner maps to the right GitHub account.
+2. Check the repo has agent instructions (`AGENTS.md` or `CLAUDE.md`). A quest is only as good as what the repo tells an agent.
+3. Write the phase down: ticket, what it waits on, one line of intent. The `intake` skill does that from the tracker.
+
+**Then run it in waves**
+
+A wave is the set of tickets whose dependencies are already merged. Three or four at a time is plenty: the pool has 4 slots per repo by default, and every quest you start is another PR you owe a review.
+
+```sh
+guild quest fair-pay-values --repo ~/code/project-api --ticket SARA-812 --model sonnet <<'EOF'
+Intent: why this ticket exists, in your words
+Context: the ticket, the spec page, the code it touches, decisions already made
+Acceptance: what done looks like, as checks someone can run
+Constraints: what not to touch; whether the trial may be skipped
+Quest type: code
+EOF
+```
+
+The branch is `SARA-812/fair-pay-values`, the way the repo already names branches, so branch, PR and ticket line up.
+
+**While a wave runs**
+
+- The sidebar shows each quest, its model and its live cost. `*` wants a decision, `!` is blocked, `?` stopped without reporting.
+- Answer boards the same day. A blocked adventurer costs nothing and moves nothing.
+- `/campfire` tells you what landed, what runs, what waits on you.
+- Review each PR as it arrives. A merged dependency is what unblocks the next wave.
+
+**Closing a wave**
+
+`guild close <slug>` returns the worktree to the warm pool and freezes the cost into history. Then `guild retro --since 7d`, and let the `retro` skill write the lessons before the next phase.
+
+**What it costs**
+
+`guild cost` after the first wave beats any estimate. Route the mechanical tickets (DDL, contracts, small endpoints) to Sonnet in `~/.guild/local/dispatch.json` and keep the expensive models for the ones with judgment in them.
+
+## The worktree pool
+
+A fresh worktree has no `node_modules`, no `target/`, no build cache, so the first build of every quest pays for all of it again, in minutes and in tokens. Guild keeps a small pool of slots per repo instead (4 by default, `GUILD_POOL_MAX`).
+
+A quest takes a free slot and points it at its own branch; closing the quest returns the slot with `git clean -fd`, which removes untracked leftovers but keeps ignored build output. The next quest on that repo starts warm. `guild quest --fresh` opts out and gets a throwaway worktree, removed on close. `guild pool list` shows what is busy, `guild pool drop [repo]` clears free slots.
+
+## After a restart
 
 Close the terminal, reboot, or kill tmux: nothing is lost.
 
