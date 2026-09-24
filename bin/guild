@@ -26,7 +26,8 @@ usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
 guild quest <slug> --repo PATH [--base REF] [--harness claude|openrouter|codex] [--model M]
-                   [--brief FILE] [--ticket KEY] [--fresh]
+                   [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
+                                    branch is TICKET/slug when a ticket is given, else quest/slug
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
@@ -311,7 +312,7 @@ cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
-  local repo="" base="" harness="claude" model="" brief="" ticket="" fresh=""
+  local repo="" base="" harness="claude" model="" brief="" ticket="" fresh="" branch=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -321,6 +322,7 @@ cmd_quest() {
       --brief) brief="$2"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
+      --branch) branch="$2"; shift 2 ;;
       *) die "unknown option $1" ;;
     esac
   done
@@ -337,11 +339,17 @@ cmd_quest() {
     base=$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD || true)
     [ -n "$base" ] || base=$(git -C "$repo" symbolic-ref -q --short HEAD || echo HEAD)
   fi
+  # Teams name branches after the ticket. Follow that when there is one, so a quest's
+  # branch, PR and ticket line up without anyone renaming anything.
+  if [ -z "$branch" ]; then
+    if [ -n "$ticket" ]; then branch="$ticket/$slug"; else branch="quest/$slug"; fi
+  fi
+
   local wt=""
   if [ -z "$fresh" ]; then
     wt=$(acquire_slot "$repo")
     if [ -n "$wt" ]; then
-      prepare_slot "$wt" "quest/$slug" "$base" || die "could not prepare the pooled worktree $wt"
+      prepare_slot "$wt" "$branch" "$base" || die "could not prepare the pooled worktree $wt"
       if [ -n "$SLOT_IS_NEW" ]; then
         echo "worktree: new pool slot $(basename "$wt")"
       else
@@ -351,7 +359,7 @@ cmd_quest() {
   fi
   if [ -z "$wt" ]; then          # --fresh, or the pool is full
     wt="$WORKTREES/$(basename "$repo")-$slug"
-    git -C "$repo" worktree add -q -b "quest/$slug" "$wt" "$base"
+    git -C "$repo" worktree add -q -b "$branch" "$wt" "$base"
   fi
   inherit_trust "$repo" "$wt"
   carry_toolchain "$repo" "$wt"
@@ -366,13 +374,14 @@ cmd_quest() {
 
   python3 - "$q/meta.json" <<PY
 import json
-json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "quest/$slug",
+json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$branch",
            "base": "$base", "harness": "$harness", "model": "$model",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
 
   sed -e "s#{{SLUG}}#$slug#g" -e "s#{{QDIR}}#$q#g" -e "s#{{BASE}}#$base#g" -e "s#{{REPO}}#$repo#g" \
+    -e "s#{{BRANCH}}#$branch#g" -e "s#{{TICKET}}#${ticket:-none}#g" \
     "$GUILD_REPO/prompts/adventurer.md" > "$q/prompt.md"
 
   { echo "#!/usr/bin/env bash"
@@ -414,7 +423,7 @@ PY
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
   tm new-window -d -t "$SESSION" -n "$slug" "bash '$q/launch.sh'"
-  echo "quest $slug: $harness${model:+/$model} on $(basename "$repo") [$base] identity=${email:-git default}"
+  echo "quest $slug: $harness${model:+/$model} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
 cmd_roster() {
@@ -622,7 +631,7 @@ PY
   mkdir -p "$QUESTS/_archive"
   mv "$q" "$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
   event "$slug" closed ""
-  echo "closed $slug (branch quest/$slug kept in $repo)"
+  echo "closed $slug (branch $(python3 -c "import json;print(json.load(open('$QUESTS/_archive/'+sorted(__import__('os').listdir('$QUESTS/_archive'))[-1]+'/meta.json'))['branch'])" 2>/dev/null || echo "quest/$slug") kept in $repo)"
 }
 
 case "${1:-}" in

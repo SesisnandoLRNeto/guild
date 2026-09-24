@@ -5,7 +5,7 @@ The quartermaster sent you on this quest for the guildmaster (the human). Nobody
 ## Where things are
 
 - Brief: `{{QDIR}}/brief.md`. Read it first. It holds the intent, the context and the acceptance criteria.
-- You are in a clean git worktree on branch `quest/{{SLUG}}`, based on `{{BASE}}`. The main repo is `{{REPO}}`. Do not touch the main checkout or other worktrees.
+- You are in a clean git worktree on branch `{{BRANCH}}`, based on `{{BASE}}`. Ticket: `{{TICKET}}`. Name that ticket in your commits and in the PR title, the way the repo already does. The main repo is `{{REPO}}`. Do not touch the main checkout or other worktrees.
 - Your git identity and `gh` account are already set for this repo. Do not change git config.
 
 ## How to report

@@ -71,7 +71,13 @@ has "quest is created" "$out" "quest alpha"
 WT=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/meta.json'))['worktree'])")
 [ -d "$WT" ] && ok "worktree exists" || bad "worktree exists" "$WT"
 has "it comes from the pool" "$WT" "/pool/repo-a-"
-is "branch is quest/alpha" "$(git -C "$REPO_A" branch --list quest/alpha --format '%(refname:short)')" "quest/alpha"
+is "branch follows the ticket" "$(git -C "$REPO_A" branch --list 'ABC-1/alpha' --format '%(refname:short)')" "ABC-1/alpha"
+out=$(echo x | "$GUILD" quest noticket --repo "$REPO_A" 2>&1)
+is "no ticket means quest/<slug>" "$(git -C "$REPO_A" branch --list 'quest/noticket' --format '%(refname:short)')" "quest/noticket"
+"$GUILD" close noticket --force >/dev/null 2>&1
+out=$(echo x | "$GUILD" quest named --repo "$REPO_A" --branch "custom/name" 2>&1)
+is "--branch wins" "$(git -C "$REPO_A" branch --list 'custom/name' --format '%(refname:short)')" "custom/name"
+"$GUILD" close named --force >/dev/null 2>&1
 is "ticket is recorded" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/meta.json'))['ticket'])")" "ABC-1"
 has "work identity comes from the remote owner" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "work@example.com"
 has "gh account matches the owner" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "work-acct"
