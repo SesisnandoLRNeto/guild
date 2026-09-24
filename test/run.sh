@@ -41,7 +41,16 @@ sleep 60
 STUB
 cat > "$TMP/stub/gh" <<'STUB'
 #!/bin/sh
-echo "REAL GH: $*"
+# A tiny GitHub: two merged PRs, one declined, everything else echoed back.
+case "$*" in
+  *"pr list"*"--state merged"*)
+    echo '[{"number":11,"title":"Store rates as decimals","body":"floats lose cents","mergedAt":"2026-08-01T10:00:00Z","closedAt":"2026-08-01T10:00:00Z","url":"u","labels":[]},
+           {"number":12,"title":"Finance-only rate editing","body":"PMs read only","mergedAt":"2026-08-02T10:00:00Z","closedAt":"2026-08-02T10:00:00Z","url":"u","labels":[{"name":"pay"}]}]' ;;
+  *"pr list"*"--state closed"*)
+    echo '[{"number":13,"title":"Let PMs edit rates","body":"faster setup","mergedAt":null,"closedAt":"2026-08-03T10:00:00Z","url":"u","labels":[]},
+           {"number":11,"title":"Store rates as decimals","body":"","mergedAt":"2026-08-01T10:00:00Z","closedAt":"2026-08-01T10:00:00Z","url":"u","labels":[]}]' ;;
+  *) echo "REAL GH: $*" ;;
+esac
 STUB
 chmod +x "$TMP/stub/claude" "$TMP/stub/gh"
 
@@ -247,6 +256,28 @@ hasnt "--fresh stays out of the pool" "$WT3" "/pool/"
 out=$("$GUILD" pool drop 2>&1); has "a busy slot is not dropped" "$out" "in use"
 "$GUILD" close beta --force >/dev/null 2>&1
 out=$("$GUILD" pool drop 2>&1); has "a free slot can be dropped" "$out" "dropped"
+
+# ── vision ────────────────────────────────────────────────────────────────────
+section "vision"
+out=$("$GUILD" vision "$REPO_A" 2>&1)
+has "thin history is refused, not invented" "$out" "too little history"
+out=$("$GUILD" vision "$REPO_A" --min 1 2>&1)
+has "evidence is collected" "$out" "2 merged, 1 declined"
+has "declined work counts as evidence" "$(cat "$GUILD_HOME/visions/repo-a.evidence.json")" "Let PMs edit rates"
+has "status says there is no vision yet" "$("$GUILD" vision status "$REPO_A")" "no vision yet"
+
+printf '# repo-a vision\nstatus: sealed\n\nRates are never floats (#11, #12).\n' > "$GUILD_HOME/visions/repo-a.md"
+has "status sees a sealed vision" "$("$GUILD" vision status repo-a)" "sealed"
+echo x | "$GUILD" quest epsilon --repo "$REPO_A" >/dev/null 2>&1
+has "a quest on that repo is told to read it" "$(cat "$GUILD_HOME/quests/epsilon/prompt.md")" "This repo's vision"
+"$GUILD" close epsilon --force >/dev/null 2>&1
+
+cat > "$TMP/vision.html" <<'HTML'
+<!doctype html><meta charset=utf-8><h1>Draft principles</h1>
+HTML
+out=$(env -u GUILD_QUEST "$GUILD" board open --quest vision-repo-a --html "$TMP/vision.html" --title "Vision: repo-a" --no-open 2>&1)
+has "a board can live outside a quest" "$out" "/b/vision-repo-a/"
+[ -f "$GUILD_HOME/quests/vision-repo-a/meta.json" ] && ok "under a quest of its own" || bad "under a quest of its own"
 
 # ── EDD: acceptance as checks ─────────────────────────────────────────────────
 section "acceptance checks (EDD)"

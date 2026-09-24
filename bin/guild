@@ -39,8 +39,10 @@ guild peek <slug> [lines]           show the last lines of an adventurer's scree
 guild send <slug> <message>         type a message into an adventurer's session
 guild check [slug] [--baseline]     run the brief's acceptance checks in the quest worktree (EDD)
 guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
+guild vision <repo path>           collect a repo's merged, declined and reverted work (vision skill)
+guild vision status <repo>         is there a sealed vision for this repo
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
-guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup]
+guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
                                     (--wrapup marks it as the quest's end-of-work report)
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
@@ -396,10 +398,20 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
 PY
 
   python3 "$GUILD_REPO/bin/checks.py" seal "$q"      # the acceptance contract, sealed with a hash
+  local vision_file="$GUILD_HOME/visions/$(basename "$repo").md"
 
   sed -e "s#{{SLUG}}#$slug#g" -e "s#{{QDIR}}#$q#g" -e "s#{{BASE}}#$base#g" -e "s#{{REPO}}#$repo#g" \
     -e "s#{{BRANCH}}#$branch#g" -e "s#{{TICKET}}#${ticket:-none}#g" \
     "$GUILD_REPO/prompts/adventurer.md" > "$q/prompt.md"
+  if [ -f "$vision_file" ]; then
+    cat >> "$q/prompt.md" <<VISION
+
+## This repo's vision
+
+The guildmaster wrote down what this repo accepts and what it resists: \`$vision_file\`. Read it before you start.
+When your change goes against it, or it does not say, stop and put the question on the war table. The vision is the guildmaster's, not yours to reinterpret.
+VISION
+  fi
 
   { echo "#!/usr/bin/env bash"
     echo "cd '$wt'"
@@ -541,16 +553,23 @@ cmd_status() {
   event "$slug" "$state" "$note"
 }
 
+# Boards that are not about a real quest (the quartermaster's own questions, a repo's
+# vision) live under a small quest of their own, so every tool that reads quests works.
+ensure_pseudo_quest() { # slug what
+  [[ "$1" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "bad board quest name: $1"
+  if [ ! -d "$(qdir "$1")" ]; then
+    mkdir -p "$(qdir "$1")"
+    python3 -c "import json,sys;json.dump({'slug':sys.argv[1],'repo':sys.argv[2],'harness':'','model':'','pseudo':True},open(sys.argv[3],'w'))" \
+      "$1" "$2" "$(qdir "$1")/meta.json"
+    printf 'working\t%s\t%s\n' "$2" "$(now)" > "$(qdir "$1")/status"
+  fi
+}
+
 cmd_ask() {
   local slug; slug=$(current_quest)
   if [ -z "$slug" ]; then
-    # The quartermaster asks too. Its boards live under a quest of its own.
-    slug="quartermaster"
-    if [ ! -d "$(qdir "$slug")" ]; then
-      mkdir -p "$(qdir "$slug")"
-      echo '{"slug": "quartermaster", "repo": "the fleet", "harness": "claude", "model": ""}' > "$(qdir "$slug")/meta.json"
-      printf 'working\tthe fleet\t%s\n' "$(now)" > "$(qdir "$slug")/status"
-    fi
+    slug="quartermaster"            # the quartermaster asks too
+    ensure_pseudo_quest "$slug" "the fleet"
   fi
   need_quest "$slug"
   [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]'
@@ -582,6 +601,28 @@ cmd_send() {
   tm send-keys -t "$SESSION:$1" Enter
   printf 'working\t%s\t%s\n' "resumed after message" "$(now)" > "$(qdir "$1")/status"
   event "$1" message "guildmaster: ${2:0:80}"
+}
+
+# A repo's written values: evidence collected here, judgment in the vision skill.
+cmd_vision() {
+  local sub="${1:-}"
+  case "$sub" in
+    ""|-h|--help) die "usage: guild vision <repo path> [--min N]   |   guild vision status <repo path or name>" ;;
+    status|show)
+      local target="${2:-.}"
+      [ -d "$target" ] && target=$(basename "$(cd "$target" && git rev-parse --show-toplevel 2>/dev/null || pwd)")
+      python3 "$GUILD_REPO/bin/vision.py" status "$target" ;;
+    *)
+      local repo; repo="$(cd "$sub" && git rev-parse --show-toplevel)" || die "not a git repo: $sub"
+      shift
+      local ident ghu=""
+      ident=$(identity_for "$repo")
+      [ -n "$ident" ] && ghu=$(echo "$ident" | cut -d'|' -f3)
+      # read the repo's history with the account that owns it
+      [ -n "$ghu" ] && export GH_TOKEN="$(gh auth token --user "$ghu" 2>/dev/null || true)"
+      python3 "$GUILD_REPO/bin/vision.py" evidence "$repo" "$@"
+      echo "next: use the vision skill to draft principles and put the hard questions on the war table" ;;
+  esac
 }
 
 # EDD: the brief's acceptance checks, run in the quest's worktree.
@@ -644,10 +685,21 @@ cmd_board() {
   local sub="${1:-list}"; shift || true
   case "$sub" in
     open|wait)
-      local slug; slug=$(current_quest)
-      [ -n "$slug" ] || die "guild board $sub must run inside a quest (GUILD_QUEST not set)"
+      local slug="" rest=()
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --quest) slug="$2"; shift 2 ;;
+          *) rest+=("$1"); shift ;;
+        esac
+      done
+      if [ -n "$slug" ]; then
+        ensure_pseudo_quest "$slug" "board: $slug"
+      else
+        slug=$(current_quest)
+      fi
+      [ -n "$slug" ] || die "guild board $sub needs a quest: run it inside one, or pass --quest <name>"
       need_quest "$slug"
-      python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$slug" "$@" ;;
+      python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$slug" ${rest[@]+"${rest[@]}"} ;;
     list|url) python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$@" ;;
     *) die "usage: guild board open|wait|list|url" ;;
   esac
@@ -705,6 +757,7 @@ case "${1:-}" in
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;
   check) shift; cmd_check "$@" ;;
+  vision) shift; cmd_vision "$@" ;;
   doctor) shift; cmd_doctor "$@" ;;
   cost) shift; cmd_cost "$@" ;;
   log) shift; cmd_log "$@" ;;
