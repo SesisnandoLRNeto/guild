@@ -37,6 +37,8 @@ guild status <slug> <state> [note] [--no-wrapup]
 guild wait [timeout-seconds]        block until a new event arrives, then print it (default 1800s)
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
 guild send <slug> <message>         type a message into an adventurer's session
+guild check [slug] [--baseline]     run the brief's acceptance checks in the quest worktree (EDD)
+guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup]
                                     put a war table up for the guildmaster and open it in the browser
@@ -46,6 +48,8 @@ guild board list | guild board url   boards and their state, or the war table ad
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
                                     put the question on the war table as a page and open it (inside a quest)
 guild pool list|drop [repo]          the warm worktree pool quests are started from
+guild shot <url> --name before|after [--width W --height H]
+                                    a screenshot taken the same way every time, filed under the quest
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
 guild doctor                        check the setup: tools, config, identities, orphans
 guild cost [slug] [--active]        what each quest spent (tokens, replies, time, dollars)
@@ -134,6 +138,8 @@ cmd_retro() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" retro
 
 cmd_doctor() { GUILD_TMUX_SOCKET="$SOCKET" GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/doctor.py" "$@"; }
 
+cmd_shot() { python3 "$GUILD_REPO/bin/shot.py" "$@"; }
+
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
 
 # Your editor, the way you already use it: the file tree on the left, any file you want.
@@ -212,6 +218,15 @@ harness_bin() { case "$1" in codex) echo codex ;; *) echo claude ;; esac; }
 # would walk up and use some parent's pin instead: a quest on a Java 25 repo would build
 # with whatever ~/ says. Copy the pins the main checkout uses, when the worktree lacks them.
 TOOLCHAIN_PINS=".java-version .nvmrc .node-version .tool-versions .python-version .ruby-version .sdkmanrc"
+
+# Changes in a worktree, minus the toolchain pins guild itself copied in. Those are
+# untracked on purpose; counting them would make every quest on such a repo look dirty
+# forever, so nothing could close and no trial could pass.
+worktree_dirty() { # worktree
+  local pins; pins=$(printf '%s|' $TOOLCHAIN_PINS | sed 's/|$//; s/\./\\./g')
+  git -C "$1" status --porcelain 2>/dev/null | grep -vE "^\?\? ($pins)\$" || true
+}
+export GUILD_TOOLCHAIN_PINS="$TOOLCHAIN_PINS"
 
 carry_toolchain() { # repo worktree
   local f
@@ -379,6 +394,8 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
+
+  python3 "$GUILD_REPO/bin/checks.py" seal "$q"      # the acceptance contract, sealed with a hash
 
   sed -e "s#{{SLUG}}#$slug#g" -e "s#{{QDIR}}#$q#g" -e "s#{{BASE}}#$base#g" -e "s#{{REPO}}#$repo#g" \
     -e "s#{{BRANCH}}#$branch#g" -e "s#{{TICKET}}#${ticket:-none}#g" \
@@ -567,6 +584,40 @@ cmd_send() {
   event "$1" message "guildmaster: ${2:0:80}"
 }
 
+# EDD: the brief's acceptance checks, run in the quest's worktree.
+cmd_check() {
+  local slug="" baseline="" reseal="" timeout="900"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --baseline) baseline="--baseline"; shift ;;
+      --reseal) reseal=1; shift ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) slug="$1"; shift ;;
+    esac
+  done
+  slug=$(current_quest "$slug")
+  [ -n "$slug" ] || die "usage: guild check [slug] [--baseline] [--timeout S]  (inside a quest the slug is implicit)"
+  need_quest "$slug"
+  local q wt out rc
+  q="$(qdir "$slug")"
+  if [ -n "$reseal" ]; then
+    # Accepting a changed brief is the guildmaster's call, never the adventurer's.
+    [ -n "${GUILD_QUEST:-}" ] && die "only the guildmaster reseals acceptance; escalate on the war table instead"
+    python3 "$GUILD_REPO/bin/checks.py" reseal "$q"
+    event "$slug" acceptance "resealed by the guildmaster"
+    return
+  fi
+  wt=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['worktree'])")
+  set +e
+  out=$(python3 "$GUILD_REPO/bin/checks.py" run "$q" "$wt" $baseline --timeout "$timeout")
+  rc=$?
+  set -e
+  printf '%s\n' "$out" | grep -v '^__EVENT__'
+  local ev; ev=$(printf '%s\n' "$out" | grep '^__EVENT__' | tail -1)
+  [ -n "$ev" ] && event "$slug" "$(echo "$ev" | cut -f2)" "$(echo "$ev" | cut -f3)"
+  return $rc
+}
+
 cmd_trial() {
   local slug; slug=$(current_quest)
   [ -n "$slug" ] || die "trial must run inside a quest (GUILD_QUEST not set)"
@@ -578,6 +629,10 @@ cmd_trial() {
     *) die "usage: guild trial pass [note] | skip <reason>" ;;
   esac
   sha=$(git rev-parse HEAD)
+  if [ "$result" = pass ]; then
+    local why
+    why=$(python3 "$GUILD_REPO/bin/checks.py" status "$(qdir "$slug")" "$sha") || die "trial refused: $why"
+  fi
   python3 -c "import json,sys;json.dump({'sha':sys.argv[1],'result':sys.argv[2],'note':sys.argv[3],'at':sys.argv[4]},open(sys.argv[5],'w'),indent=2)" \
     "$sha" "$result" "$note" "$(now)" "$(qdir "$slug")/trial.json"
   event "$slug" "trial-$result" "${note:-$sha}"
@@ -605,7 +660,7 @@ cmd_close() {
   q="$(qdir "$slug")"
   wt=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['worktree'])")
   repo=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['repo'])")
-  if [ -d "$wt" ] && [ -n "$(git -C "$wt" status --porcelain)" ] && [ "$force" != "--force" ]; then
+  if [ -d "$wt" ] && [ -n "$(worktree_dirty "$wt")" ] && [ "$force" != "--force" ]; then
     die "worktree $wt has uncommitted changes; use --force to drop them"
   fi
   # The session logs stay on disk, but freeze the numbers now so history never drifts.
@@ -648,6 +703,8 @@ case "${1:-}" in
   calm) shift; cmd_calm "$@" ;;
   revive) shift; cmd_revive "$@" ;;
   pool) shift; cmd_pool "$@" ;;
+  shot) shift; cmd_shot "$@" ;;
+  check) shift; cmd_check "$@" ;;
   doctor) shift; cmd_doctor "$@" ;;
   cost) shift; cmd_cost "$@" ;;
   log) shift; cmd_log "$@" ;;

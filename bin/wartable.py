@@ -88,6 +88,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 return self.send(200, self.render_index())
+            v = re.match(r"^/vendor/([A-Za-z0-9._-]+)$", path)
+            if v:   # mermaid and friends, fetched once by install.sh, never from a CDN at view time
+                target = os.path.join(GUILD_HOME, "vendor", v.group(1))
+                if not os.path.isfile(target):
+                    return self.send(404, "not installed: run install.sh")
+                with open(target, "rb") as f:
+                    return self.send(200, f.read(), "text/javascript; charset=utf-8")
             m = re.match(r"^/b/([^/]+)/([^/]+)/?(.*)$", path)
             if not m:
                 return self.send(404, "not found")

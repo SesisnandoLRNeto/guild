@@ -50,6 +50,17 @@
   </figure>
 </div>
 
+<h2>How it flows</h2>
+<!-- Diagrams: write Mermaid inside a pre.mermaid block. It renders offline from the
+     war table itself. Use it for state machines, flows, sequences, anything with arrows. -->
+<pre class="mermaid">
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> Active: finance approves
+  Active --> Superseded: a newer row starts
+  Superseded --> [*]
+</pre>
+
 <h2>Numbers</h2>
 <table>
   <tr><th>Measure</th><th>Before</th><th>After</th><th>How measured</th></tr>
@@ -61,5 +72,12 @@
 
 <div class="note">Answer in the panel on the right. Add notes or drop screenshots there.</div>
 
+<script src="/vendor/mermaid.min.js"></script>
+<script>
+  if (window.mermaid) {
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
+  }
+</script>
 </body>
 </html>

@@ -213,6 +213,7 @@ has "its window is back" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -
 has "the revived launch continues instead of restarting" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "continue"
 
 mkdir -p "$WT/node_modules" && echo cached > "$WT/node_modules/dep.txt"   # ignored build output
+is "a carried toolchain pin alone is not a change" "$(cd "$REPO" && GUILD_HOME="$GUILD_HOME" bash -c 'source <(sed -n "/^TOOLCHAIN_PINS=/p;/^worktree_dirty()/,/^}/p" bin/guild); worktree_dirty "'"$WT"'"' | wc -l | tr -d ' ')" "0"
 echo "work in progress" > "$WT/unsaved.txt"
 out=$("$GUILD" close alpha 2>&1); has "a dirty worktree is protected" "$out" "uncommitted"
 [ -d "$GUILD_HOME/quests/alpha" ] && ok "a protected quest stays live" || bad "a protected quest stays live"
@@ -246,6 +247,68 @@ hasnt "--fresh stays out of the pool" "$WT3" "/pool/"
 out=$("$GUILD" pool drop 2>&1); has "a busy slot is not dropped" "$out" "in use"
 "$GUILD" close beta --force >/dev/null 2>&1
 out=$("$GUILD" pool drop 2>&1); has "a free slot can be dropped" "$out" "dropped"
+
+# ── EDD: acceptance as checks ─────────────────────────────────────────────────
+section "acceptance checks (EDD)"
+"$GUILD" quest delta --repo "$REPO_A" --model sonnet >/dev/null 2>&1 <<'EOF'
+Intent: add a greeting file
+Acceptance:
+- check: test -f hello.txt
+- check: true
+- the greeting reads well
+Constraints: none
+EOF
+QD="$GUILD_HOME/quests/delta"
+WTD=$(python3 -c "import json;print(json.load(open('$QD/meta.json'))['worktree'])")
+is "the contract is sealed at quest start" "$(python3 -c "import json;d=json.load(open('$QD/acceptance.json'));print(sum(1 for i in d['items'] if i['kind']=='check'), sum(1 for i in d['items'] if i['kind']=='manual'))")" "2 1"
+has "with a hash in the quest" "$(cat "$QD/meta.json")" "acceptance_hash"
+
+out=$("$GUILD" check delta --baseline 2>&1); code=$?
+is "a baseline run never fails the command" "$code" "0"
+has "a check that already passes is called weak" "$out" "weak"
+
+out=$(cd "$WTD" && GUILD_QUEST=delta "$GUILD" trial pass "too early" 2>&1)
+has "the trial refuses before any real run" "$out" "trial refused"
+
+out=$("$GUILD" check delta 2>&1); code=$?
+is "red checks exit non-zero" "$code" "1"
+has "and say what failed" "$out" "fail"
+has "a red run is an event" "$(tail -1 "$GUILD_HOME/events.log")" "checks-red"
+
+echo hi > "$WTD/hello.txt"
+git -C "$WTD" add hello.txt && git -C "$WTD" -c user.email=t@t -c user.name=t commit -q -m "add hello"
+out=$("$GUILD" check delta 2>&1); code=$?
+is "after the work the checks go green" "$code" "0"
+out=$(cd "$WTD" && GUILD_QUEST=delta "$GUILD" trial pass "checks green" 2>&1)
+has "the trial passes on green" "$out" "trial pass recorded"
+
+git -C "$WTD" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "later"
+out=$(cd "$WTD" && GUILD_QUEST=delta "$GUILD" trial pass "stale" 2>&1)
+has "a newer commit needs the checks run again" "$out" "run \`guild check\` again"
+
+cp "$QD/acceptance.json" "$TMP/acc.bak"
+python3 -c "import json;p='$QD/acceptance.json';d=json.load(open(p));d['items']=[{'kind':'check','run':'true'}];json.dump(d,open(p,'w'))"
+out=$("$GUILD" check delta 2>&1)
+has "a quietly weakened contract is refused" "$out" "changed since the quest started"
+cp "$TMP/acc.bak" "$QD/acceptance.json"
+
+out=$(GUILD_QUEST=delta "$GUILD" check delta --reseal 2>&1)
+has "an adventurer cannot reseal" "$out" "only the guildmaster"
+out=$("$GUILD" check delta --reseal 2>&1)
+has "the guildmaster can" "$out" "acceptance:"
+
+wg() { echo "$1" | GUILD_QUEST=delta GUILD_HOME="$GUILD_HOME" "$REPO/hooks/worker-guard.sh" >/dev/null 2>&1; echo $?; }
+is "the hook stops an adventurer editing its brief" "$(wg '{"tool_name":"Edit","tool_input":{"file_path":"'"$QD"'/brief.md"}}')" "2"
+is "or its acceptance file" "$(wg '{"tool_name":"Write","tool_input":{"file_path":"'"$QD"'/acceptance.json"}}')" "2"
+is "or running the reseal" "$(wg '{"tool_name":"Bash","tool_input":{"command":"guild check --reseal"}}')" "2"
+is "normal work is untouched" "$(wg '{"tool_name":"Edit","tool_input":{"file_path":"'"$WTD"'/hello.txt"}}')" "0"
+
+out=$("$GUILD" retro --since 30d --json)
+is "retro counts quests with checks" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["totals"]["edd"]["quests_with_checks"])')" "1"
+is "and the weak check" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["totals"]["edd"]["weak_checks"])')" "1"
+is "and that it was not a first pass" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["totals"]["edd"]["first_pass"])')" "0"
+has "history tells the acceptance story" "$("$GUILD" log delta)" "green after 2 runs"
+"$GUILD" close delta --force >/dev/null 2>&1
 
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"

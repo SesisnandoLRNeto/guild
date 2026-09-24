@@ -99,6 +99,12 @@ def check_config():
     shim = os.path.join(REPO, "bin", "shims", "gh")
     line("ok" if os.access(shim, os.X_OK) else "fail", "gh shim", "the trial gate for every harness")
 
+    mermaid = os.path.join(GUILD_HOME, "vendor", "mermaid.min.js")
+    line("ok" if os.path.exists(mermaid) else "warn", "mermaid for boards",
+         "diagrams render offline" if os.path.exists(mermaid) else "missing: run install.sh")
+    code, out, _ = run(sys.executable, os.path.join(REPO, "bin", "shot.py"), "x", "--find-browser")
+    line("ok" if out else "warn", "browser for guild shot", out or "no Chrome/Chromium/Edge: set GUILD_BROWSER")
+
     calm_file = os.path.join(GUILD_HOME, "calm")
     calm = open(calm_file).read().strip() if os.path.exists(calm_file) else "off"
     line("ok", "calm mode", f"{calm} (the bird; guild calm on|off)")

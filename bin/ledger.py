@@ -15,6 +15,9 @@ import re
 import sys
 from datetime import datetime, timedelta
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import checks  # noqa: E402  (bin/checks.py: the acceptance contract and its runs)
+
 GUILD_HOME = os.environ.get("GUILD_HOME", os.path.expanduser("~/.guild"))
 QUESTS = os.path.join(GUILD_HOME, "quests")
 ARCHIVE = os.path.join(QUESTS, "_archive")
@@ -115,6 +118,8 @@ def load(d):
         cost, unknown = cost_of(models)
         q.update({"models": models, "messages": messages, "first": first, "last": last,
                   "sessions": sessions, "cost": cost, "unknown": unknown, "source": "live"})
+
+    q["edd"] = checks.summarize(d)
 
     trial = os.path.join(d, "trial.json")
     q["trial"] = json.load(open(trial))["result"] if os.path.exists(trial) else ""
@@ -237,6 +242,13 @@ def show_one(matches, slug):
         print(f"            {DIM}{model}: in {human_tokens(tokens['input'])}, out {human_tokens(tokens['output'])}, "
               f"cache w {human_tokens(tokens['cache_write'])} / r {human_tokens(tokens['cache_read'])}{RESET}")
     print(f"  trial     {q['trial'] or 'none'}   decisions on the war table: {q['decisions']}")
+    edd = q.get("edd", {})
+    if edd.get("checks"):
+        story = ("first pass" if edd.get("first_pass") else
+                 f"green after {edd['runs_to_green']} runs" if edd.get("runs_to_green") else
+                 "not green yet" if edd.get("runs") else "never run")
+        print(f"  checks    {edd['checks']} check(s), {edd.get('manual', 0)} manual: {story}"
+              + (f", {len(edd['weak'])} weak" if edd.get("weak") else ""))
 
     brief = os.path.join(q["dir"], "brief.md")
     if os.path.exists(brief):
@@ -321,6 +333,7 @@ def cmd_retro(args):
             "stalls": sum(1 for e in mine if len(e) > 2 and e[2] == "stopped"),
             "escalations": sum(1 for e in mine if len(e) > 2 and e[2] == "needs-decision"),
             "revived": sum(1 for e in mine if len(e) > 3 and "revived" in e[3]),
+            "edd": q.get("edd", {}),
         })
 
     quests = report["quests"]
@@ -339,6 +352,21 @@ def cmd_retro(args):
         "stalls": sum(q["stalls"] for q in quests),
         "escalations": sum(q["escalations"] for q in quests),
     }
+    # EDD: how often a quest met its own acceptance on the first real run, per model.
+    judged = [q for q in quests if q["edd"].get("checks") and q["edd"].get("first_pass") is not None]
+    by_model = {}
+    for q in judged:
+        m = by_model.setdefault(q["model"] or q["harness"], [0, 0])
+        m[0] += 1 if q["edd"]["first_pass"] else 0
+        m[1] += 1
+    report["totals"]["edd"] = {
+        "quests_with_checks": sum(1 for q in quests if q["edd"].get("checks")),
+        "first_pass": sum(1 for q in judged if q["edd"]["first_pass"]),
+        "judged": len(judged),
+        "first_pass_by_model": {m: f"{a}/{b}" for m, (a, b) in sorted(by_model.items())},
+        "weak_checks": sum(len(q["edd"].get("weak", [])) for q in quests),
+        "code_quests_without_checks": sum(1 for q in quests if q["trial"] and not q["edd"].get("checks")),
+    }
     if args.get("json"):
         print(json.dumps(report, indent=2))
         return
@@ -351,6 +379,14 @@ def cmd_retro(args):
     print(f"  friction: {t['escalations']} escalations, {t['stalls']} silent stops")
     if t["by_model"]:
         print("  spend by model: " + ", ".join(f"{m} {money(c)}" for m, c in t["by_model"].items()))
+    e = t["edd"]
+    if e["quests_with_checks"]:
+        rate = f"{e['first_pass']}/{e['judged']}" if e["judged"] else "no runs yet"
+        print(f"  acceptance: first pass {rate}"
+              + (" · by model " + ", ".join(f"{m} {v}" for m, v in e["first_pass_by_model"].items()) if e["first_pass_by_model"] else "")
+              + (f" · {e['weak_checks']} weak check(s)" if e["weak_checks"] else ""))
+    if e["code_quests_without_checks"]:
+        print(f"  {e['code_quests_without_checks']} code quest(s) had no acceptance checks at all")
     print()
     for q in quests:
         flags = []
@@ -364,6 +400,16 @@ def cmd_retro(args):
             flags.append("recommendation overruled")
         if q["brief_lines"] and q["brief_lines"] < 3:
             flags.append("very short brief")
+        edd = q["edd"]
+        if edd.get("checks"):
+            if edd.get("first_pass") is True:
+                flags.append("acceptance: first pass")
+            elif edd.get("runs_to_green"):
+                flags.append(f"acceptance: green after {edd['runs_to_green']} runs")
+            elif edd.get("runs"):
+                flags.append("acceptance: never green")
+            if edd.get("weak"):
+                flags.append(f"{len(edd['weak'])} weak check(s)")
         mark = COLORS.get(q["state"], "")
         print(f"  {mark}{q['slug'][:28]:<30}{RESET} {q['model'][:14]:<15} {money(q['cost']):>8} "
               f"{DIM}{', '.join(flags) or 'clean'}{RESET}")
