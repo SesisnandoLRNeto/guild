@@ -41,6 +41,7 @@ guild check [slug] [--baseline]     run the brief's acceptance checks in the que
 guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
 guild vision <repo path>           collect a repo's merged, declined and reverted work (vision skill)
 guild vision status <repo>         is there a sealed vision for this repo
+guild jira once|watch|status       start quests from your @quartermaster comments on tickets
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
@@ -105,6 +106,9 @@ cmd_up() {
       "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
     tm select-layout -t "$SESSION:qm" main-vertical
     command -v claude-deck >/dev/null && tm new-window -d -t "$SESSION" -n deck "claude-deck; exec \$SHELL"
+    # The Jira watcher gets its own tab when jira.json says "watch": true, so you can see what it does.
+    python3 -c "import json,sys;sys.exit(0 if json.load(open('$GUILD_HOME/local/jira.json')).get('watch') else 1)" 2>/dev/null \
+      && tm new-window -d -t "$SESSION" -n jira "guild jira watch; exec \$SHELL"
     tm select-window -t "$SESSION:qm"
     tm select-pane -t "$SESSION:qm.1"
     cmd_revive >/dev/null 2>&1 || true   # quests that outlived the last session get their windows back
@@ -135,6 +139,8 @@ cmd_revive() {
 
 cmd_cost() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" cost "$@"; }
 cmd_log()  { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" log "$@"; }
+
+cmd_jira() { python3 "$GUILD_REPO/bin/jira_watch.py" "${1:-status}"; }
 
 cmd_retro() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" retro "$@"; }
 
@@ -758,6 +764,7 @@ case "${1:-}" in
   shot) shift; cmd_shot "$@" ;;
   check) shift; cmd_check "$@" ;;
   vision) shift; cmd_vision "$@" ;;
+  jira) shift; cmd_jira "$@" ;;
   doctor) shift; cmd_doctor "$@" ;;
   cost) shift; cmd_cost "$@" ;;
   log) shift; cmd_log "$@" ;;

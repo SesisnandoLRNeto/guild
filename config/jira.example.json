@@ -1,0 +1,17 @@
+{
+  "_note": "Copy to ~/.guild/local/jira.json. Put JIRA_API_TOKEN=... in ~/.guild/local/env (an Atlassian API token). Only comments written by this account trigger anything.",
+  "site": "https://your-company.atlassian.net",
+  "email": "you@company.example",
+  "trigger": "@quartermaster",
+  "projects": ["PROJ"],
+  "repos": {
+    "api": "~/code/api",
+    "web": "~/code/web"
+  },
+  "default_repo": { "PROJ": "api" },
+  "autostart": false,
+  "max_active": 2,
+  "poll_minutes": 5,
+  "model": "sonnet",
+  "watch": false
+}

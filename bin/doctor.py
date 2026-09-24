@@ -99,6 +99,18 @@ def check_config():
     shim = os.path.join(REPO, "bin", "shims", "gh")
     line("ok" if os.access(shim, os.X_OK) else "fail", "gh shim", "the trial gate for every harness")
 
+    jira = os.path.join(GUILD_HOME, "local", "jira.json")
+    if os.path.exists(jira):
+        try:
+            cfg = json.load(open(jira))
+            has_token = os.path.exists(env) and any(l.strip().startswith("JIRA_API_TOKEN=") for l in open(env))
+            line("ok" if has_token and cfg.get("projects") else "warn", "jira watcher",
+                 f"{', '.join(cfg.get('projects', [])) or 'no projects'} · "
+                 f"{'autostart' if cfg.get('autostart') else 'asks first'} · "
+                 f"{'token set' if has_token else 'no JIRA_API_TOKEN in local/env'}")
+        except ValueError as e:
+            line("fail", "jira.json", f"not valid json: {e}")
+
     mermaid = os.path.join(GUILD_HOME, "vendor", "mermaid.min.js")
     line("ok" if os.path.exists(mermaid) else "warn", "mermaid for boards",
          "diagrams render offline" if os.path.exists(mermaid) else "missing: run install.sh")
