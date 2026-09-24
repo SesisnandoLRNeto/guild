@@ -364,6 +364,8 @@ def main():
     cmd, rest = argv[0], argv[1:]
     if cmd == "daemon":
         serve()
+        with open(os.path.join(GUILD_HOME, ".wartable-pid"), "w") as f:
+            f.write(str(os.getpid()))
         while True:
             time.sleep(3600)
     args, key = {}, None

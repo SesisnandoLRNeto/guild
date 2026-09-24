@@ -93,6 +93,17 @@ def check_config():
                          (os.path.expanduser("~/.claude/skills/campfire"), "the catch-up")]:
         line("ok" if os.path.exists(link) else "fail", os.path.basename(link), target)
 
+    # Claude ignores a settings file it cannot parse, which would switch every gate off
+    # without a word. Prove they parse and still carry their hooks.
+    for name, hook in (("worker-settings.json", "pr-gate.sh"), ("qm-settings.json", "qm-guard.sh")):
+        path = os.path.join(GUILD_HOME, name)
+        try:
+            text = open(path).read()
+            json.loads(text)
+            line("ok" if hook in text else "fail", name, "valid, hooks present" if hook in text else f"{hook} missing: run install.sh")
+        except (OSError, ValueError) as e:
+            line("fail", name, f"unreadable or invalid, so its gates are off: {e}")
+
     guard = os.path.join(REPO, "hooks", "qm-guard.sh")
     line("ok" if os.access(guard, os.X_OK) else "fail", "quartermaster guard", "stops the orchestrator editing project code")
 

@@ -36,6 +36,7 @@ guild status <slug> <state> [note] [--no-wrapup]
                                     (a code quest needs a wrap-up board before done; --no-wrapup opts out)
 guild wait [timeout-seconds]        block until a new event arrives, then print it (default 1800s)
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
+guild peek <slug> --calls [n]       the last tool calls and results, from the session log (works with calm on)
 guild send <slug> <message>         type a message into an adventurer's session
 guild check [slug] [--baseline]     run the brief's acceptance checks in the quest worktree (EDD)
 guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
@@ -252,7 +253,6 @@ carry_toolchain() { # repo worktree
 # the next quest on that repo starts warm. `git clean -fd` (no -x) is exactly that line:
 # untracked files go, ignored build output stays.
 POOL_MAX="${GUILD_POOL_MAX:-4}"
-SLOT_IS_NEW=""
 
 pool_root() { echo "$WORKTREES/pool"; }
 
@@ -283,15 +283,14 @@ acquire_slot() { # repo -> prints path, or nothing when the pool is full
     [ -d "$path" ] || continue
     [ -n "$(slot_busy "$path")" ] && continue
     git -C "$path" rev-parse --git-dir >/dev/null 2>&1 || continue
-    echo "$path"
+    echo "reused $path"
     return 0
   done
   n=$(ls -d "$(pool_root)/$name-"* 2>/dev/null | wc -l | tr -d ' ')
   [ "$n" -ge "$POOL_MAX" ] && return 0
   path="$(pool_root)/$name-$((n + 1))"
   git -C "$repo" worktree add -q --detach "$path" HEAD || return 0
-  SLOT_IS_NEW=1
-  echo "$path"
+  echo "new $path"          # printed, not a variable: this runs inside $(...), a subshell
 }
 
 # Point a slot at this quest's branch, with a clean tree but its caches intact.
@@ -370,10 +369,11 @@ cmd_quest() {
 
   local wt=""
   if [ -z "$fresh" ]; then
-    wt=$(acquire_slot "$repo")
-    if [ -n "$wt" ]; then
+    local got; got=$(acquire_slot "$repo")
+    if [ -n "$got" ]; then
+      wt="${got#* }"
       prepare_slot "$wt" "$branch" "$base" || die "could not prepare the pooled worktree $wt"
-      if [ -n "$SLOT_IS_NEW" ]; then
+      if [ "${got%% *}" = new ]; then
         echo "worktree: new pool slot $(basename "$wt")"
       else
         echo "worktree: reused $(basename "$wt"), build cache kept"
@@ -598,7 +598,17 @@ cmd_wait() {
   done
 }
 
-cmd_peek() { need_quest "$1"; tm capture-pane -p -t "$SESSION:$1" -S "-${2:-40}"; }
+# The screen, or with --calls the tool calls from the session log. Calm mode hides tool
+# rows on screen, so the log is the only honest record of what an agent ran.
+cmd_peek() {
+  need_quest "$1"
+  if [ "${2:-}" = "--calls" ]; then
+    local wt; wt=$(python3 -c "import json;print(json.load(open('$(qdir "$1")/meta.json'))['worktree'])")
+    python3 "$GUILD_REPO/bin/calls.py" "$wt" "${3:-15}"
+    return
+  fi
+  tm capture-pane -p -t "$SESSION:$1" -S "-${2:-40}"
+}
 
 cmd_send() {
   need_quest "$1"
@@ -718,6 +728,7 @@ cmd_close() {
   q="$(qdir "$slug")"
   wt=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['worktree'])")
   repo=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['repo'])")
+  local branch; branch=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('branch') or 'quest/$slug')")
   if [ -d "$wt" ] && [ -n "$(worktree_dirty "$wt")" ] && [ "$force" != "--force" ]; then
     die "worktree $wt has uncommitted changes; use --force to drop them"
   fi
@@ -744,7 +755,7 @@ PY
   mkdir -p "$QUESTS/_archive"
   mv "$q" "$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
   event "$slug" closed ""
-  echo "closed $slug (branch $(python3 -c "import json;print(json.load(open('$QUESTS/_archive/'+sorted(__import__('os').listdir('$QUESTS/_archive'))[-1]+'/meta.json'))['branch'])" 2>/dev/null || echo "quest/$slug") kept in $repo)"
+  echo "closed $slug (branch $branch kept in $repo)"
 }
 
 case "${1:-}" in

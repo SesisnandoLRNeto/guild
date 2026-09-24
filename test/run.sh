@@ -29,7 +29,8 @@ section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 cleanup() {
   [ -n "${JIRA_PID:-}" ] && kill "$JIRA_PID" 2>/dev/null
   tmux -L "$GUILD_TMUX_SOCKET" kill-server 2>/dev/null
-  pkill -f "wartable.py daemon" 2>/dev/null
+  # only the suite's own war table: a bare pkill would take down your real one too
+  [ -f "$GUILD_HOME/.wartable-pid" ] && kill "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -77,6 +78,7 @@ tmux -L "$GUILD_TMUX_SOCKET" new-session -d -s guild -n qm "sleep 600"
 section "quests"
 out=$(echo "do a thing" | "$GUILD" quest alpha --repo "$REPO_A" --model sonnet --ticket ABC-1 2>&1)
 has "quest is created" "$out" "quest alpha"
+has "a repo's first quest says it made a new slot" "$out" "new pool slot"
 [ -f "$GUILD_HOME/quests/alpha/brief.md" ] && ok "brief is stored" || bad "brief is stored"
 WT=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/meta.json'))['worktree'])")
 [ -d "$WT" ] && ok "worktree exists" || bad "worktree exists" "$WT"
@@ -251,7 +253,8 @@ has "the pool now lists it busy" "$("$GUILD" pool list)" "busy"
 out=$(echo "isolated" | "$GUILD" quest gamma --repo "$REPO_A" --fresh --model sonnet 2>&1)
 WT3=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/gamma/meta.json'))['worktree'])")
 hasnt "--fresh stays out of the pool" "$WT3" "/pool/"
-"$GUILD" close gamma --force >/dev/null 2>&1
+out=$("$GUILD" close gamma --force 2>&1)
+has "close names the quest's own branch" "$out" "branch quest/gamma"
 [ -d "$WT3" ] && bad "a fresh worktree is removed on close" || ok "a fresh worktree is removed on close"
 
 out=$("$GUILD" pool drop 2>&1); has "a busy slot is not dropped" "$out" "in use"
@@ -303,7 +306,7 @@ JSON
 "$GUILD" jira once >/dev/null 2>&1
 st="$GUILD_HOME/jira-state.json"
 is "by default it asks instead of starting" "$(python3 -c "import json;print(len(json.load(open('$st'))['pending']))")" "1"
-[ -d "$GUILD_HOME/quests/sara-9-fair-pay-list" ] && bad "nothing starts before you say so" || ok "nothing starts before you say so"
+[ -d "$GUILD_HOME/quests/fair-pay-list" ] && bad "nothing starts before you say so" || ok "nothing starts before you say so"
 has "someone else's mention is ignored" "$(cat "$st")" '"101"'
 brief=$(python3 -c "import json;print(list(json.load(open('$st'))['pending'].values())[0]['brief'])")
 has "your own check comes through" "$brief" "check: test -f fairpay.txt"
@@ -313,12 +316,12 @@ hasnt "a project off the list is ignored" "$(cat "$st")" "OTHER-1"
 board=$(python3 -c "import json;print(list(json.load(open('$st'))['pending'].values())[0]['board'])")
 curl -s -X POST "http://127.0.0.1:4899/b/jira/$board/reply" -d '{"answers":{"go":"start"}}' >/dev/null
 "$GUILD" jira once >/dev/null 2>&1
-[ -d "$GUILD_HOME/quests/sara-9-fair-pay-list" ] && ok "your yes on the war table starts it" || bad "your yes on the war table starts it"
-is "the quest carries the ticket" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/sara-9-fair-pay-list/meta.json'))['branch'])")" "SARA-9/sara-9-fair-pay-list"
-has "and its acceptance is sealed" "$(cat "$GUILD_HOME/quests/sara-9-fair-pay-list/acceptance.json")" "test -f fairpay.txt"
+[ -d "$GUILD_HOME/quests/fair-pay-list" ] && ok "your yes on the war table starts it" || bad "your yes on the war table starts it"
+is "the branch names the ticket once" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/fair-pay-list/meta.json'))['branch'])")" "SARA-9/fair-pay-list"
+has "and its acceptance is sealed" "$(cat "$GUILD_HOME/quests/fair-pay-list/acceptance.json")" "test -f fairpay.txt"
 
 "$GUILD" jira once >/dev/null 2>&1
-is "polling again starts nothing new" "$(ls -d "$GUILD_HOME/quests/sara-"* | wc -l | tr -d ' ')" "1"
+is "polling again starts nothing new" "$(ls -d "$GUILD_HOME/quests/fair-pay-list"* | wc -l | tr -d ' ')" "1"
 
 python3 - "$TMP/jira.json" <<'PY'
 import json, sys
@@ -329,12 +332,17 @@ json.dump(d, open(sys.argv[1], "w"))
 PY
 python3 -c "import json;p='$GUILD_HOME/local/jira.json';d=json.load(open(p));d['autostart']=True;json.dump(d,open(p,'w'))"
 "$GUILD" jira once >/dev/null 2>&1
-[ -d "$GUILD_HOME/quests/sara-10-client-rates" ] && bad "the cap holds back a second auto quest" || ok "the cap holds back a second auto quest"
-"$GUILD" close sara-9-fair-pay-list --force >/dev/null 2>&1
+[ -d "$GUILD_HOME/quests/client-rates" ] && bad "the cap holds back a second auto quest" || ok "the cap holds back a second auto quest"
+"$GUILD" status fair-pay-list done "PR #42" --no-wrapup >/dev/null 2>&1
+out=$("$GUILD" jira once 2>&1)
+has "it tells you when its quest is done" "$out" "fair-pay-list is done: PR #42"
+out=$("$GUILD" jira once 2>&1)
+hasnt "and only once" "$out" "is done"
+"$GUILD" close fair-pay-list --force >/dev/null 2>&1
 "$GUILD" jira once >/dev/null 2>&1
-[ -d "$GUILD_HOME/quests/sara-10-client-rates" ] && ok "once a slot frees, autostart picks it up" || bad "once a slot frees, autostart picks it up"
+[ -d "$GUILD_HOME/quests/client-rates" ] && ok "once a slot frees, autostart picks it up" || bad "once a slot frees, autostart picks it up"
 has "status lists what the watcher started" "$("$GUILD" jira status)" "SARA-10"
-"$GUILD" close sara-10-client-rates --force >/dev/null 2>&1
+"$GUILD" close client-rates --force >/dev/null 2>&1
 
 # ── EDD: acceptance as checks ─────────────────────────────────────────────────
 section "acceptance checks (EDD)"
@@ -399,6 +407,40 @@ is "and that it was not a first pass" "$(delta_edd "['first_pass']")" "False"
 has "the totals include it" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["totals"]["edd"])')" "weak_checks"
 has "history tells the acceptance story" "$("$GUILD" log delta)" "green after 2 runs"
 "$GUILD" close delta --force >/dev/null 2>&1
+
+section "review fixes"
+# the stop hook waits before crying wolf
+mkdir -p "$GUILD_HOME/quests/idle" && echo '{"slug":"idle","repo":"/tmp","worktree":"/tmp","harness":"claude"}' > "$GUILD_HOME/quests/idle/meta.json"
+printf 'working\tx\t2026\n' > "$GUILD_HOME/quests/idle/status"
+echo '{}' | GUILD_QUEST=idle GUILD_STOP_GRACE=1 "$REPO/hooks/worker-stop.sh"
+is "a paused turn is not called stopped at once" "$(cut -f1 "$GUILD_HOME/quests/idle/status")" "working"
+sleep 3
+is "but a real silent stop is, after the grace" "$(cut -f1 "$GUILD_HOME/quests/idle/status")" "stopped"
+printf 'working\tx\t2026\n' > "$GUILD_HOME/quests/idle/status"
+echo '{}' | GUILD_QUEST=idle GUILD_STOP_GRACE=2 "$REPO/hooks/worker-stop.sh"
+sleep 1; printf '%s\tidle\tchecks-green\t1/1\n' "$(date +%Y-%m-%dT%H:%M:%S)" >> "$GUILD_HOME/events.log"
+sleep 3
+is "a quest that carried on is left alone" "$(cut -f1 "$GUILD_HOME/quests/idle/status")" "working"
+rm -rf "$GUILD_HOME/quests/idle"
+
+# peek --calls reads the log, so calm mode cannot hide what an agent ran
+echo x | "$GUILD" quest zeta --repo "$REPO_A" >/dev/null 2>&1
+WTZ=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/zeta/meta.json'))['worktree'])")
+pz="$HOME/.claude/projects/$(echo "$WTZ" | sed 's#/#-#g; s#\.#-#g')"; mkdir -p "$pz"
+python3 - "$pz/s.jsonl" <<'PY'
+import json, sys
+rows = [{"timestamp": "2026-09-24T10:00:00Z", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "guild check --baseline"}}]}},
+        {"timestamp": "2026-09-24T10:00:02Z", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "baseline recorded (1/2 already green)"}]}}]
+open(sys.argv[1], "w").write("\n".join(json.dumps(r) for r in rows))
+PY
+out=$("$GUILD" peek zeta --calls)
+has "peek --calls shows the command" "$out" "guild check --baseline"
+has "and its result" "$out" "baseline recorded"
+"$GUILD" close zeta --force >/dev/null 2>&1
+
+# the suite only ever stops its own war table
+[ -f "$GUILD_HOME/.wartable-pid" ] && kill -0 "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null \
+  && ok "the war table records its own pid" || bad "the war table records its own pid"
 
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"

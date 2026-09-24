@@ -112,8 +112,14 @@ def strip_checks(text):
 
 
 def slug_for(key, summary):
-    words = re.sub(r"[^a-z0-9]+", "-", summary.lower()).strip("-").split("-")[:5]
-    return (key.lower() + "-" + "-".join(w for w in words if w))[:44].strip("-")
+    """Readable words only: the branch is KEY/slug, so the key must not appear twice.
+    If another ticket already owns those words, fall back to key-prefixed."""
+    words = [w for w in re.sub(r"[^a-z0-9]+", "-", summary.lower()).strip("-").split("-") if w][:5]
+    slug = "-".join(words)[:40].strip("-") or key.lower()
+    meta = os.path.join(GUILD_HOME, "quests", slug, "meta.json")
+    if os.path.exists(meta) and json.load(open(meta)).get("ticket") != key:
+        slug = (key.lower() + "-" + slug)[:44].strip("-")
+    return slug
 
 
 def notify(title, text):
@@ -212,12 +218,32 @@ def settle_pending(cfg, state):
         del state["pending"][cid]
 
 
+def report_finished(state):
+    """A quest the watcher started has reported done: say so, once, with its note (the PR)."""
+    for slug, info in state.get("started", {}).items():
+        if info.get("notified"):
+            continue
+        status = os.path.join(GUILD_HOME, "quests", slug, "status")
+        if not os.path.exists(status):
+            archived = os.path.join(GUILD_HOME, "quests", "_archive")
+            hits = sorted(n for n in os.listdir(archived) if n.startswith(slug + "-")) if os.path.isdir(archived) else []
+            status = os.path.join(archived, hits[-1], "status") if hits else ""
+        if not status or not os.path.exists(status):
+            continue
+        state_, note = (open(status).read().split("\t") + ["", ""])[:2]
+        if state_ in ("done", "failed"):
+            info["notified"] = True
+            log(f"{info['key']}: {slug} is {state_}: {note}")
+            notify("guild", f"{info['key']} {state_}: {note[:80]}")
+
+
 def once(cfg):
     state = load_state()
     if "account_id" not in state:
         state["account_id"] = api(cfg, "GET", "/rest/api/3/myself")["accountId"]
     me = state["account_id"]
     settle_pending(cfg, state)
+    report_finished(state)
 
     projects = ", ".join(json.dumps(p) for p in cfg["projects"])
     word = cfg["trigger"].lstrip("@")
@@ -253,7 +279,7 @@ def once(cfg):
             item = {"key": key, "repo": repo, "slug": slug_for(key, issue["fields"].get("summary", "")),
                     "brief": build_brief(key, issue["fields"], instruction, cfg["site"])}
             if os.path.isdir(os.path.join(GUILD_HOME, "quests", item["slug"])):
-                log(f"{key}: quest {item['slug']} already exists")
+                log(f"{key}: a quest for this ticket is already open ({item['slug']})")
                 state["seen"].append(cid)
                 continue
             if cfg["autostart"]:

@@ -12,6 +12,7 @@ Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate
 - **Scoped hooks.** Guild hooks load only in sessions guild starts (`claude --settings ~/.guild/*.json`), never in your normal sessions.
 - **State on disk.** `~/.guild/quests/<slug>/` holds the brief, status, trial result and report. `~/.guild/events.log` is the event stream. Kill any session and nothing is lost.
 - **No polling tokens.** The quartermaster runs `guild wait` in the background. It returns only when an adventurer reports, and Claude Code wakes the quartermaster when a background command finishes.
+- **No false alarms.** A turn that ends while an adventurer waits on a background command is not a silent stop. The stop hook looks again after two minutes (`GUILD_STOP_GRACE`) and only flags the quest if nothing moved.
 - **Right identity per repo.** A quest's git author and `gh` account come from the repo's remote owner (`~/.guild/local/identities.json`), so work repos get work identity and personal repos get personal identity.
 
 ## Install
@@ -38,6 +39,12 @@ guild up ~/Workspace
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
 | `guild pool list\|drop [repo]` | The warm worktree slots quests start from |
+| `guild check [slug] [--baseline]` | Run the brief's acceptance checks in the quest worktree (EDD) |
+| `guild check <slug> --reseal` | Accept a changed Acceptance block (you only, never an adventurer) |
+| `guild vision <repo>` / `guild vision status <repo>` | Collect a repo's evidence for its written vision |
+| `guild jira once\|watch\|status` | Start quests from your `@quartermaster` comments on tickets |
+| `guild shot <url> --name before\|after` | A screenshot taken the same way every time, filed under the quest |
+| `guild peek <slug> --calls` | The tool calls an adventurer actually ran, from its session log |
 | `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
 | `guild cost [slug]` | Tokens, replies, time and dollars per quest |
 | `guild log [slug] [--since 7d] [--repo NAME]` | History: what ran, what it decided, what it cost |
@@ -65,6 +72,8 @@ guild ask "Ship the chooser now or after the icons?" \
 The agent then blocks on `guild board wait <id>` until you answer, and picks up your choice, your notes and your screenshots.
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+
+**Diagrams and screenshots.** Write Mermaid inside `<pre class="mermaid">` in a board page and it renders, offline: the war table serves a pinned Mermaid that `install.sh` fetched once, so a state machine, a flow or a sequence can be the options themselves, approved before any code exists. `guild shot <url> --name before|after` takes screenshots one way every time (headless Chrome, fixed viewport, throwaway profile) so before and after pairs can be compared. Chrome starts cold on each shot, so one takes about 20 seconds.
 
 ## Costs and history
 
@@ -94,6 +103,30 @@ It counts the things worth learning from: **where your call differed from the ag
 
 The quartermaster reads that file before writing any brief, so a lesson written on Friday changes Monday's work. A lesson that stops showing up in the evidence gets removed.
 
+## Acceptance as checks (EDD)
+
+"The agent says it works" is not evidence. A brief's `Acceptance:` block can hold checks:
+
+```
+Acceptance:
+- check: ./mvnw -q test -Dtest=RateValueIT
+- check: curl -sf localhost:8080/health
+- the list shows dated history            <- no command: shown on the wrap-up page
+```
+
+- When the quest starts, those lines are **sealed** into `acceptance.json` with a hash. The adventurer cannot quietly rewrite them: a hook refuses the edit, and `guild check` refuses to run a contract whose hash changed. Only you reseal (`guild check <slug> --reseal`).
+- `guild check --baseline` runs before any work. A check that already passes is reported as **weak**: it proves nothing about the change.
+- `guild check` runs them in the worktree; `guild trial pass` is refused until the last run was green on the current commit.
+- The retro reports **first-pass rate per model**: how often a quest met its own acceptance on its first real run. That is how you find out, with numbers, whether a cheaper model is enough for a kind of ticket.
+
+## A repo's vision
+
+A vision is an acceptance policy for a whole repo: given a change, would this repo accept it or resist it?
+
+- `guild vision <repo>` collects the evidence: merged PRs, declined PRs, reverts, read with the repo owner's GitHub account. It refuses when there is too little history to find real values.
+- The `vision` skill drafts principles that each cite that evidence, then writes 8 to 12 hard hypothetical changes and puts them on the war table as one board. You rule on them; your answers are folded back in and the result is sealed in `~/.guild/visions/<repo>.md`, outside the repo.
+- Every new quest on that repo is told to read it and to stop and ask when a change goes against it. The quartermaster reads it before writing a brief.
+
 ## From ticket to quest
 
 Your work starts in a tracker, not in a terminal. The `intake` skill queries your open tickets live (Jira through its MCP tools), sorts them into ready, needs-you and not-code, proposes a shortlist, and after your yes creates the quests:
@@ -104,10 +137,22 @@ guild quest work-api-null-fix --repo ~/code/work-api --ticket PMC2-1023 < brief.
 
 The key is stored with the quest, so `guild log` and `guild retro` can show which ticket the work came from. Nothing is ever posted back to the tracker without your word.
 
+## Tickets that start themselves
+
+Comment `@quartermaster repo:work-api build the fair pay list` on a ticket, and a quest can start from it. This is the one part of guild that acts without you typing a command, so it is built around what it must never do:
+
+- **Only your comments count.** Anyone else mentioning the trigger is ignored, and remembered as ignored.
+- **Ticket text never becomes a command.** `check:` lines come only from your comment; the ticket description is context, with any `check:` lines stripped.
+- **It asks first.** By default it puts "start a quest for SARA-812?" on the war table with the exact brief it would use. It starts only on your yes. `"autostart": true` skips the question and is capped by `max_active`.
+- **It never writes to Jira.** Ticket comments stay yours. It tells you, with a desktop notification, when a quest it started is done, with the note (usually the PR).
+- It watches only the projects you list; the repo comes from `repo:<name>` or a per-project default, and an unknown repo is a question, not a guess.
+
+Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` and `JIRA_API_TOKEN=...` in `~/.guild/local/env`. `guild jira once` polls one time; with `"watch": true` the cockpit opens a `jira` tab running `guild jira watch`.
+
 ## Tests
 
 ```sh
-./test/run.sh      # 59 checks, about 5 seconds, no model calls
+./test/run.sh      # 145 checks, under a minute, no model calls
 ```
 
 The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table (including a path traversal attempt), the trial gate in both forms, cost arithmetic against a synthetic session log, the retro counters, revive, close, and doctor. It also runs in CI on every push.

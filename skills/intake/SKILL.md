@@ -39,7 +39,9 @@ Then, per approved ticket:
 guild quest <slug> --repo <path> --ticket <KEY> --model <m> <<'EOF'
 Intent: <why this ticket exists, in the guildmaster's words>
 Context: <ticket key and link, the comment tail that matters, related code, prior decisions>
-Acceptance: <what done looks like, from the ticket>
+Acceptance:
+- check: <a command that proves one criterion from the ticket>
+- <a criterion no command can prove, for the wrap-up page>
 Constraints: <what not to touch; whether the trial may be skipped>
 Quest type: code | investigation
 EOF

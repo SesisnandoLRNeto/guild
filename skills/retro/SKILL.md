@@ -25,6 +25,7 @@ Read a few real briefs and decisions behind the numbers (`guild log <slug>`). Co
 - **Silent stops and revivals.** Where adventurers lose their way.
 - **Skipped trials.** Which repos or task types keep skipping, and whether a bug followed.
 - **Cost against outcome.** An expensive quest that produced a small diff, or a cheap model that had to be redone.
+- **Acceptance.** First-pass rate by model (did the quest meet its own checks on the first real run?), weak checks (already green before any work), and code quests that had no checks at all. A model with a low first-pass rate on a task type is a routing lesson for `dispatch.json`; weak checks are a lesson about how acceptance gets written.
 - **Very short briefs.** Check whether they correlate with escalations.
 
 ## 3. Write the lessons

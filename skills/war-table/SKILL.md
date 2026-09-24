@@ -77,6 +77,12 @@ Write `decisions.json` beside the page and pass `--decisions`:
 - **Next to other work**: run `guild roster` and name the quests this touches or blocks.
 - End with the decisions the guildmaster still owns: merge as is, change something, or split a follow-up quest.
 
+## Diagrams and screenshots
+
+- **Diagrams**: write Mermaid in `<pre class="mermaid">` blocks. The war table serves Mermaid itself, so it renders offline. Reach for it whenever the point has arrows: a state machine you want the guildmaster to approve before building it, a request flow, a sequence between services, or "what is actually happening" behind a hard topic.
+- **Prototypes first**: when a decision is about behaviour, draw the state machine or flow as the options themselves (one diagram per option) and let the guildmaster pick before any code exists.
+- **Screenshots**: `guild shot <url> --name before|after` takes them one way every time (headless, fixed viewport). Take the pair with identical flags, then put them side by side.
+
 ## Page rules
 
 - Start from `~/Workspace/guild/web/board-template.html`. It already has the colors, the option grid, the numbers table and dark and light support. Copy it, then replace the content.

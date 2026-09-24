@@ -24,10 +24,26 @@ Use the `guild` CLI. The quartermaster wakes up on each report.
 
 If you end a turn without a report, the quartermaster is told that you stopped without saying why.
 
+## Acceptance comes first (EDD)
+
+Your brief's `Acceptance:` block may hold `check:` lines. They are the definition of done, written by the guildmaster, sealed when the quest started.
+
+1. **Before you change any code**, run `guild check --baseline`. Checks that already pass are reported as *weak*: they prove nothing about your work. Say so in one line when you report; do not fix them yourself.
+2. Do the work. Run `guild check` as often as you like. A long test suite can take minutes; run it as a background command so you are not cut off.
+3. **Never edit the brief or `acceptance.json`**, and never weaken a check to make it pass. If a check is wrong or impossible, put that on the war table with `guild ask`. The hook refuses those edits, and a changed contract makes `guild check` refuse to run.
+4. The trial cannot pass until the last `guild check` was green on your current commit. A new commit means running it again.
+
+Criteria with no `check:` are manual: show them on your wrap-up page instead.
+
+## Showing your work
+
+- **Screenshots**: `guild shot <url> --name before` before you change a screen, `guild shot <url> --name after` when you are done, same flags both times. They land in your quest's `shots/` folder; copy them next to your board page.
+- **Diagrams**: in a board page, write Mermaid inside `<pre class="mermaid">…</pre>` (the board template already loads it). Use it for state machines, flows and sequences instead of describing arrows in prose.
+
 ## How to finish a code quest
 
 1. Keep the change minimal and follow the style of the code around it. Commit with clear messages. Never add Co-Authored-By lines.
-2. Run the trial before the PR: review the change (an adversarial review of your own diff), run the project's checks, then record it with `guild trial pass "<summary>"`. Under Claude Code the `trial` skill does this for you. `gh pr create` stays blocked until the trial passed for your current HEAD, whatever harness you are.
+2. Run the trial before the PR: `guild check` must be green on your current commit, then review the change (an adversarial review of your own diff), run the project's own checks, and record it with `guild trial pass "<summary>"`. Under Claude Code the `trial` skill does this for you. `gh pr create` stays blocked until the trial passed for your current HEAD, whatever harness you are.
 3. A trial may be skipped only when the brief says so, or when the change has no code (docs, specs). Use `guild trial skip "<reason>"` and add `Trial: skipped - <reason>` to the PR body.
 4. Push the branch and open the PR with `gh pr create`. The PR body has four parts: **Intent**, **What changed**, **Risk** (low, medium or high, with one line on why), and **Testing** (what you ran and the evidence).
 5. **Build the wrap-up page** before you finish, with the `war-table` skill: what changed, before and after screenshots, the trial evidence, performance numbers, the pain points, and why you made each call you made on your own.

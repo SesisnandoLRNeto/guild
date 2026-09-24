@@ -15,13 +15,14 @@ Run this inside a quest worktree (`GUILD_QUEST` is set). The goal is simple: no 
    - Safe and mechanical (a clear bug, a missing null check, a failing test): fix it, commit, and review the new diff again.
    - It changes intent or scope, or you are not sure: do not fix it. Report `guild status $GUILD_QUEST needs-decision "..."` and stop.
    - Not real after checking: drop it, and note why in the report.
-4. **Checks.** Run the project's own checks, found from the repo (package.json scripts, Makefile, mvnw or gradlew, pytest, and so on): build, tests related to the change, lint and types. Paste the result lines, not the full logs.
-5. **Live check** when it makes sense: run the thing (CLI, endpoint, UI through the browser tools) and prove that the acceptance criteria hold.
-6. **Report.** Write `~/.guild/quests/$GUILD_QUEST/trial.md`:
+4. **Acceptance.** `guild check` must be green on the current commit, or `guild trial pass` refuses. If the brief has no `check:` lines, say so in the report: a code quest without runnable acceptance is a gap the guildmaster should see.
+5. **Project checks.** Run the project's own checks, found from the repo (package.json scripts, Makefile, mvnw or gradlew, pytest, and so on): build, tests related to the change, lint and types. Paste the result lines, not the full logs.
+6. **Live check** when it makes sense: run the thing (CLI, endpoint, UI through the browser tools) and prove that the acceptance criteria hold.
+7. **Report.** Write `~/.guild/quests/$GUILD_QUEST/trial.md`:
    - **Risk**: low, medium or high, with the reason (blast radius, migrations, public API, auth, data).
    - **Findings**: fixed, escalated, dropped.
    - **Testing**: each scenario, pass or fail, and the evidence.
-7. **Record.** Only when every check is green and no finding is left open: `guild trial pass "<one-line summary>"`. Otherwise keep working, or escalate.
+8. **Record.** Only when every check is green and no finding is left open: `guild trial pass "<one-line summary>"`. Otherwise keep working, or escalate.
 
 Reuse the Risk and Testing sections of `trial.md` in the PR body.
 
