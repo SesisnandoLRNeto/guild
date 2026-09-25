@@ -59,6 +59,7 @@ guild up ~/Workspace
 | `guild pin [tab]` / `guild unpin [tab]` / `guild pins [menu]` | Keep sessions at the top of the sidebar; the menu jumps to one (`Ctrl-g p`, `Ctrl-g P`) |
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
+| `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
@@ -79,6 +80,18 @@ The agent then blocks on `guild board wait <id>` until you answer, and picks up 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
 
 **Diagrams and screenshots.** Write Mermaid inside `<pre class="mermaid">` in a board page and it renders, offline: the war table serves a pinned Mermaid that `install.sh` fetched once, so a state machine, a flow or a sequence can be the options themselves, approved before any code exists. `guild shot <url> --name before|after` takes screenshots one way every time (headless Chrome, fixed viewport, throwaway profile) so before and after pairs can be compared. Chrome starts cold on each shot, so one takes about 20 seconds.
+
+**Backend wrap-ups: data model, impact and business rules.** `guild impact` draws the part of a backend report that a diff hides:
+
+- **Data model changes.** Every migration (Liquibase formatted SQL or XML, Flyway SQL) is replayed once on the base branch and once on the quest's branch, and the two schemas are compared: an ER diagram of the changed tables with NEW, CHANGED and REMOVED columns, before and after column lists, and the constraints the database now enforces (CHECK, NOT NULL, DEFAULT, UNIQUE). Changed JPA entities are compared field by field, and a field with no column in the migrations is flagged in red.
+- **Impact on the rest of the project.** Every file outside the migrations that names a changed table, entity or removed field, grouped by module and layer (API, service, repository, mapper, contract, tests), as a map and a table. The files the change did not touch are the ones to double check. Changed `@...Mapping` lines list the endpoints.
+- **Business rule changes.** Code cannot say what a rule means, so guild finds the candidates (validation annotations, throws, conditions, enum constants, schema constraints) and the adventurer explains each one in plain words in a rules file: rule, before, after, where, why.
+
+```sh
+guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunning replaces the section
+```
+
+`guild status done` refuses a backend quest whose wrap-up lacks the section, or leaves a rule candidate unexplained (`--no-impact "<why>"` is the recorded way out). No database and no build are needed: it reads the repo and git.
 
 ## Costs and history
 
@@ -301,31 +314,33 @@ You rarely type these. The quartermaster matches each task to a rule in `~/.guil
  guild   0 qm   1 deck   2 pay-rate   3 layouts*    2 working · 1 waiting on you
 ```
 
-- **Left pane**: every quest grouped by repo, with a colored state dot, its model, and the last events. It refreshes every 2 seconds.
+- **Left pane**: the sidebar, drawn in claude-deck's style and colors (Catppuccin Mocha): boxed panels for your pins, every quest grouped by repo with a colored state dot and its model, and the last events. **Everything in it is clickable**: a quest or an event jumps to that quest's tab, a pin jumps to (or reopens) its session, and the buttons at the bottom open a Claude tab, a terminal, the campaign board or the pins menu. It refreshes every 2 seconds.
 - **Right pane**: the quartermaster. The only session you talk to.
 - **One tab per quest**, plus a `deck` tab running [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) when it is installed. The deck speaks tmux, so from that tab you can mirror, jump to or type into any adventurer's pane. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
-- **Status bar** on the right: how many quests are working, how many wait on you, how many boards are open.
+- **Status bar**: every tab is a button, click it to switch. On the right, buttons for `+claude`, `+term`, `board` (the campaign) and `pins`, then how many quests are working, how many wait on you, how many boards are open.
 
 ### Keys
 
-The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does not fire here.
+Press **Ctrl-g**, then a letter. You can keep Ctrl held for the letter: `Ctrl-g Ctrl-k` works the same as `Ctrl-g k`, so each action is one hand, one motion. Not sure which letter? **`Ctrl-g ?`** (or `Ctrl-g Space`) opens a menu of every action; press its letter or click it.
+
+Why not a bare `Ctrl-k`: every Ctrl letter already means something in Claude Code, zsh or nvim (`Ctrl-k` deletes a line, `Ctrl-t` opens the todo list, `Ctrl-h/j/k/l` move between nvim windows), so taking one away would break the tools inside the cockpit.
 
 | Key | What |
 |---|---|
+| `Ctrl-g` `?` | Menu of every action |
 | `Ctrl-g` then `0`…`9` | Jump to a tab |
-| `Alt-Left` / `Alt-Right` | Previous or next tab |
-| `Alt-h` / `Alt-l` | Move between the sidebar and the quartermaster |
-| `Ctrl-g` `w` | Pick a quest from a list |
+| `Ctrl-g` `Left` / `Right` | Previous or next tab |
+| `Ctrl-g` `Ctrl-h` / `Ctrl-l` | Move to the sidebar, and back to the quartermaster |
+| `Ctrl-g` `w` | Pick a tab from a list |
 | `Ctrl-g` `n` | A new Claude tab in the current folder (`Ctrl-g N` asks for the folder) |
-| click `+ claude` | The green button on the status bar: a new Claude tab |
-| `Ctrl-g` `=` | Put the sidebar back to its size (about a quarter of the window, 24 to 36 columns) |
+| `Ctrl-g` `t` | A plain terminal tab in the current folder |
 | `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
 | `Ctrl-g` `E` | Asks what to open: a quest, a folder or one file |
-| `Ctrl-g` `t` | A plain terminal tab in the current folder |
-| `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `k` | Open the campaign board in the browser |
+| `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `p` | Pin or unpin the current tab (it goes to the top of the sidebar) |
 | `Ctrl-g` `P` | Menu of pinned sessions: pick one to jump to it, or to reopen it if its tab is gone |
+| `Ctrl-g` `=` | Put the sidebar back to its size (about a quarter of the window, 24 to 36 columns) |
 | `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |
 
 ### The campaign board

@@ -59,6 +59,8 @@ guild pins [menu]                   the pinned list; menu jumps to one (Ctrl-g P
 guild campaign                      the campaign board: every agent, ticket and to-do as a kanban (Ctrl-g k)
 guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
 guild harnesses                     the agent CLIs guild knows and their model tiers
+guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
+                                    data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
@@ -198,17 +200,19 @@ cmd_new() {
 }
 
 # Pins keep the sessions you care about at the top of the sidebar and the campaign board.
-cmd_pin() {
-  local how="${1:-toggle}" target="${2:-}"
+cmd_pin() { # how [target] [client]
+  local how="${1:-toggle}" target="${2:-}" client="${3:-}"
   [ -n "$target" ] || target=$(tm display-message -p '#W' 2>/dev/null) || die "which tab? guild pin <tab or slug>"
   local out; out=$(python3 "$GUILD_REPO/bin/fleet.py" "$how" "$target") || exit 1
   echo "$out"
-  tm display-message "$out" 2>/dev/null || true
+  tm display-message ${client:+-c "$client"} "$out" 2>/dev/null || true
 }
 
 # The pinned list as a tmux menu: pick one to jump to it, or to reopen it when its tab is gone.
-cmd_pins() {
+cmd_pins() { # [menu [client]]
   if [ "${1:-}" != menu ]; then python3 "$GUILD_REPO/bin/fleet.py" pins; return; fi
+  local client="${2:-}"
+  [ -n "$client" ] || client=$(tm list-clients -F '#{client_activity} #{client_name}' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)
   local args=() key name state tab n=0
   while IFS=$'\t' read -r key name state tab; do
     n=$((n + 1))
@@ -220,8 +224,18 @@ cmd_pins() {
     esac
     args+=("$name  ($state)" "$n" "$go")
   done < <(python3 "$GUILD_REPO/bin/fleet.py" pins)
-  [ ${#args[@]} -gt 0 ] || { tm display-message "nothing pinned yet: Ctrl-g p pins the current tab"; return; }
-  tm display-menu -T "#[bold] pinned " -x C -y C "${args[@]}"
+  [ ${#args[@]} -gt 0 ] || { tm display-message ${client:+-c "$client"} "nothing pinned yet: Ctrl-g p pins the current tab"; return; }
+  tm display-menu ${client:+-c "$client"} -T "#[bold] pinned " -x C -y C "${args[@]}"
+}
+
+# The buttons on the status bar (config/guild.tmux.conf sends every click here).
+cmd_click() { # range client path
+  case "${1:-}" in
+    newtab) cmd_new "${3:-}" ;;
+    newterm) tm new-window -t "$SESSION" -n shell -c "${3:-$HOME}" ;;
+    campaign) cmd_campaign >/dev/null ;;
+    pins) cmd_pins menu "${2:-}" ;;
+  esac
 }
 
 cmd_todo() { python3 "$GUILD_REPO/bin/fleet.py" todo "$@"; }
@@ -245,6 +259,7 @@ cmd_layout() {
   side=$(( w * 28 / 100 )); [ "$side" -lt 24 ] && side=24; [ "$side" -gt 36 ] && side=36
   tm set-window-option -t "$SESSION:qm" main-pane-width "$side" >/dev/null
   tm select-layout -t "$SESSION:qm" main-vertical >/dev/null
+  tm select-pane -t "$SESSION:qm.0" -P 'bg=#1e1e2e' 2>/dev/null || true   # claude-deck's background
 }
 
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
@@ -605,15 +620,17 @@ wrapup_of() { # slug
   python3 - "$(qdir "$1")/boards" <<'PY'
 import json, os, sys
 root = sys.argv[1]
+found = []
 if os.path.isdir(root):
-    for b in sorted(os.listdir(root)):
+    for b in os.listdir(root):
         meta = os.path.join(root, b, "board.json")
         try:
             if json.load(open(meta)).get("wrapup"):
-                print(b)
-                break
+                found.append((os.path.getmtime(meta), b))
         except (OSError, ValueError):
             continue
+if found:
+    print(max(found)[1])     # the newest wrap-up: a report posted again replaces the old one
 PY
 }
 
@@ -636,6 +653,7 @@ cmd_status() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-wrapup) export GUILD_NO_WRAPUP=1; shift ;;
+      --no-impact) export GUILD_NO_IMPACT=1; shift ;;
       *) note="$1"; shift ;;
     esac
   done
@@ -651,6 +669,13 @@ cmd_status() {
      Nothing to show (docs, spec, an investigation)? Then: guild status $slug done --no-wrapup \"<result>\""
   fi
 
+  # A backend change that moved the data model or its rules owes the wrap-up a drawn impact
+  # section (guild impact), with every rule change explained in plain words.
+  if [ "$state" = done ] && [ -z "${GUILD_NO_WRAPUP:-}" ] && [ -z "${GUILD_NO_IMPACT:-}" ] && [ -n "$(wrapup_of "$slug")" ]; then
+    local why; why=$(impact_missing "$slug")
+    [ -z "$why" ] || die "$why"
+  fi
+
   local board=""
   [ "$state" = needs-decision ] && board=$(open_board "$slug")
   # A decision already on a board keeps that board's title when no note is given.
@@ -664,6 +689,7 @@ cmd_status() {
     return
   fi
   [ "$state" = done ] && [ -n "${GUILD_NO_WRAPUP:-}" ] && note="$note (no wrap-up)"
+  [ "$state" = done ] && [ -n "${GUILD_NO_IMPACT:-}" ] && note="$note (no impact section)"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
 }
@@ -692,6 +718,57 @@ PY2
   event "$1" planned "${2:-plan approved} -> building on $build"
   tm run-shell -b "sleep 2; tmux -L '$SOCKET' respawn-window -k -t '$SESSION:$1' \"GUILD_RESUME=1 GUILD_HANDOFF=1 bash '$q/launch.sh'\"" 2>/dev/null || true
   echo "plan phase over: $1 restarts on $build in a moment"
+}
+
+# Prints why the wrap-up still lacks its impact section, or nothing when it is fine.
+impact_missing() { # slug
+  local q wt base flags page
+  q="$(qdir "$1")"
+  wt=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('worktree',''))")
+  base=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('base',''))")
+  [ -d "$wt" ] && [ -n "$base" ] || return 0
+  flags=$(python3 "$GUILD_REPO/bin/impact.py" detect "$wt" "$base" 2>/dev/null) || return 0
+  page="$q/boards/$(wrapup_of "$1")/content.html"
+  if ! grep -q 'class="guild-impact"' "$page" 2>/dev/null; then
+    echo "this quest changed the backend ($flags), so its wrap-up needs the impact section:
+     guild impact --into <page> --rules <rules.json>, then open the wrap-up board again
+     Nothing real to show? guild status $1 done --no-impact \"<why>\""
+  elif grep -qE 'data-unexplained="[1-9]' "$page"; then
+    echo "the wrap-up's impact section has rule changes nobody explained: write them in a rules file
+     ({\"rules\": [{\"rule\", \"before\", \"after\", \"where\", \"why\"}], \"note\": \"...\"}) and run guild impact --into <page> --rules <file> again"
+  fi
+}
+
+# Data model, impact and business rule changes as a drawn section for a wrap-up page.
+cmd_impact() {
+  local slug="" rules="" into="" out="" base="" repo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --rules) rules="$2"; shift 2 ;;
+      --into) into="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      --base) base="$2"; shift 2 ;;
+      --repo) repo="$2"; shift 2 ;;
+      *) slug="$1"; shift ;;
+    esac
+  done
+  slug=$(current_quest "$slug")
+  if [ -n "$slug" ] && [ -d "$(qdir "$slug")" ]; then
+    [ -n "$repo" ] || repo=$(python3 -c "import json;print(json.load(open('$(qdir "$slug")/meta.json'))['worktree'])")
+    [ -n "$base" ] || base=$(python3 -c "import json;print(json.load(open('$(qdir "$slug")/meta.json'))['base'])")
+  fi
+  [ -n "$repo" ] || repo="$PWD"
+  if [ -z "$base" ]; then
+    base=$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD || echo main)
+  fi
+  local extra=(); [ -n "$rules" ] && extra=(--rules "$rules")
+  if [ -n "$into" ]; then
+    python3 "$GUILD_REPO/bin/impact.py" into "$into" "$repo" "$base" ${extra[@]+"${extra[@]}"}
+  elif [ -n "$out" ]; then
+    python3 "$GUILD_REPO/bin/impact.py" build "$repo" "$base" --out "$out" ${extra[@]+"${extra[@]}"}
+  else
+    python3 "$GUILD_REPO/bin/impact.py" build "$repo" "$base" ${extra[@]+"${extra[@]}"}
+  fi
 }
 
 # Boards that are not about a real quest (the quartermaster's own questions, a repo's
@@ -909,11 +986,13 @@ case "${1:-}" in
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;
   new) shift; cmd_new "$@" ;;
-  pin) shift; cmd_pin toggle "${1:-}" ;;
-  unpin) shift; cmd_pin unpin "${1:-}" ;;
+  pin) shift; cmd_pin toggle "${1:-}" "${2:-}" ;;
+  unpin) shift; cmd_pin unpin "${1:-}" "${2:-}" ;;
   pins) shift; cmd_pins "$@" ;;
   todo) shift; cmd_todo "$@" ;;
+  click) shift; cmd_click "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
+  impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;
   layout) cmd_layout ;;
   check) shift; cmd_check "$@" ;;

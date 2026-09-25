@@ -75,6 +75,19 @@ Write `decisions.json` beside the page and pass `--decisions`:
 - **Pain points**: what fought back, what is still ugly, what you would redo.
 - **Why**: the design choices you made on your own, each with its reason, so the guildmaster can disagree cheaply.
 - **Next to other work**: run `guild roster` and name the quests this touches or blocks.
+- **Backend: data model, impact and business rules.** When the change touches migrations, entities, services or validation, the report gets a drawn section. Guild builds it; you explain it:
+  1. `guild impact --out /tmp/impact.html` gives a first look. Read what it found: the schema diff (every migration replayed on the base and on your branch), changed entities and fields, every module that uses what changed (the files you did *not* touch are the ones to double check), changed endpoints, and the code lines that look like rules.
+  2. Write `rules.json` beside your page. For every real business rule change, one entry in plain words a product person can read:
+     ```json
+     {"rules": [{"rule": "A workstream paid by units needs its units per hour",
+                 "before": "not stored", "after": "required when paid by UNITS, above 0",
+                 "where": "WorkstreamClosureService.java:148", "why": "hourly equivalent for the minimum wage check"}],
+      "note": "The other candidates only carry the new field; same behaviour."}
+     ```
+     Use `note` to say why the remaining candidates are not rule changes. Never leave a candidate unexplained.
+  3. `guild impact --into <page.html> --rules rules.json` puts the section where the page has `<!--GUILD-IMPACT-->` (or at the end): an ER diagram of the changed tables with NEW, CHANGED and REMOVED columns, before and after column lists, the constraints the database now enforces, a module impact map, the endpoints, and your rules table. Rerunning it replaces the section.
+  4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.
+  `guild status done` refuses a backend quest whose wrap-up lacks this section or leaves rules unexplained. `--no-impact "<why>"` is the recorded escape.
 - End with the decisions the guildmaster still owns: merge as is, change something, or split a follow-up quest.
 
 ## Diagrams and screenshots

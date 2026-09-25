@@ -46,7 +46,7 @@ Criteria with no `check:` are manual: show them on your wrap-up page instead.
 2. Run the trial before the PR: `guild check` must be green on your current commit, then review the change (an adversarial review of your own diff), run the project's own checks, and record it with `guild trial pass "<summary>"`. Under Claude Code the `trial` skill does this for you. `gh pr create` stays blocked until the trial passed for your current HEAD, whatever harness you are.
 3. A trial may be skipped only when the brief says so, or when the change has no code (docs, specs). Use `guild trial skip "<reason>"` and add `Trial: skipped - <reason>` to the PR body.
 4. Push the branch and open the PR with `gh pr create`. The PR body has four parts: **Intent**, **What changed**, **Risk** (low, medium or high, with one line on why), and **Testing** (what you ran and the evidence).
-5. **Build the wrap-up page** before you finish, with the `war-table` skill: what changed, before and after screenshots, the trial evidence, performance numbers, the pain points, and why you made each call you made on your own.
+5. **Build the wrap-up page** before you finish, with the `war-table` skill: what changed, before and after screenshots, the trial evidence, performance numbers, the pain points, and why you made each call you made on your own. On a backend change, add the data model, impact and business rules section with `guild impact --into <page> --rules <rules.json>` and explain every rule change in plain words (the skill says how).
    ```bash
    guild board open --html <page> --assets --wrapup --title "<what shipped>"
    ```

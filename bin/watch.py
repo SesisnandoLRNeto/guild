@@ -19,10 +19,19 @@ EVENTS = os.path.join(GUILD_HOME, "events.log")
 SOCKET = os.environ.get("GUILD_TMUX_SOCKET", "guild")
 SESSION = "guild"
 
-DIM, RESET, BOLD = "\033[38;5;245m", "\033[0m", "\033[1m"
+# Catppuccin Mocha, the palette claude-deck uses, so the cockpit reads as one tool.
+def rgb(hexcolor):
+    h = hexcolor.lstrip("#")
+    return f"\033[38;2;{int(h[0:2], 16)};{int(h[2:4], 16)};{int(h[4:6], 16)}m"
+
+
+TEXT, SUBTEXT, OVERLAY, BORDER = rgb("#cdd6f4"), rgb("#a6adc8"), rgb("#6c7086"), rgb("#585b70")
+BLUE, GREEN, YELLOW, RED, MAUVE, PEACH = (rgb(c) for c in ("#89b4fa", "#a6e3a1", "#f9e2af", "#f38ba8", "#cba6f7", "#fab387"))
+DIM, RESET, BOLD = OVERLAY, "\033[0m", "\033[1m"
 COLORS = {
-    "working": "\033[38;5;111m", "needs-decision": "\033[38;5;179m", "blocked": "\033[38;5;174m",
-    "failed": "\033[38;5;174m", "stopped": "\033[38;5;176m", "done": "\033[38;5;114m",
+    "working": BLUE, "needs-decision": YELLOW, "blocked": RED,
+    "failed": RED, "stopped": MAUVE, "done": GREEN, "your turn": YELLOW,
+    "checks-green": GREEN, "checks-red": RED, "trial-pass": GREEN, "planned": BLUE,
 }
 # What a tab shows next to its name. Quiet states get no mark at all.
 MARKS = {"needs-decision": "*", "blocked": "!", "failed": "!", "stopped": "?", "done": "+"}
@@ -80,60 +89,29 @@ def pinned():
         return []
 
 
-PIN_COLORS = {"working": COLORS["working"], "your turn": COLORS["needs-decision"], "gone": DIM, "closed": DIM}
-
-
-def draw_pins(rows, width):
-    if not rows:
-        return []
-    lines = [f"{BOLD}pinned{RESET}  {DIM}^g P{RESET}"]
-    for r in rows:
-        state = r["state"]
-        color = PIN_COLORS.get(state.split(" +")[0], COLORS.get(state, DIM))
-        where = "" if r["open"] else f" {DIM}(closed tab){RESET}"
-        lines.append(f"  {color}●{RESET} {r['name']}{where}")
-        lines.append(f"    {DIM}{SHORT_STATE.get(state, state)}{RESET}")
-    return lines + [""]
-
-
-def draw(quests, width, spend=None, pins=None):
-    lines = draw_pins(pins or [], width) + [f"{BOLD}fleet{RESET}", ""]
-    by_repo = {}
-    for q in quests:
-        by_repo.setdefault(os.path.basename(q["repo"]), []).append(q)
-    if not by_repo:
-        lines.append(f"{DIM}no quests yet{RESET}")
-    for repo, items in sorted(by_repo.items()):
-        lines.append(f" {BOLD}{repo[:width - 2]}{RESET}")
-        for q in items:
-            color = COLORS.get(q["state"], DIM)
-            board = f" {COLORS['needs-decision']}[board]{RESET}" if q["boards"] else ""
-            lines.append(f"  {color}●{RESET} {q['slug'][:width - 6]}{board}")
-            price = (spend or {}).get(q["slug"])
-            parts = [SHORT_STATE.get(q["state"], q["state"])] + ([money(price)] if price else [])
-            model = q.get("model") or q.get("harness", "")
-            if model and len(" · ".join(parts + [model])) <= width - 5:
-                parts.append(model)                  # the model only when there is room for it
-            lines.append(f"    {DIM}{' · '.join(parts)}{RESET}")
-    lines += ["", f"{BOLD}activity{RESET}"]
-    lines += activity(width)
-    return lines
-
-
 ANSI = re.compile(r"\033\[[0-9;]*m")
 
 
+def visible(text):
+    return len(ANSI.sub("", text))
+
+
 def fit(line, width):
-    """Clip a line to the pane's width by visible characters, keeping its colors intact."""
+    """Clip a line to a width by visible characters, keeping its colors intact."""
     out, seen, i = [], 0, 0
     while i < len(line):
         m = ANSI.match(line, i)
         if m:
             out.append(m.group(0)); i = m.end(); continue
-        if seen >= width - 1:
+        if seen >= width:
             break
         out.append(line[i]); seen += 1; i += 1
     return "".join(out) + RESET
+
+
+def pad(line, width):
+    line = fit(line, width)
+    return line + " " * max(0, width - visible(line))
 
 
 # Short words for a narrow sidebar. Colors still carry the state at a glance.
@@ -159,11 +137,11 @@ def short_note(note):
 
 
 def activity(width, limit=8, hours=24):
-    """One line per event, newest first, last day only: time, quest, what happened."""
+    """(line, quest) per event, newest first, last day only."""
     try:
         rows = open(EVENTS).read().splitlines()
     except OSError:
-        return [f" {DIM}nothing yet{RESET}"]
+        return [(f"{DIM}nothing yet{RESET}", None)]
     cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - hours * 3600))
     out = []
     for row in reversed(rows):
@@ -171,14 +149,112 @@ def activity(width, limit=8, hours=24):
         if len(parts) < 4 or parts[0] < cutoff:
             continue
         when, slug, state, note = parts[0][11:16], short_slug(parts[1]), parts[2], short_note(parts[3])
-        color = COLORS.get(state, DIM)
         word = SHORT_STATE.get(state, state)
-        room = width - len(f" {when} {slug} {word}") - 2
-        tail = f" {DIM}{note[:room]}{RESET}" if note and room > 6 and state not in ("closed",) else ""
-        out.append(f" {DIM}{when}{RESET} {slug} {color}{word}{RESET}{tail}")
+        room = width - len(f"{when} {slug} {word}") - 1
+        tail = f" {DIM}{note[:room]}{RESET}" if note and room > 6 and state != "closed" else ""
+        out.append((f"{DIM}{when}{RESET} {TEXT}{slug}{RESET} {COLORS.get(state, SUBTEXT)}{word}{RESET}{tail}", parts[1]))
         if len(out) >= limit:
             break
-    return out or [f" {DIM}quiet for the last {hours}h{RESET}"]
+    return out or [(f"{DIM}quiet for the last {hours}h{RESET}", None)]
+
+
+def panel(title, rows, width, accent=BORDER):
+    """A claude-deck style box: rows are (text, action). Returns (line, action) pairs."""
+    inner = width - 4
+    head = f"{accent}┌─ {BOLD}{TEXT}{title}{RESET}{accent} " + "─" * max(0, width - len(title) - 5) + f"┐{RESET}"
+    out = [(head, None)]
+    for text, action in rows:
+        out.append((f"{accent}│{RESET} {pad(text, inner)} {accent}│{RESET}", action))
+    out.append((f"{accent}└" + "─" * (width - 2) + f"┘{RESET}", None))
+    return out
+
+
+BUTTONS = [("+claude", ("new",), GREEN), ("+term", ("term",), BLUE), ("board", ("campaign",), PEACH),
+           ("pins", ("pins",), MAUVE)]
+
+
+def buttons(width):
+    """One row of clickable buttons; each knows its own column span."""
+    line, spans, col = "", [], 1
+    gap = 1 if sum(len(b[0]) + 3 for b in BUTTONS) <= width else 0     # squeeze on a narrow sidebar
+    for label, action, color in BUTTONS:
+        chunk = f"[{label}]"
+        if col + len(chunk) - 1 > width:
+            break
+        spans.append((col, col + len(chunk) - 1, action))
+        line += f"{color}{chunk}{RESET}" + " " * gap
+        col += len(chunk) + gap
+    return line, spans
+
+
+def draw(quests, width, height, spend=None, pins=None):
+    """Every line of the sidebar with what a click on it does."""
+    out = []
+    if pins:
+        rows = []
+        for r in pins:
+            state = r["state"]
+            color = COLORS.get(state.split(" +")[0], SUBTEXT)
+            where = "" if r["open"] else f" {DIM}(closed){RESET}"
+            rows.append((f"{color}●{RESET} {TEXT}{r['name']}{RESET}{where}", ("pin", r["key"], r["tab"])))
+            rows.append((f"  {DIM}{SHORT_STATE.get(state, state)}{RESET}", ("pin", r["key"], r["tab"])))
+        out += panel("Pinned", rows, width, MAUVE)
+    by_repo = {}
+    for q in quests:
+        by_repo.setdefault(os.path.basename(q["repo"]), []).append(q)
+    rows = [] if by_repo else [(f"{DIM}no quests yet{RESET}", None)]
+    for repo, items in sorted(by_repo.items()):
+        rows.append((f"{SUBTEXT}{BOLD}{repo}{RESET}", None))
+        for q in items:
+            color = COLORS.get(q["state"], SUBTEXT)
+            board = f" {YELLOW}[board]{RESET}" if q["boards"] else ""
+            target = ("board",) if q.get("pseudo") else ("quest", q["slug"])     # the quartermaster's own boards
+            rows.append((f"{color}●{RESET} {TEXT}{q['slug']}{RESET}{board}", target))
+            price = (spend or {}).get(q["slug"])
+            parts = [SHORT_STATE.get(q["state"], q["state"])] + ([money(price)] if price else [])
+            model = q.get("model") or q.get("harness", "")
+            if model and len(" · ".join(parts + [model])) <= width - 8:
+                parts.append(model)                  # the model only when there is room for it
+            rows.append((f"  {DIM}{' · '.join(parts)}{RESET}", target))
+    out += panel("Fleet", rows, width, BLUE)
+    room = height - len(out) - 4                      # activity box borders + buttons + hint
+    if room > 1:
+        out += panel("Activity", [(t, ("quest", slug) if slug else None) for t, slug in activity(width - 4, limit=room)], width)
+    return out
+
+
+def act(action):
+    """What a click in the sidebar does. Everything goes through tmux or the guild CLI."""
+    guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+    tmux = ["tmux", "-L", SOCKET]
+    kind = action[0]
+    if kind == "quest":
+        slug = action[1]
+        if subprocess.run(tmux + ["select-window", "-t", f"{SESSION}:{slug}"], capture_output=True).returncode:
+            subprocess.run([guild, "revive", slug], capture_output=True)
+            subprocess.run(tmux + ["select-window", "-t", f"{SESSION}:{slug}"], capture_output=True)
+    elif kind == "pin":
+        key, tab = action[1], action[2]
+        if tab:
+            subprocess.run(tmux + ["select-window", "-t", f"{SESSION}:{tab}"], capture_output=True)
+        elif key.startswith("session:"):
+            subprocess.run([guild, "new", "--resume", key.split(":", 1)[1]], capture_output=True)
+        elif key.startswith("quest:"):
+            act(("quest", key.split(":", 1)[1]))
+    elif kind == "new":
+        subprocess.run([guild, "new"], capture_output=True)
+    elif kind == "term":
+        subprocess.run(tmux + ["new-window", "-t", SESSION, "-n", "shell", "-c", os.environ.get("GUILD_EDIT_ROOT", os.path.expanduser("~/Workspace"))], capture_output=True)
+    elif kind == "board":
+        subprocess.run(["sh", "-c", f"'{guild}' board url | head -1 | xargs open"], capture_output=True)
+    elif kind == "campaign":
+        subprocess.run([guild, "campaign"], capture_output=True)
+    elif kind == "pins":
+        subprocess.run(tmux + ["select-pane", "-t", f"{SESSION}:qm.1"], capture_output=True)
+        subprocess.run([guild, "pins", "menu"], capture_output=True)
+
+
+MOUSE = re.compile(r"\033\[<(\d+);(\d+);(\d+)([mM])")
 
 
 def count_line():
@@ -198,21 +274,67 @@ def count_line():
     return " · ".join(parts)
 
 
+def render(width, height):
+    quests = read_quests()
+    mark_tabs(quests)
+    lines = draw(quests, width, height, costs(), pinned())[:max(0, height - 2)]
+    bar, spans = buttons(width)
+    hint = f"{DIM}click to jump · ^g ? for keys{RESET}"
+    return lines, bar, spans, hint
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--count":
         print(count_line())
         return
     interval = float(sys.argv[1]) if len(sys.argv) > 1 else 2.0
-    while True:
-        # the pane's real size, read every tick, so a resize never makes lines wrap
-        width = shutil.get_terminal_size((30, 20)).columns
-        quests = read_quests()
-        mark_tabs(quests)
-        spend = costs()
-        rows = draw(quests, width, spend, pinned())
-        sys.stdout.write("\033[H\033[2J" + "\n".join(fit(l, width) for l in rows) + "\n")
-        sys.stdout.flush()
-        time.sleep(interval)
+    interactive = sys.stdin.isatty()
+    saved = None
+    if interactive:                       # clicks arrive as SGR mouse reports on stdin
+        import termios, tty
+        saved = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
+        sys.stdout.write("\033[?1000h\033[?1006h\033[?25l")
+    try:
+        buf = ""
+        while True:
+            # the pane's real size, read every tick, so a resize never makes lines wrap
+            size = shutil.get_terminal_size((30, 20))
+            width, height = size.columns, size.lines
+            lines, bar, spans, hint = render(width, height)
+            body = [pad(l, width) for l, _ in lines]
+            body += [""] * max(0, height - 2 - len(body))
+            sys.stdout.write("\033[H" + "\n".join(body + [pad(bar, width), pad(hint, width)]) + "\033[J")
+            sys.stdout.flush()
+            if not interactive:
+                time.sleep(interval)
+                continue
+            import select
+            deadline = time.time() + interval
+            while time.time() < deadline:
+                ready, _, _ = select.select([sys.stdin], [], [], max(0.0, deadline - time.time()))
+                if not ready:
+                    break
+                buf += os.read(sys.stdin.fileno(), 1024).decode("utf-8", "replace")
+                clicked = False
+                for m in MOUSE.finditer(buf):
+                    button, x, y, kind = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+                    if kind != "M" or button != 0:          # left press only; no wheel, no release
+                        continue
+                    if y == height - 1:
+                        for a, b, action in spans:
+                            if a <= x <= b:
+                                act(action); clicked = True
+                    elif 1 <= y <= len(lines) and lines[y - 1][1]:
+                        act(lines[y - 1][1]); clicked = True
+                buf = buf[buf.rfind("\033"):] if "\033" in buf and not buf.endswith(("M", "m")) else ""
+                if clicked:
+                    break                                 # redraw at once
+    finally:
+        if saved is not None:
+            import termios
+            sys.stdout.write("\033[?1000l\033[?1006l\033[?25h")
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved)
 
 
 if __name__ == "__main__":

@@ -512,6 +512,104 @@ url=$("$GUILD" campaign --url)
 has "guild campaign serves the board" "$(curl -s "${url}.json")" '"columns"'
 has "and the page" "$(curl -s "$url")" "The Guild Campaign"
 
+# ── backend impact: data model, impact, business rules ───────────────────────
+section "backend impact"
+RB="$TMP/repo-b"; mkdir -p "$RB/src/main/resources/db/changelog/changes" "$RB/src/main/java/com/acme/pay/domain/entity" \
+  "$RB/src/main/java/com/acme/pay/service" "$RB/src/main/java/com/acme/pay/api"
+git -C "$RB" init -q -b main
+cat > "$RB/src/main/resources/db/changelog/changes/0001-rate.sql" <<'SQL'
+--liquibase formatted sql
+--changeset t:0001
+CREATE TABLE rate (
+    id     uuid    CONSTRAINT rate_pkey PRIMARY KEY,
+    amount numeric NOT NULL
+);
+SQL
+cat > "$RB/src/main/java/com/acme/pay/domain/entity/RateEntity.java" <<'JAVA'
+package com.acme.pay.domain.entity;
+@Entity
+@Table(name = "rate")
+public class RateEntity {
+  @Id
+  private UUID id;
+  @Column(nullable = false)
+  private BigDecimal amount;
+}
+JAVA
+cat > "$RB/src/main/java/com/acme/pay/api/RateController.java" <<'JAVA'
+package com.acme.pay.api;
+class RateController { RateEntity find() { return null; } }
+JAVA
+cat > "$RB/src/main/java/com/acme/pay/service/RateService.java" <<'JAVA'
+package com.acme.pay.service;
+class RateService {
+  void save(RateEntity r) { }
+}
+JAVA
+git -C "$RB" add -A && git -C "$RB" -c user.email=t@t -c user.name=t commit -q -m base
+git -C "$RB" remote add origin "git@github.com:TestOrg/repo-b.git"
+git -C "$RB" update-ref refs/remotes/origin/main HEAD
+git -C "$RB" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+echo "add a currency" | "$GUILD" quest cur --repo "$RB" --base origin/main >/dev/null 2>&1
+WB=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/cur/meta.json'))['worktree'])")
+cat > "$WB/src/main/resources/db/changelog/changes/0002-currency.sql" <<'SQL'
+--liquibase formatted sql
+--changeset t:0002
+ALTER TABLE rate ADD COLUMN currency text NOT NULL DEFAULT 'USD';
+ALTER TABLE rate ADD CONSTRAINT rate_amount_check CHECK (amount > 0);
+--rollback ALTER TABLE rate DROP COLUMN currency;
+SQL
+python3 - "$WB" <<'PY'
+import sys
+wb = sys.argv[1]
+p = wb + "/src/main/java/com/acme/pay/domain/entity/RateEntity.java"
+s = open(p).read().replace("  private BigDecimal amount;\n", "  private BigDecimal amount;\n  @Column(nullable = false)\n  private String currency;\n  private String region;\n")
+open(p, "w").write(s)
+p = wb + "/src/main/java/com/acme/pay/service/RateService.java"
+s = open(p).read().replace("void save(RateEntity r) { }", "void save(RateEntity r) {\n    if (r.getCurrency() == null) throw new IllegalArgumentException(\"currency\");\n  }")
+open(p, "w").write(s)
+PY
+git -C "$WB" add -A && git -C "$WB" -c user.email=t@t -c user.name=t commit -q -m "currency"
+is "impact sees a model and a rule change" "$(python3 "$REPO/bin/impact.py" detect "$WB" origin/main)" "model rules"
+sec=$(GUILD_QUEST=cur "$GUILD" impact)
+has "the schema diff finds the new column" "$sec" "+ currency"
+has "the ER diagram marks it NEW" "$sec" 'currency &quot;NEW&quot;'
+has "the new CHECK is a rule the database enforces" "$sec" "CHECK (amount &gt; 0)"
+has "the new column with a default is listed" "$sec" "new required column (default"
+has "an entity field with no column is flagged" "$sec" "field region maps to column region"
+has "code that uses the entity is in the impact map" "$sec" "RateController.java"
+has "the throw is a rule candidate" "$sec" "throw new IllegalArgumentException"
+has "unexplained rules are counted" "$sec" 'data-unexplained="3"'
+cat > "$TMP/wrap-b.html" <<'HTML'
+<!doctype html><meta charset=utf-8><h1>Currency on rates</h1>
+<!--GUILD-IMPACT-->
+</body>
+HTML
+GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
+out=$("$GUILD" status cur done "PR" 2>&1)
+has "done is refused without the impact section" "$out" "needs the impact section"
+cat > "$TMP/rules.json" <<'JSON'
+{"rules": [{"rule": "A rate needs a currency", "before": "no currency", "after": "required, USD by default", "where": "RateService.java:3", "why": "finance reports per currency"}]}
+JSON
+GUILD_QUEST=cur "$GUILD" impact --into "$TMP/wrap-b.html" >/dev/null
+GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
+out=$("$GUILD" status cur done "PR" 2>&1)
+has "done is refused while rules are unexplained" "$out" "nobody explained"
+GUILD_QUEST=cur "$GUILD" impact --into "$TMP/wrap-b.html" --rules "$TMP/rules.json" >/dev/null
+is "rerunning replaces the section" "$(grep -c 'class="guild-impact"' "$TMP/wrap-b.html")" "1"
+has "the rule is in plain words" "$(cat "$TMP/wrap-b.html")" "A rate needs a currency"
+GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
+"$GUILD" status cur done "PR" >/dev/null 2>&1
+is "with the section and the rules explained, done goes through" "$(cut -f1 "$GUILD_HOME/quests/cur/status")" "done"
+"$GUILD" close cur --force >/dev/null 2>&1
+
+# ── the cockpit, through a real tmux client ──────────────────────────────────
+section "cockpit keys and clicks"
+CK="$TMP/cockpit-home"; mkdir -p "$CK/local"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; esac
+done < <(python3 "$REPO/test/cockpit.py" "$REPO" "$CK" "guild-cockpit-test" 2>&1)
+
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"
 out=$("$GUILD" doctor 2>&1); code=$?
