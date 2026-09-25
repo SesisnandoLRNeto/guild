@@ -47,6 +47,12 @@ def record(quest, state, note):
             f.write(f"{state}\t{note}\t{now()}\n")
     with open(EVENTS, "a") as f:
         f.write(f"{now()}\t{quest}\t{state}\t{note}\n")
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import notify
+        threading.Thread(target=notify.on_event, args=(quest, state, note), daemon=True).start()
+    except Exception:
+        pass
 
 
 def list_boards():
@@ -446,8 +452,58 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 .replace("{{QUESTIONS}}", json.dumps(questions)))
 
 
+class RemoteHandler(Handler):
+    """The war table on your Tailscale address. Every request needs the key: once in the link
+    (?k=...), after that from a cookie the link sets."""
+
+    def allowed(self):
+        cfg = remote_config()
+        key = cfg.get("key", "")
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        cookie = dict(c.strip().split("=", 1) for c in (self.headers.get("Cookie") or "").split(";") if "=" in c)
+        if key and query.get("k", [""])[0] == key:
+            self._set_cookie = f"guild_k={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000"
+            return True
+        self._set_cookie = ""
+        return bool(key) and cookie.get("guild_k") == key
+
+    def end_headers(self):
+        if getattr(self, "_set_cookie", ""):
+            self.send_header("Set-Cookie", self._set_cookie)
+        super().end_headers()
+
+    def do_GET(self):
+        if not self.allowed():
+            return self.send(403, "guild: this war table needs its key. Open the link from `guild remote url`.")
+        return super().do_GET()
+
+    def do_POST(self):
+        if not self.allowed():
+            return self.send(403, json.dumps({"error": "key needed"}), "application/json")
+        return super().do_POST()
+
+
+def remote_config():
+    try:
+        return json.load(open(os.path.join(GUILD_HOME, "local", "remote.json")))
+    except (OSError, ValueError):
+        return {}
+
+
+def serve_remote():
+    cfg = remote_config()
+    if not (cfg.get("remote") and cfg.get("bind") and cfg.get("key")):
+        return
+    try:
+        httpd = http.server.ThreadingHTTPServer((cfg["bind"], int(cfg.get("port", 4712))), RemoteHandler)
+    except OSError:
+        return                          # Tailscale down or the port taken: the local table still works
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+
 def serve():
     """Start the server unless one is already up. Writes the port to ~/.guild/.wartable-port."""
+    serve_remote()
     port = int(os.environ.get("GUILD_BOARD_PORT", "4711"))
     for candidate in range(port, port + 20):
         try:

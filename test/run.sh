@@ -15,6 +15,7 @@ export GUILD_WORKTREES="$TMP/worktrees"
 export GUILD_TMUX_SOCKET="guild-test"
 export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
+export GUILD_NO_NOTIFY="1"       # nor a notification
 export PATH="$TMP/stub:$PATH"
 mkdir -p "$HOME" "$GUILD_HOME/local" "$GUILD_WORKTREES" "$TMP/stub"
 
@@ -708,6 +709,43 @@ GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "
 "$GUILD" status cur done "PR" >/dev/null 2>&1
 is "with the section and the rules explained, done goes through" "$(cut -f1 "$GUILD_HOME/quests/cur/status")" "done"
 "$GUILD" close cur --force >/dev/null 2>&1
+
+# the war table from a phone: a second listener that needs the key; pushes carry no details
+section "remote and notifications"
+cat > "$GUILD_HOME/local/remote.json" <<'JSON'
+{"remote": true, "bind": "127.0.0.1", "port": 4896, "key": "k3y-for-tests", "mac": false}
+JSON
+"$GUILD" remote restart >/dev/null 2>&1
+sleep 1
+is "without the key the remote table refuses" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4896/)" "403"
+has "with the key it opens the docket" "$(curl -s 'http://127.0.0.1:4896/?k=k3y-for-tests')" "The Docket"
+has "and sets a cookie for the next pages" "$(curl -s -D - -o /dev/null 'http://127.0.0.1:4896/?k=k3y-for-tests')" "guild_k=k3y-for-tests"
+is "the cookie alone is enough after that" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Cookie: guild_k=k3y-for-tests' http://127.0.0.1:4896/docket.json)" "200"
+has "guild remote url gives the phone link" "$("$GUILD" remote url)" "http://127.0.0.1:4896/?k=k3y-for-tests"
+python3 - "$TMP/push.txt" <<'PY' &
+import http.server, sys
+out = sys.argv[1]
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers["Content-Length"])).decode()
+        open(out, "w").write(self.headers.get("Title", "") + "|" + body + "|" + self.headers.get("Click", ""))
+        self.send_response(200); self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", 4897), H).handle_request()
+PY
+PUSH_PID=$!
+sleep 0.5
+python3 - "$GUILD_HOME/local/remote.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1])); c["ntfy"] = "http://127.0.0.1:4897/topic"; json.dump(c, open(sys.argv[1], "w"))
+PY
+GUILD_NO_NOTIFY= python3 "$REPO/bin/notify.py" event alpha needs-decision "secret ticket text SARA-999"
+wait $PUSH_PID 2>/dev/null
+push=$(cat "$TMP/push.txt" 2>/dev/null)
+has "a decision sends a push" "$push" "alpha a decision waits for you"
+hasnt "without the note's text" "$push" "SARA-999"
+has "and the push links to the remote docket" "$push" "k=k3y-for-tests"
+rm -f "$GUILD_HOME/local/remote.json"
 
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"

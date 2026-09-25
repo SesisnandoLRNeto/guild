@@ -62,6 +62,8 @@ guild docket                        every open decision on one page: rule, hold 
 guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
+guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
+guild notify test                   check that notifications reach you (Mac, and ntfy if set)
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
                                     data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
@@ -81,6 +83,8 @@ EOF
 
 event() { # slug state note
   printf '%s\t%s\t%s\t%s\n' "$(now)" "$1" "$2" "${3:-}" >> "$EVENTS"
+  # a notification when it needs you (never blocks: a slow push must not slow the guild)
+  ( python3 "$GUILD_REPO/bin/notify.py" event "$1" "$2" "${3:-}" >/dev/null 2>&1 & )
 }
 
 # Calm mode is opt-in: it rides on an early-access Claude Code surface, so guild turns it
@@ -300,6 +304,17 @@ json.dump(m, open(path, "w"), indent=2)
 PY
   fi
   python3 "$GUILD_REPO/bin/budget.py" show "$slug"
+}
+
+# The war table from your phone, over Tailscale, behind a key; and notifications.
+cmd_remote() {
+  case "${1:-status}" in
+    restart)
+      [ -f "$GUILD_HOME/.wartable-pid" ] && kill "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null
+      sleep 1; GUILD_BOARD_NO_OPEN=1 cmd_docket --url >/dev/null
+      python3 "$GUILD_REPO/bin/notify.py" remote status ;;
+    *) python3 "$GUILD_REPO/bin/notify.py" remote "${1:-status}" ;;
+  esac
 }
 
 cmd_todo() { python3 "$GUILD_REPO/bin/fleet.py" todo "$@"; }
@@ -1089,6 +1104,8 @@ case "${1:-}" in
   todo) shift; cmd_todo "$@" ;;
   click) shift; cmd_click "$@" ;;
   budget) shift; cmd_budget "$@" ;;
+  remote) shift; cmd_remote "$@" ;;
+  notify) shift; python3 "$GUILD_REPO/bin/notify.py" "${@:-test}" ;;
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
   docket) shift; cmd_docket "$@" ;;
