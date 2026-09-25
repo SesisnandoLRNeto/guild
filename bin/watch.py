@@ -8,6 +8,7 @@ Window names stay exactly the quest slug, so `guild peek` and `guild send` keep 
 import json
 import re
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -82,13 +83,43 @@ def draw(quests, width, spend=None):
             color = COLORS.get(q["state"], DIM)
             board = f" {COLORS['needs-decision']}[board]{RESET}" if q["boards"] else ""
             lines.append(f"  {color}●{RESET} {q['slug'][:width - 6]}{board}")
-            model = q.get("model") or q.get("harness", "")
             price = (spend or {}).get(q["slug"])
-            tail = f" · {money(price)}" if price else ""
-            lines.append(f"    {DIM}{model} · {q['state']}{tail}{RESET}")
+            parts = [SHORT_STATE.get(q["state"], q["state"])] + ([money(price)] if price else [])
+            model = q.get("model") or q.get("harness", "")
+            if model and len(" · ".join(parts + [model])) <= width - 5:
+                parts.append(model)                  # the model only when there is room for it
+            lines.append(f"    {DIM}{' · '.join(parts)}{RESET}")
     lines += ["", f"{BOLD}activity{RESET}"]
     lines += activity(width)
     return lines
+
+
+ANSI = re.compile(r"\033\[[0-9;]*m")
+
+
+def fit(line, width):
+    """Clip a line to the pane's width by visible characters, keeping its colors intact."""
+    out, seen, i = [], 0, 0
+    while i < len(line):
+        m = ANSI.match(line, i)
+        if m:
+            out.append(m.group(0)); i = m.end(); continue
+        if seen >= width - 1:
+            break
+        out.append(line[i]); seen += 1; i += 1
+    return "".join(out) + RESET
+
+
+# Short words for a narrow sidebar. Colors still carry the state at a glance.
+SHORT_STATE = {"checks-baseline": "baseline", "checks-green": "green", "checks-red": "red",
+               "needs-decision": "decide", "trial-pass": "trial ok", "trial-skip": "trial skip",
+               "acceptance": "resealed", "message": "msg"}
+
+
+def short_slug(slug):
+    """The part that tells quests apart: a ticket prefix like sara-838, else the first word or two."""
+    m = re.match(r"^([a-z]+-\d+)", slug)
+    return m.group(1) if m else slug[:12]
 
 
 def short_note(note):
@@ -113,12 +144,12 @@ def activity(width, limit=8, hours=24):
         parts = row.split("\t")
         if len(parts) < 4 or parts[0] < cutoff:
             continue
-        when, slug, state, note = parts[0][11:16], parts[1], parts[2], short_note(parts[3])
+        when, slug, state, note = parts[0][11:16], short_slug(parts[1]), parts[2], short_note(parts[3])
         color = COLORS.get(state, DIM)
-        head = f"{when} {slug}"
-        room = max(0, width - len(head) - len(state) - 3)
-        tail = f" {DIM}{note[:room]}{RESET}" if note and room > 4 and state not in ("closed",) else ""
-        out.append(f" {DIM}{when}{RESET} {slug[:max(6, width - 20)]} {color}{state}{RESET}{tail}"[: width * 3])
+        word = SHORT_STATE.get(state, state)
+        room = width - len(f" {when} {slug} {word}") - 2
+        tail = f" {DIM}{note[:room]}{RESET}" if note and room > 6 and state not in ("closed",) else ""
+        out.append(f" {DIM}{when}{RESET} {slug} {color}{word}{RESET}{tail}")
         if len(out) >= limit:
             break
     return out or [f" {DIM}quiet for the last {hours}h{RESET}"]
@@ -147,12 +178,12 @@ def main():
         return
     interval = float(sys.argv[1]) if len(sys.argv) > 1 else 2.0
     while True:
-        width = int(os.environ.get("COLUMNS") or subprocess.run(
-            ["tput", "cols"], capture_output=True, text=True).stdout.strip() or 30)
+        # the pane's real size, read every tick, so a resize never makes lines wrap
+        width = shutil.get_terminal_size((30, 20)).columns
         quests = read_quests()
         mark_tabs(quests)
         spend = costs()
-        sys.stdout.write("\033[H\033[2J" + "\n".join(draw(quests, width, spend)) + "\n")
+        sys.stdout.write("\033[H\033[2J" + "\n".join(fit(l, width) for l in draw(quests, width, spend)) + "\n")
         sys.stdout.flush()
         time.sleep(interval)
 

@@ -282,6 +282,7 @@ The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does 
 | `Ctrl-g` `w` | Pick a quest from a list |
 | `Ctrl-g` `n` | A new Claude tab in the current folder (`Ctrl-g N` asks for the folder) |
 | click `+ claude` | The green button on the status bar: a new Claude tab |
+| `Ctrl-g` `=` | Put the sidebar back to its size (about a quarter of the window, 24 to 36 columns) |
 | `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
 | `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |

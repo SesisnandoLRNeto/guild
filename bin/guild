@@ -106,7 +106,7 @@ cmd_up() {
     # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
       "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
-    tm select-layout -t "$SESSION:qm" main-vertical
+    cmd_layout
     command -v claude-deck >/dev/null && tm new-window -d -t "$SESSION" -n deck "claude-deck; exec \$SHELL"
     # The Jira watcher gets its own tab when jira.json says "watch": true, so you can see what it does.
     python3 -c "import json,sys;sys.exit(0 if json.load(open('$GUILD_HOME/local/jira.json')).get('watch') else 1)" 2>/dev/null \
@@ -163,6 +163,17 @@ cmd_new() {
 }
 
 cmd_shot() { python3 "$GUILD_REPO/bin/shot.py" "$@"; }
+
+# The sidebar gets about a quarter of the window: 24 to 36 columns. A fixed width broke
+# narrow windows (a 99-column terminal squeezed the sidebar down to one column).
+cmd_layout() {
+  tm has-session -t "$SESSION" 2>/dev/null || return 0
+  local w side
+  w=$(tm display-message -p -t "$SESSION:qm" '#{window_width}' 2>/dev/null) || return 0
+  side=$(( w * 28 / 100 )); [ "$side" -lt 24 ] && side=24; [ "$side" -gt 36 ] && side=36
+  tm set-window-option -t "$SESSION:qm" main-pane-width "$side" >/dev/null
+  tm select-layout -t "$SESSION:qm" main-vertical >/dev/null
+}
 
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
 
@@ -789,6 +800,7 @@ case "${1:-}" in
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;
   new) shift; cmd_new "$@" ;;
+  layout) cmd_layout ;;
   check) shift; cmd_check "$@" ;;
   vision) shift; cmd_vision "$@" ;;
   jira) shift; cmd_jira "$@" ;;
