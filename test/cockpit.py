@@ -127,8 +127,36 @@ try:
         drain(0.2)
     check("clicking a quest in the sidebar jumps to its tab", active() == "alpha")
     home()
-    check("the sidebar draws claude-deck style panels", any("┌─ Fleet" in l for l in screen))
-    check("and its buttons", any("[+claude]" in l for l in screen))
+    check("the sidebar draws claude-deck style panels", any("┌ Quests" in l for l in screen))
+    check("with the deck's key:Action help bar", any("n:New" in l for l in screen))
+
+    # single letters, like the deck: they work while the sidebar has focus
+    def focus_sidebar():
+        home(); T("select-pane", "-t", "guild:qm.0"); drain(1.2)
+    focus_sidebar(); n = len(windows()); os.write(fd, b"t")
+    for _ in range(30):
+        if len(windows()) > n:
+            break
+        drain(0.2)
+    check("t in the focused sidebar opens a terminal tab", len(windows()) == n + 1)
+    focus_sidebar(); os.write(fd, b"1")
+    for _ in range(30):
+        if active() == "alpha":
+            break
+        drain(0.2)
+    check("1 in the focused sidebar jumps to the first quest", active() == "alpha")
+    home()
+    foot = T("capture-pane", "-p", "-t", "guild:qm.0").splitlines()
+    row = next((i + 1 for i, l in enumerate(foot) if "t:Term" in l), None)
+    col = foot[row - 1].index("t:Term") + 2 if row else 0
+    n = len(windows())
+    if row:
+        click(col, row, wait=0.2)
+    for _ in range(30):
+        if len(windows()) > n:
+            break
+        drain(0.2)
+    check("clicking t:Term on the help bar opens a terminal tab", len(windows()) == n + 1)
 finally:
     os.kill(pid, 9)
     subprocess.run(["tmux", "-L", SOCK, "kill-server"], capture_output=True)

@@ -259,7 +259,6 @@ cmd_layout() {
   side=$(( w * 28 / 100 )); [ "$side" -lt 24 ] && side=24; [ "$side" -gt 36 ] && side=36
   tm set-window-option -t "$SESSION:qm" main-pane-width "$side" >/dev/null
   tm select-layout -t "$SESSION:qm" main-vertical >/dev/null
-  tm select-pane -t "$SESSION:qm.0" -P 'bg=#1e1e2e' 2>/dev/null || true   # claude-deck's background
 }
 
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
