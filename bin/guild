@@ -39,6 +39,8 @@ guild wait [timeout-seconds] [--for slug,slug]
                                     block until a new event arrives, then print it (default 1800s);
                                     --for waits only for those quests, with its own cursor
 guild helper <name> [--tier T] < brief   inside a quest: a helper quest on a branch from yours
+guild quest ... --machine NAME      run the quest on another machine over ssh (see guild machines)
+guild machines [list|check|sync]    the machines in local/machines.json, whether guild answers there
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
 guild peek <slug> --calls [n]       the last tool calls and results, from the session log (works with calm on)
 guild send <slug> <message>         type a message into an adventurer's session
@@ -566,6 +568,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
+  local machine="" headless="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -577,6 +580,8 @@ cmd_quest() {
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
       --parent) parent="$2"; shift 2 ;;
+      --machine) machine="$2"; shift 2 ;;
+      --headless) headless=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
@@ -584,6 +589,21 @@ cmd_quest() {
       *) die "unknown option $1" ;;
     esac
   done
+  # Another machine: guild there builds the quest; here it gets a tab (ssh) and a mirror.
+  if [ -n "$machine" ]; then
+    tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+    [ -e "$(qdir "$slug")" ] && die "quest '$slug' already exists"
+    local passed=() skip=""
+    for a in "${all_args[@]}"; do
+      if [ -n "$skip" ]; then skip=""; continue; fi
+      case "$a" in --machine|--repo|--brief) skip=1 ;; *) passed+=("$a") ;; esac
+    done
+    local brief_text; if [ -n "$brief" ]; then brief_text=$(cat "$brief"); else brief_text=$(cat); fi
+    printf '%s' "$brief_text" | python3 "$GUILD_REPO/bin/machines.py" start "$machine" "$slug" "$repo" ${passed[@]+"${passed[@]}"} || exit 1
+    open_tab "$slug" "$HOME" "bash '$(qdir "$slug")/launch.sh'" --bg >/dev/null
+    event "$slug" working "launched on $machine"
+    return 0
+  fi
   # A helper works for another quest: same repo, from the parent's branch, the parent's ticket.
   if [ -n "$parent" ]; then
     need_quest "$parent"
@@ -621,7 +641,7 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   repo="$(cd "$repo" && git rev-parse --show-toplevel)" || die "not a git repo: $repo"
   local q; q="$(qdir "$slug")"
   [ -e "$q" ] && die "quest '$slug' already exists"
-  tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+  [ -n "$headless" ] || tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
 
   if [ -z "$base" ]; then
     git -C "$repo" fetch -q origin 2>/dev/null || true
@@ -744,7 +764,8 @@ PLAN
 
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
-  open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
+  # headless: another machine's guild asked for this quest; its tab lives over there
+  [ -n "$headless" ] || open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -977,6 +998,8 @@ cmd_wait() { # [timeout] [--for slug,slug]
   while :; do
     # held decisions whose date came back become events, about once a minute
     [ $((waited % 60)) = 0 ] && python3 "$GUILD_REPO/bin/wartable.py" due 2>/dev/null
+    # quests on other machines: mirror them here about every 20 seconds
+    [ -f "$GUILD_HOME/local/machines.json" ] && [ $((waited % 20)) = 0 ] && python3 "$GUILD_REPO/bin/machines.py" sync 2>/dev/null
     size=$(wc -c < "$EVENTS" | tr -d ' ')
     if [ "$size" -gt "$cursor" ]; then
       out=$(tail -c +"$((cursor + 1))" "$EVENTS")
@@ -1118,6 +1141,11 @@ cmd_board() {
 cmd_close() {
   local slug="$1" force="${2:-}"
   need_quest "$slug"
+  # a quest on another machine closes there first (its worktree lives there)
+  if python3 -c "import json,sys;sys.exit(0 if json.load(open('$(qdir "$slug")/meta.json')).get('machine') else 1)"; then
+    python3 "$GUILD_REPO/bin/machines.py" sync 2>/dev/null
+    python3 "$GUILD_REPO/bin/machines.py" close "$slug" || true
+  fi
   local q wt repo
   q="$(qdir "$slug")"
   wt=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['worktree'])")
@@ -1175,6 +1203,7 @@ case "${1:-}" in
   click) shift; cmd_click "$@" ;;
   budget) shift; cmd_budget "$@" ;;
   helper) shift; cmd_helper "$@" ;;
+  machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   lesson) shift; [ "${1:-}" = propose ] || die "usage: guild lesson propose \"<lesson>\" --evidence \"<quest>: <quote>\" (twice or more) [--why \"...\"]"
           python3 "$GUILD_REPO/bin/lessons.py" "$@" ;;

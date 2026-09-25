@@ -244,6 +244,7 @@ function cardHtml(c) {
   if (c.ticket && c.ticket !== c.title) meta.push(`<span>${esc(c.ticket)}</span>`);
   if (c.repo) meta.push(`<span>${esc(c.repo)}</span>`);
   if (c.harness && c.harness !== "claude") meta.push(`<span>${esc(c.harness)}</span>`);
+  if (c.machine) meta.push(`<span class="grade" title="runs on another machine">on ${esc(c.machine)}</span>`);
   if (c.since) meta.push(`<span>${esc(ago(c.since))}</span>`);
   if (c.grade && c.grade.grade) meta.push(`<span class="grade g${c.grade.grade}" title="${esc(c.grade.message || "")}">graded ${c.grade.grade}/5${c.grade.verdict ? " · " + esc(c.grade.verdict) : ""}</span>`);
   // helpers running in parallel: subagents of a session, or the quests the quartermaster sent out

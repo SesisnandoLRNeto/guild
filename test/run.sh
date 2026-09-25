@@ -792,6 +792,47 @@ is "without moving the quartermaster's cursor" "$(cat "$GUILD_HOME/.wait-cursor"
 has "the board joins them in one thread" "$(python3 "$REPO/bin/fleet.py" json)" "helper of pa"
 for s in pa-docs pa-tests pa; do "$GUILD" close $s --force >/dev/null 2>&1; done
 
+# another machine: a fake ssh runs the "remote" guild in its own home, so the whole path runs
+section "machines"
+RH="$TMP/remote-home"; mkdir -p "$RH/.guild/local" "$TMP/remote-wt"
+git clone -q "$REPO_A" "$TMP/remote-repo-a"
+cp "$GUILD_HOME/local/dispatch.json" "$RH/.guild/local/"
+cat > "$TMP/stub/fake-ssh" <<SH
+#!/bin/bash
+while [ \$# -gt 0 ]; do case "\$1" in -o) shift 2 ;; -t|-T) shift ;; *) break ;; esac; done
+shift   # the host
+export HOME="$RH" GUILD_HOME="$RH/.guild" GUILD_WORKTREES="$TMP/remote-wt" GUILD_TMUX_SOCKET=guild-remote-unused GUILD_BOARD_PORT=4880
+exec bash -c "\$*"
+SH
+chmod +x "$TMP/stub/fake-ssh"
+export GUILD_SSH=fake-ssh
+cat > "$GUILD_HOME/local/machines.json" <<JSON
+{"mini": {"ssh": "mini", "guild": "$REPO/bin/guild", "repos": {"repo-a": "$TMP/remote-repo-a"}}}
+JSON
+has "guild answers on the machine" "$("$GUILD" machines check 2>&1)" "guild answers"
+echo "work over there" | "$GUILD" quest rq --repo "$REPO_A" --machine mini --model sonnet >/dev/null 2>&1
+is "the quest is built on the machine" "$(python3 -c "import json;print(json.load(open('$RH/.guild/quests/rq/meta.json'))['slug'])" 2>/dev/null)" "rq"
+has "with its worktree there" "$(python3 -c "import json;print(json.load(open('$RH/.guild/quests/rq/meta.json'))['worktree'])" 2>/dev/null)" "$TMP/remote-wt"
+is "this Mac keeps a mirror that knows the machine" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/rq/meta.json'))['machine'])")" "mini"
+has "its tab here is an ssh session into the agent" "$(cat "$GUILD_HOME/quests/rq/launch.sh")" "fake-ssh"
+tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W' | grep -qx rq && ok "and it has a cockpit tab" || bad "and it has a cockpit tab"
+fake-ssh mini "'$REPO/bin/guild' status rq blocked 'need the staging key'" >/dev/null 2>&1
+"$GUILD" machines sync
+is "the machine's status comes back" "$(cut -f1 "$GUILD_HOME/quests/rq/status")" "blocked"
+has "and its events" "$(tail -3 "$GUILD_HOME/events.log")" "need the staging key"
+fake-ssh mini "GUILD_QUEST=rq GUILD_BOARD_NO_OPEN=1 '$REPO/bin/guild' ask 'Which region?' --option eu=EU --option us=US --recommend eu" >/dev/null 2>&1
+"$GUILD" machines sync
+rb=$(ls "$GUILD_HOME/quests/rq/boards" | head -1)
+has "its question reaches the docket here" "$(curl -s "${url%/campaign}/docket.json")" "Which region?"
+curl -s -X POST "${url%/campaign}/docket/rule" -d "{\"quest\":\"rq\",\"board\":\"$rb\",\"answers\":{\"choice\":\"us\"}}" >/dev/null
+"$GUILD" machines sync
+is "your answer reaches the agent there" "$(python3 -c "import json;print(json.load(open('$RH/.guild/quests/rq/boards/$rb/decision.json'))['answers']['choice'])" 2>/dev/null)" "us"
+is "and the quest moves on there" "$(cut -f1 "$RH/.guild/quests/rq/status")" "working"
+"$GUILD" close rq --force >/dev/null 2>&1
+[ ! -d "$RH/.guild/quests/rq" ] && ok "closing closes it on the machine" || bad "closing closes it on the machine"
+[ -f "$RH/.guild/.wartable-pid" ] && kill "$(cat "$RH/.guild/.wartable-pid")" 2>/dev/null
+rm -f "$GUILD_HOME/local/machines.json"; unset GUILD_SSH
+
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
 CK="$TMP/cockpit-home"; mkdir -p "$CK/local"

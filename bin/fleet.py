@@ -435,7 +435,7 @@ def board():
             agents=(main or {}).get("agents", []), links=links,
             tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True,
             branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", ""),
-            grade=grade, parent=q.get("parent", "")))
+            grade=grade, parent=q.get("parent", ""), machine=q.get("machine", "")))
 
     party = [{"type": q["slug"], "what": q["state"]} for q in qs if QUEST_COLUMN.get(q["state"]) in ("road", "waiting")]
     qm_boards = pseudo_boards()
