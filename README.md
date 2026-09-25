@@ -93,6 +93,8 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 `guild status done` refuses a backend quest whose wrap-up lacks the section, or leaves a rule candidate unexplained (`--no-impact "<why>"` is the recorded way out). No database and no build are needed: it reads the repo and git.
 
+**The docket.** `guild docket` (or `Ctrl-g g`) is the war table's front page: every open decision from every quest on one parchment ledger, one row each. Pick a ruling (a star marks the adventurer's suggestion), add a note, or hold it until a date, then send them all with one button. A held decision parks its quest and tells the adventurer to stop waiting; on its date `guild wait` raises it again and the quartermaster brings it back to you. Wrap-ups waiting for your grade are rows too. The full list of boards stays at `/boards`.
+
 **Grading the result.** Every wrap-up page asks you for a grade (1 to 5) and a verdict: ready to merge, needs changes, or split a follow-up. "Needs changes" sends your notes straight back to the adventurer, which carries on. The grade stays with the quest (`grade.json`), the campaign board shows it (or a red "grade it" until you do), and `guild retro` compares grades by model, tier and harness, so routing in `dispatch.json` follows your judgment, not only whether checks passed.
 
 ## Costs and history
@@ -340,7 +342,7 @@ Why not a bare `Ctrl-k`: every Ctrl letter already means something in Claude Cod
 | `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
 | `Ctrl-g` `E` | Asks what to open: a quest, a folder or one file |
 | `Ctrl-g` `b` (or `k`) | Open the campaign board in the browser |
-| `Ctrl-g` `g` | Open the war table in the browser |
+| `Ctrl-g` `g` | The docket: every open decision on one page |
 | `Ctrl-g` `p` | Pin or unpin the current tab (it goes to the top of the sidebar) |
 | `Ctrl-g` `P` | Menu of pinned sessions: pick one to jump to it, or to reopen it if its tab is gone |
 | `Ctrl-g` `=` | Put the sidebar back to its size (about a quarter of the window, 24 to 36 columns) |

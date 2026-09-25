@@ -50,7 +50,7 @@ QUEST_COLUMN = {
     "working": "road", "checks-baseline": "road", "checks-green": "road", "checks-red": "road",
     "acceptance": "road", "message": "road", "planned": "road",
     "needs-decision": "waiting", "blocked": "waiting", "failed": "waiting", "stopped": "todo",
-    "trial-pass": "trial", "trial-skip": "trial", "done": "done",
+    "trial-pass": "trial", "trial-skip": "trial", "done": "done", "held": "todo",
 }
 
 
@@ -266,7 +266,9 @@ def quests():
                 if bj.get("wrapup"):
                     meta["wrapup"] = b
                 elif not os.path.exists(os.path.join(boards, b, "decision.json")):
-                    meta["open_boards"].append(b)
+                    held = bj.get("held_until", "")
+                    if not held or held <= time.strftime("%Y-%m-%d"):      # a held decision waits for its date
+                        meta["open_boards"].append(b)
         out.append(meta)
     return out
 

@@ -124,6 +124,120 @@ def grade_wrapup(quest, board, meta, decision):
         subprocess.run([guild, "send", quest, text], capture_output=True)
 
 
+def answer_board(quest, board, payload):
+    """Write the guildmaster's answer; the waiting adventurer picks it up with `guild board wait`."""
+    d = board_dir(quest, board)
+    decision = {
+        "answers": payload.get("answers", {}),
+        "message": payload.get("message", ""),
+        "attachments": payload.get("attachments", []),
+        "ended": bool(payload.get("ended")),
+        "at": now(),
+    }
+    with open(os.path.join(d, "decision.json"), "w") as f:
+        json.dump(decision, f, indent=2)
+    meta = json.load(open(os.path.join(d, "board.json")))
+    if meta.get("wrapup"):
+        grade_wrapup(quest, board, meta, decision)
+        return
+    picked = ", ".join(f"{k}={v}" for k, v in decision["answers"].items()) or "message only"
+    record(quest, "working", f"war table answered ({meta.get('title', board)}): {picked}")
+    if meta.get("held_until"):           # it stopped waiting when you held it: wake it up
+        nudge(quest, f"Your held decision '{meta.get('title', board)}' is answered. Read it with "
+                     f"`guild board wait {board}` and carry on.")
+
+
+def nudge(quest, text):
+    guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+    subprocess.run([guild, "send", quest, text], capture_output=True)
+
+
+# ── the docket: every open decision on one page, one ruling per row ───────────
+def board_questions(bdir, meta):
+    qpath = os.path.join(bdir, "decisions.json")
+    questions = json.load(open(qpath)).get("questions", []) if os.path.exists(qpath) else []
+    return (GRADE_QUESTIONS + questions) if meta.get("wrapup") else questions
+
+
+def docket_items():
+    today = datetime.date.today().isoformat()
+    items, recent = [], []
+    if not os.path.isdir(QUESTS):
+        return {"open": [], "held": [], "recent": []}
+    for quest in sorted(os.listdir(QUESTS)):
+        qdir = os.path.join(QUESTS, quest)
+        bdir = os.path.join(qdir, "boards")
+        if not os.path.isdir(bdir):
+            continue
+        qmeta = {}
+        try:
+            qmeta = json.load(open(os.path.join(qdir, "meta.json")))
+        except (OSError, ValueError):
+            pass
+        for board in sorted(os.listdir(bdir)):
+            d = os.path.join(bdir, board)
+            try:
+                meta = json.load(open(os.path.join(d, "board.json")))
+            except (OSError, ValueError):
+                continue
+            base = {"quest": quest, "board": board, "title": meta.get("title", board), "subtitle": meta.get("subtitle", ""),
+                    "created": meta.get("created", ""), "url": f"/b/{quest}/{board}/", "wrapup": bool(meta.get("wrapup")),
+                    "ticket": qmeta.get("ticket", ""), "model": qmeta.get("model", ""), "pseudo": bool(qmeta.get("pseudo"))}
+            dec = os.path.join(d, "decision.json")
+            if os.path.exists(dec):
+                answer = json.load(open(dec))
+                recent.append(dict(base, answers=answer.get("answers", {}), message=answer.get("message", ""), at=answer.get("at", "")))
+                continue
+            item = dict(base, questions=board_questions(d, meta), held_until=meta.get("held_until", ""),
+                        held_note=meta.get("held_note", ""))
+            items.append(item)
+    held = [i for i in items if i["held_until"] and i["held_until"] > today]
+    open_ = [i for i in items if i not in held]
+    open_.sort(key=lambda i: (i["wrapup"], i["created"]))          # decisions first, then reviews
+    held.sort(key=lambda i: i["held_until"])
+    recent.sort(key=lambda i: i["at"], reverse=True)
+    return {"open": open_, "held": held, "recent": recent[:12], "today": today}
+
+
+def hold_board(quest, board, until, note=""):
+    """Park a decision until a date. The adventurer stops waiting; the quartermaster brings it
+    back on the date (guild wait emits held-due)."""
+    d = board_dir(quest, board)
+    path = os.path.join(d, "board.json")
+    meta = json.load(open(path))
+    if until:
+        datetime.date.fromisoformat(until)       # refuses anything that is not a date
+        meta["held_until"], meta["held_note"] = until, note
+        meta.pop("held_announced", None)
+    else:
+        for k in ("held_until", "held_note", "held_announced"):
+            meta.pop(k, None)
+    json.dump(meta, open(path, "w"), indent=2)
+    title = meta.get("title", board)
+    if until:
+        record(quest, "held", f"held until {until}: {title}" + (f" ({note})" if note else ""))
+        nudge(quest, f"The guildmaster held the decision '{title}' until {until}"
+                     + (f": {note}" if note else "") + ". Stop waiting on that board, park this part of the work, "
+                     "and end your turn. You will be told when it is answered.")
+    else:
+        record(quest, "needs-decision", f"back on the docket: {title}")
+
+
+def due_boards():
+    """Held decisions whose date has come, each announced once. Prints one event line each."""
+    today = datetime.date.today().isoformat()
+    for item in docket_items()["open"]:
+        if not item["held_until"]:
+            continue
+        path = os.path.join(board_dir(item["quest"], item["board"]), "board.json")
+        meta = json.load(open(path))
+        if meta.get("held_announced"):
+            continue
+        meta["held_announced"] = today
+        json.dump(meta, open(path, "w"), indent=2)
+        record(item["quest"], "needs-decision", f"held decision is due again: {item['title']}")
+
+
 def fleet():
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import fleet as mod
@@ -192,7 +306,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
         try:
-            if path in ("/", "/index.html"):
+            if path in ("/", "/index.html", "/docket"):     # the docket is the war table's front page
+                return self.send(200, open(os.path.join(WEB, "docket.html")).read())
+            if path == "/docket.json":
+                return self.send(200, json.dumps(docket_items()), "application/json")
+            if path == "/boards":
                 return self.send(200, self.render_index())
             if path == "/theme.css":         # the guild look for every board page
                 with open(os.path.join(WEB, "theme.css"), "rb") as f:
@@ -242,6 +360,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        k = re.match(r"^/docket/(rule|hold)$", path)
+        if k:
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+                if not SAFE.match(body.get("quest", "")) or not SAFE.match(body.get("board", "")):
+                    raise ValueError("bad board")
+                if k.group(1) == "rule":
+                    answer_board(body["quest"], body["board"], body)
+                else:
+                    hold_board(body["quest"], body["board"], body.get("until", ""), body.get("note", ""))
+                return self.send(200, json.dumps({"ok": True}), "application/json")
+            except Exception as e:
+                return self.send(500, json.dumps({"error": str(e)}), "application/json")
         c = re.match(r"^/campaign/(jump|pin|todo|close)$", path)
         if c:
             length = int(self.headers.get("Content-Length", 0))
@@ -269,21 +401,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     f.write(base64.b64decode(payload.get("data", "").split(",")[-1]))
                 return self.send(200, json.dumps({"path": rel}), "application/json")
 
-            decision = {
-                "answers": payload.get("answers", {}),
-                "message": payload.get("message", ""),
-                "attachments": payload.get("attachments", []),
-                "ended": bool(payload.get("ended")),
-                "at": now(),
-            }
-            with open(os.path.join(d, "decision.json"), "w") as f:
-                json.dump(decision, f, indent=2)
-            meta = json.load(open(os.path.join(d, "board.json")))
-            if meta.get("wrapup"):
-                grade_wrapup(quest, board, meta, decision)
-                return self.send(200, json.dumps({"ok": True}), "application/json")
-            picked = ", ".join(f"{k}={v}" for k, v in decision["answers"].items()) or "message only"
-            record(quest, "working", f"war table answered ({meta.get('title', board)}): {picked}")
+            answer_board(quest, board, payload)
             return self.send(200, json.dumps({"ok": True}), "application/json")
         except Exception as e:
             return self.send(500, json.dumps({"error": str(e)}), "application/json")
@@ -491,6 +609,9 @@ def main():
     if not argv:
         raise SystemExit(__doc__)
     cmd, rest = argv[0], argv[1:]
+    if cmd == "due":
+        due_boards()
+        return
     if cmd == "daemon":
         serve()
         with open(os.path.join(GUILD_HOME, ".wartable-pid"), "w") as f:

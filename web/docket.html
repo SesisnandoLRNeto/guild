@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Docket</title>
+<style>
+  /* The docket: every open decision in one ledger, one ruling per row. Guild theme:
+     a parchment sheet on a wooden table. */
+  :root {
+    --wood: #22170f; --wood-2: #2a1d14; --grain: #1a110b; --sign: #5b3e28; --sign-text: #f3e2bd; --hint: #c9b08a;
+    --paper: #f3e7c9; --paper-2: #e6d5ad; --ink: #2d2216; --ink-dim: #6e5a41; --rule: #cdb88e;
+    --gold: #d9a441; --seal: #a8322a; --ok: #3f7d3a; --held: #6c7086;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; color: var(--ink); background-color: var(--wood);
+    background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 190, 110, .10), transparent 60%),
+      repeating-linear-gradient(0deg, var(--wood-2) 0 46px, var(--grain) 46px 48px, var(--wood) 48px 94px, var(--grain) 94px 96px);
+    font: 15px/1.5 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; padding-bottom: 90px; }
+  header { max-width: 1180px; margin: 0 auto; padding: 22px 20px 10px; display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: flex-end; }
+  h1 { margin: 0; color: var(--sign-text); font-size: 28px; font-variant: small-caps; letter-spacing: .06em; text-shadow: 0 2px 0 rgba(0, 0, 0, .45); }
+  .sub { margin: 2px 0 0; color: var(--hint); font-style: italic; }
+  nav { margin-left: auto; display: flex; gap: 8px; }
+  nav a { color: var(--sign-text); text-decoration: none; border: 1px solid #4a3322; background: rgba(0, 0, 0, .2); padding: 4px 12px; border-radius: 999px; font-size: 13px; }
+  nav a:hover { border-color: var(--gold); color: var(--gold); }
+  .sheet { max-width: 1180px; margin: 10px auto 18px; padding: 22px 26px 26px; background: linear-gradient(170deg, var(--paper), var(--paper-2));
+    border-radius: 3px; box-shadow: 0 2px 0 rgba(0, 0, 0, .2), 0 14px 34px rgba(0, 0, 0, .5); }
+  h2 { margin: 0 0 4px; font-variant: small-caps; letter-spacing: .04em; color: #4a2f1a; font-size: 20px; }
+  .lead { margin: 0 0 14px; color: var(--ink-dim); font-style: italic; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-variant: small-caps; letter-spacing: .04em; color: var(--ink-dim); font-size: 13px; padding: 6px 10px; border-bottom: 2px solid var(--rule); }
+  td { vertical-align: top; padding: 12px 10px; border-bottom: 1px solid var(--rule); }
+  tr.ready td { background: rgba(217, 164, 65, .16); }
+  .n { color: var(--ink-dim); width: 28px; }
+  .item b { display: block; font-size: 15px; }
+  .item .meta { font-size: 12px; color: var(--ink-dim); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 11px; border-radius: 3px; padding: 0 6px; background: rgba(90, 60, 30, .12); }
+  .chip.review { background: var(--gold); color: #2a1d14; font-weight: 700; }
+  .chip.qm { background: #5b3e28; color: var(--sign-text); }
+  .item a { color: #8a4b12; font-size: 12px; }
+  .ruling .qt { font-size: 12px; color: var(--ink-dim); margin: 0 0 4px; font-variant: small-caps; letter-spacing: .03em; }
+  .ruling .q + .q { margin-top: 10px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 5px; }
+  .opts button { font: inherit; font-size: 13px; padding: 3px 10px; border-radius: 3px; border: 1px solid var(--rule); background: rgba(255, 250, 235, .6);
+    color: var(--ink); cursor: pointer; }
+  .opts button:hover { border-color: #8a4b12; }
+  .opts button.rec { border-color: var(--seal); }
+  .opts button.rec::after { content: " \2605"; color: var(--seal); font-size: 11px; }
+  .opts button[aria-pressed="true"] { background: #5b3e28; border-color: #5b3e28; color: var(--sign-text); }
+  .opts button[aria-pressed="true"].rec::after { color: var(--gold); }
+  .why { font-size: 12px; color: var(--ink-dim); margin-top: 4px; min-height: 1em; }
+  textarea, input[type=date] { font: inherit; font-size: 13px; color: var(--ink); background: rgba(255, 250, 235, .7); border: 1px solid var(--rule); border-radius: 3px; }
+  textarea { width: 100%; min-height: 54px; resize: vertical; padding: 6px 8px; }
+  .hold { white-space: nowrap; }
+  .hold input { padding: 3px 4px; width: 138px; }
+  .hold button, .back { font: inherit; font-size: 12px; padding: 3px 8px; border-radius: 3px; border: 1px solid var(--held); background: transparent; color: var(--ink); cursor: pointer; margin-top: 6px; display: block; }
+  .hold button:hover, .back:hover { background: var(--held); color: #fff; }
+  .empty { padding: 18px 10px; color: var(--ink-dim); font-style: italic; }
+  .held td { color: var(--ink-dim); }
+  .recent td { font-size: 13px; padding: 7px 10px; }
+  .picked { font-weight: 700; color: var(--ok); }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--sign); box-shadow: 0 -4px 12px rgba(0, 0, 0, .45); }
+  .bar .in { max-width: 1180px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 14px; color: var(--sign-text); }
+  .bar button { font: inherit; font-weight: 700; padding: 8px 18px; border-radius: 4px; border: 0; background: var(--gold); color: #2a1d14; cursor: pointer; }
+  .bar button:disabled { opacity: .5; cursor: default; }
+  .bar .hint { color: var(--hint); font-size: 13px; font-style: italic; }
+  @media (max-width: 820px) {
+    header, .sheet { margin-left: 0; margin-right: 0; }
+    .sheet { padding: 16px; border-radius: 0; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    thead { display: none; }
+    td { border: 0; padding: 6px 0; }
+    tr { border-bottom: 1px solid var(--rule); padding: 10px 0; }
+    .n { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>The Docket</h1>
+    <p class="sub">Every decision waiting for you, one ruling per row. Pick, note, or hold until a date; then send them all.</p>
+  </div>
+  <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a></nav>
+</header>
+
+<section class="sheet" aria-labelledby="h-open">
+  <h2 id="h-open">Awaiting your ruling</h2>
+  <p class="lead">Decisions first, then finished work waiting for your grade. &#9733; marks the adventurer's suggestion.</p>
+  <table>
+    <thead><tr><th></th><th>Item</th><th>Ruling</th><th>Note</th><th>Hold</th></tr></thead>
+    <tbody id="open"></tbody>
+  </table>
+</section>
+
+<section class="sheet" aria-labelledby="h-held">
+  <h2 id="h-held">Held</h2>
+  <p class="lead">Parked until their date. The quartermaster brings each one back to you when its day comes.</p>
+  <table><tbody id="held"></tbody></table>
+</section>
+
+<section class="sheet" aria-labelledby="h-recent">
+  <h2 id="h-recent">Recent rulings</h2>
+  <table class="recent"><tbody id="recent"></tbody></table>
+</section>
+
+<div class="bar"><div class="in">
+  <button id="send" disabled>Send rulings</button>
+  <span class="hint" id="status">Pick a ruling in any row. Nothing is sent until you press the button.</span>
+</div></div>
+
+<script>
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const $ = (s) => document.querySelector(s);
+const key = (i) => `${i.quest}/${i.board}`;
+let data = null;
+const picks = {}, notes = {};          // survive the refresh: what you chose but did not send yet
+
+function rowHtml(i, n) {
+  const k = key(i);
+  const chips = [
+    i.wrapup ? `<span class="chip review">review</span>` : "",
+    i.pseudo ? `<span class="chip qm">quartermaster</span>` : `<span class="chip">${esc(i.quest)}</span>`,
+    i.ticket ? `<span class="chip">${esc(i.ticket)}</span>` : "",
+    i.model ? `<span class="chip">${esc(i.model)}</span>` : "",
+  ].join("");
+  const qs = (i.questions || []).map((q) => {
+    const chosen = (picks[k] || {})[q.id];
+    const opts = (q.options || []).map((o) =>
+      `<button data-k="${esc(k)}" data-q="${esc(q.id)}" data-o="${esc(o.id)}" class="${q.recommended === o.id ? "rec" : ""}" aria-pressed="${chosen === o.id}" title="${esc(o.why || "")}">${esc(o.label)}</button>`).join("");
+    const why = (q.options || []).find((o) => o.id === chosen);
+    return `<div class="q"><p class="qt">${esc(q.title)}</p><div class="opts">${opts}</div><div class="why">${esc(why ? why.why || "" : "")}</div></div>`;
+  }).join("") || `<p class="qt">No options on this board: write your answer in the note, or open the page.</p>`;
+  const ready = isReady(i);
+  return `<tr class="${ready ? "ready" : ""}">
+    <td class="n">${n}</td>
+    <td class="item"><b>${esc(i.title)}</b>${i.subtitle ? `<span>${esc(i.subtitle)}</span>` : ""}<div class="meta">${chips}<a href="${esc(i.url)}" target="_blank" rel="noopener">open page</a></div></td>
+    <td class="ruling">${qs}</td>
+    <td><textarea data-note="${esc(k)}" aria-label="Note for ${esc(i.title)}" placeholder="Anything to add">${esc(notes[k] || "")}</textarea></td>
+    <td class="hold"><input type="date" data-until="${esc(k)}" min="${data.today}" aria-label="Hold until"><button data-hold="${esc(k)}">Hold</button></td>
+  </tr>`;
+}
+
+function isReady(i) {
+  const p = picks[key(i)] || {}, qs = i.questions || [];
+  if (!qs.length) return !!(notes[key(i)] || "").trim();
+  return qs.every((q) => p[q.id]);
+}
+
+function render() {
+  const open = data.open || [];
+  $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5">Nothing waits for you. The guild is on the road.</td></tr>`;
+  $("#held").innerHTML = (data.held || []).map((i) =>
+    `<tr class="held"><td class="item"><b>${esc(i.title)}</b><div class="meta"><span class="chip">${esc(i.quest)}</span>${i.held_note ? esc(i.held_note) : ""}</div></td>
+     <td>until <b>${esc(i.held_until)}</b></td><td><button class="back" data-unhold="${esc(key(i))}">Bring back now</button></td></tr>`).join("")
+    || `<tr><td class="empty">Nothing held.</td></tr>`;
+  $("#recent").innerHTML = (data.recent || []).map((r) =>
+    `<tr><td>${esc(r.at.replace("T", " ").slice(0, 16))}</td><td>${esc(r.title)}</td>
+     <td class="picked">${esc(Object.entries(r.answers || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
+     <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("") || `<tr><td class="empty">No rulings yet.</td></tr>`;
+  const ready = open.filter(isReady).length;
+  $("#send").disabled = !ready;
+  $("#send").textContent = ready ? `Send ${ready} ruling${ready > 1 ? "s" : ""}` : "Send rulings";
+}
+
+async function load() {
+  if (document.activeElement && document.activeElement.matches("textarea, input")) return;   // never redraw under your typing
+  try { data = await (await fetch("/docket.json", { cache: "no-store" })).json(); render(); }
+  catch (e) { $("#status").textContent = "The war table is not answering. Run guild docket again."; }
+}
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const out = await r.json();
+  if (out.error) throw new Error(out.error);
+}
+
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  if (b.dataset.o) {
+    const p = picks[b.dataset.k] = picks[b.dataset.k] || {};
+    p[b.dataset.q] = p[b.dataset.q] === b.dataset.o ? undefined : b.dataset.o;
+    render();
+  } else if (b.dataset.hold) {
+    const until = document.querySelector(`input[data-until="${CSS.escape(b.dataset.hold)}"]`).value;
+    if (!until) { $("#status").textContent = "Pick a date to hold it until."; return; }
+    const [quest, board] = b.dataset.hold.split("/");
+    await post("/docket/hold", { quest, board, until, note: notes[b.dataset.hold] || "" });
+    $("#status").textContent = `Held until ${until}. The adventurer was told to park it.`;
+    load();
+  } else if (b.dataset.unhold) {
+    const [quest, board] = b.dataset.unhold.split("/");
+    await post("/docket/hold", { quest, board, until: "" });
+    load();
+  } else if (b.id === "send") {
+    const ready = (data.open || []).filter(isReady);
+    b.disabled = true;
+    let sent = 0;
+    for (const i of ready) {
+      const k = key(i), answers = {};
+      for (const [q, o] of Object.entries(picks[k] || {})) if (o) answers[q] = o;
+      try { await post("/docket/rule", { quest: i.quest, board: i.board, answers, message: notes[k] || "" }); sent++; delete picks[k]; delete notes[k]; }
+      catch (e) { $("#status").textContent = `Could not send "${i.title}": ${e.message}`; }
+    }
+    $("#status").textContent = `${sent} ruling${sent === 1 ? "" : "s"} sent. The adventurers carry on.`;
+    load();
+  }
+});
+document.addEventListener("input", (ev) => {
+  if (ev.target.dataset.note) { notes[ev.target.dataset.note] = ev.target.value; const i = (data.open || []).find((x) => key(x) === ev.target.dataset.note);
+    ev.target.closest("tr").classList.toggle("ready", !!i && isReady(i)); const r = (data.open || []).filter(isReady).length;
+    $("#send").disabled = !r; $("#send").textContent = r ? `Send ${r} ruling${r > 1 ? "s" : ""}` : "Send rulings"; }
+});
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

@@ -31,7 +31,7 @@ DIM, RESET, BOLD = OVERLAY, "\033[0m", "\033[1m"
 COLORS = {
     "working": BLUE, "needs-decision": YELLOW, "blocked": RED,
     "failed": RED, "stopped": MAUVE, "done": GREEN, "your turn": YELLOW,
-    "checks-green": GREEN, "checks-red": RED, "trial-pass": GREEN, "planned": BLUE,
+    "checks-green": GREEN, "checks-red": RED, "trial-pass": GREEN, "planned": BLUE, "held": OVERLAY,
 }
 # What a tab shows next to its name. Quiet states get no mark at all.
 MARKS = {"needs-decision": "*", "blocked": "!", "failed": "!", "stopped": "?", "done": "+"}
@@ -182,7 +182,7 @@ def panel(title, rows, width, focused=False):
 # One letter each, like the deck. They work while the sidebar has focus (click it, or Ctrl-g Ctrl-h).
 # The same letters work after Ctrl-g from anywhere, so one set of keys to learn.
 KEYS = [("n", "New", ("new",)), ("t", "Term", ("term",)), ("b", "Board", ("campaign",)),
-        ("g", "War", ("board",)), ("p", "Pins", ("pins",)), ("0-9", "Tab", None), ("x", "Close", None),
+        ("g", "Docket", ("board",)), ("p", "Pins", ("pins",)), ("0-9", "Tab", None), ("x", "Close", None),
         ("?", "Keys", ("keys",)), ("q", "Back", ("back",))]
 
 
@@ -381,7 +381,7 @@ def act(action):
     elif kind == "term":
         subprocess.run([guild, "term"], capture_output=True)
     elif kind == "board":
-        subprocess.run(["sh", "-c", f"'{guild}' board url | head -1 | xargs open"], capture_output=True)
+        subprocess.run([guild, "docket"], capture_output=True)
     elif kind == "campaign":
         subprocess.run([guild, "campaign"], capture_output=True)
     elif kind == "back":                     # from the menu back to this tab's content

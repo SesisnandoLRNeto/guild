@@ -56,7 +56,8 @@ guild new [dir] [name] [--harness H] [--model M | --tier T] [--resume SESSION]
                                     a plain agent session in a new cockpit tab (Ctrl-g n, or click + claude)
 guild pin [tab] | unpin [tab]       keep a quest or session at the top of the sidebar (Ctrl-g p toggles)
 guild pins [menu]                   the pinned list; menu jumps to one (Ctrl-g P)
-guild campaign                      the campaign board: every agent, ticket and to-do as a kanban (Ctrl-g k)
+guild campaign                      the campaign board: every agent, ticket and to-do as a kanban (Ctrl-g b)
+guild docket                        every open decision on one page: rule, hold until a date, send all (Ctrl-g g)
 guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
@@ -282,6 +283,14 @@ cmd_click() { # range client path
 }
 
 cmd_todo() { python3 "$GUILD_REPO/bin/fleet.py" todo "$@"; }
+
+# The docket: every open decision on one page, one ruling each, holds with a date.
+cmd_docket() {
+  local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+  local url="http://127.0.0.1:$port/"
+  echo "$url"
+  [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+}
 
 # The campaign board: quests, sessions, subagents, tickets and to-dos as one kanban.
 cmd_campaign() {
@@ -852,6 +861,8 @@ cmd_wait() {
   local timeout="${1:-1800}" cursor_file="$GUILD_HOME/.wait-cursor" cursor size waited=0
   cursor=$(cat "$cursor_file" 2>/dev/null || echo 0)
   while :; do
+    # held decisions whose date came back become events, about once a minute
+    [ $((waited % 60)) = 0 ] && python3 "$GUILD_REPO/bin/wartable.py" due 2>/dev/null
     size=$(wc -c < "$EVENTS" | tr -d ' ')
     if [ "$size" -gt "$cursor" ]; then
       tail -c +"$((cursor + 1))" "$EVENTS"
@@ -1047,6 +1058,7 @@ case "${1:-}" in
   click) shift; cmd_click "$@" ;;
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
+  docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;
   layout) cmd_layout ;;

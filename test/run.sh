@@ -570,6 +570,36 @@ has "and the theme is served" "$(curl -s "${url%/campaign}/theme.css")" "parchme
 
 
 
+# ── the docket: every open decision on one page ──────────────────────────────
+section "docket"
+dq="$GUILD_HOME/quests/dk"; mkdir -p "$dq/boards/200001" "$dq/boards/200002"
+python3 - "$dq" <<'PY'
+import json, sys
+q = sys.argv[1]
+json.dump({"slug": "dk", "repo": "/tmp/r", "ticket": "DK-1", "model": "sonnet"}, open(q + "/meta.json", "w"))
+open(q + "/status", "w").write("needs-decision\tx\t2026-09-25T10:00:00\n")
+for b, title in (("200001", "Pick a name"), ("200002", "Pick a color")):
+    json.dump({"quest": "dk", "id": b, "title": title, "created": "2026-09-25T10:00:00"}, open(f"{q}/boards/{b}/board.json", "w"))
+    json.dump({"questions": [{"id": "c", "title": title, "recommended": "a", "options": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]}]},
+              open(f"{q}/boards/{b}/decisions.json", "w"))
+PY
+base="${url%/campaign}"
+dj=$(curl -s "$base/docket.json")
+has "the docket lists every open decision" "$dj" "Pick a name"
+has "with its options" "$dj" '"recommended": "a"'
+has "the docket is the war table's front page" "$(curl -s "$base/")" "The Docket"
+curl -s -X POST "$base/docket/rule" -d '{"quest":"dk","board":"200001","answers":{"c":"b"},"message":"B reads better"}' >/dev/null
+is "a ruling from the docket answers the board" "$(python3 -c "import json;print(json.load(open('$dq/boards/200001/decision.json'))['answers']['c'])")" "b"
+curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"2999-01-01","note":"after the release"}' >/dev/null
+is "a held decision parks the quest" "$(cut -f1 "$dq/status")" "held"
+has "and leaves the open list" "$(curl -s "$base/docket.json" | python3 -c "import json,sys;print([i['title'] for i in json.load(sys.stdin)['held']])")" "Pick a color"
+out=$(curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"soon"}')
+has "a hold needs a real date" "$out" "error"
+curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"2000-01-01"}' >/dev/null
+python3 "$REPO/bin/wartable.py" due; python3 "$REPO/bin/wartable.py" due
+is "a held decision comes back once when its date passes" "$(grep -c 'due again: Pick a color' "$GUILD_HOME/events.log")" "1"
+rm -rf "$dq"
+
 # ── backend impact: data model, impact, business rules ───────────────────────
 section "backend impact"
 RB="$TMP/repo-b"; mkdir -p "$RB/src/main/resources/db/changelog/changes" "$RB/src/main/java/com/acme/pay/domain/entity" \
