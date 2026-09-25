@@ -53,7 +53,7 @@ guild up ~/Workspace
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
-| `guild calm on\|off\|status` | Draw a blue bird instead of tool calls in guild sessions |
+| `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor with the file tree: a quest's worktree, any folder, or your work root |
 
@@ -287,9 +287,9 @@ The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does 
 
 The cockpit runs on its own tmux server, socket `guild`, with `config/guild.tmux.conf`. Your normal `tmux` keeps its own server, config, keys and sessions. Attach by hand with `tmux -L guild attach -t guild`, and kill everything with `tmux -L guild kill-server`.
 
-## Calm mode: the blue bird
+## Calm mode: the party on the road
 
-While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a blue bird gliding across two rows of sky where the spinner was, and tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/bird` toggles it inside a session.
+While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a party of three adventurers walking through a forest where the spinner was: a knight with a sword in front, a mage with a staff, an archer with a bow behind, trees drifting past the other way. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
 
 It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Verified on Claude Code 2.1.280; the API may change between releases.
 

@@ -1,6 +1,6 @@
 {
   "name": "guild-calm",
-  "version": "0.1.0",
-  "description": "Calm mode for guild sessions: a blue bird glides where the thinking and tool calls used to scroll. Drawing only, the transcript and the model context are untouched.",
+  "version": "0.2.0",
+  "description": "Calm mode for guild sessions: a party of three adventurers walks through a forest where the thinking and tool calls used to scroll. Drawing only, the transcript and the model context are untouched.",
   "author": { "name": "SesisnandoLRNeto", "url": "https://github.com/SesisnandoLRNeto/guild" }
 }

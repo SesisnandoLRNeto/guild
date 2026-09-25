@@ -1,4 +1,4 @@
-// guild calm: the working row becomes a blue bird, and tool rows stop drawing.
+// guild calm: the working row becomes a party walking through a forest, and tool rows stop drawing.
 //
 // Why: while an adventurer works, the tool calls scrolling by are noise. Hiding them
 // keeps your attention for the question that matters. Nothing here changes the stored
@@ -8,18 +8,18 @@
 // CLAUDE_CODE_ENABLE_FUNCTION_HOOKS and GUILD_CALM are exactly "1", so it can never
 // touch a normal session. `guild up` and `guild quest` set both when calm is on.
 import type { EngineInterface, Register, RenderElement, RenderInput } from "claude-code";
-import { BIRD_KEY, BIRD_PALETTES, BIRD_ROWS, BIRD_TICK_MS, birdColumns, birdFamily, birdFrame, type BirdPalette } from "../lib/bird.ts";
+import { PARTY_KEY, PARTY_PALETTES, PARTY_ROWS, PARTY_TICK_MS, partyColumns, partyFamily, partyFrame, type PartyPalette } from "../lib/party.ts";
 
-const COMMAND = "bird";
+const COMMAND = "calm";
 
 let calm = true;
-let palette: BirdPalette = BIRD_PALETTES.light;
+let palette: PartyPalette = PARTY_PALETTES.light;
 let preferencePath = "";
 let activation: Promise<boolean> | undefined;
 let loading: Promise<void> | undefined;
 let ticker: { cancel(): void } | undefined;
 let tick = 0;
-/** Every working row currently drawing the bird, with the size a repaint must repeat. */
+/** Every working row currently drawing the party, with the size a repaint must repeat. */
 const sites = new Map<string, { columns: number }>();
 
 function activated($: EngineInterface): Promise<boolean> {
@@ -35,8 +35,8 @@ async function load($: EngineInterface): Promise<void> {
   const home = (await $.env.get("GUILD_HOME").catch(() => undefined)) || `${await $.env.get("HOME")}/.guild`;
   preferencePath = `${home}/calm`;
   calm = (await $.fs.read(preferencePath).catch(() => "on")).trim() !== "off";
-  palette = BIRD_PALETTES[birdFamily(await readTheme($))];
-  ticker ??= $.clock.every(BIRD_TICK_MS, () => void repaint($));
+  palette = PARTY_PALETTES[partyFamily(await readTheme($))];
+  ticker ??= $.clock.every(PARTY_TICK_MS, () => void repaint($));
   $.ui.invalidate("ui.render");
 }
 
@@ -52,17 +52,17 @@ function ensureLoaded($: EngineInterface): Promise<void> {
   return (loading ??= load($));
 }
 
-/** Repaint every mounted bird without a render pass. */
+/** Repaint every mounted party without a render pass. */
 async function repaint($: EngineInterface): Promise<void> {
   if (!calm || sites.size === 0) return;
   tick += 1;
   for (const [requestId, site] of [...sites]) {
     const result = await $.ui.blit({
       requestId,
-      key: BIRD_KEY,
-      cells: birdFrame(site.columns, tick, palette),
+      key: PARTY_KEY,
+      cells: partyFrame(site.columns, tick, palette),
       columns: site.columns,
-      rows: BIRD_ROWS,
+      rows: PARTY_ROWS,
     });
     // Denied means that row is gone (the turn ended, or a resize redrew it).
     if (result.deny !== undefined && sites.get(requestId) === site) sites.delete(requestId);
@@ -81,7 +81,7 @@ export const register: Register = (on) => {
     loading = undefined;
     sites.clear();
     await ensureLoaded($);
-    await $.command.register({ name: COMMAND, description: "Guild calm: show the bird instead of the tool calls." });
+    await $.command.register({ name: COMMAND, description: "Guild calm: show the party instead of the tool calls." });
     return next(e);
   });
 
@@ -98,16 +98,16 @@ export const register: Register = (on) => {
     calm = wanted;
     if (!calm) sites.clear();
     $.ui.invalidate("ui.render");
-    $.ui.toast(calm ? "Calm on, the bird has the sky" : "Calm off, tool calls are back");
+    $.ui.toast(calm ? "Calm on, the party is on the road" : "Calm off, tool calls are back");
     return {};
   });
 
-  // A theme change repaints the bird in the new family's blue.
+  // A theme change repaints the party in the new family's colors.
   on("config.set", { key: "theme" }, async ($, e, next) => {
     if (!(await activated($))) return next(e);
     const result = await next(e);
     if (result.deny === undefined) {
-      const chosen = BIRD_PALETTES[birdFamily(result.value)];
+      const chosen = PARTY_PALETTES[partyFamily(result.value)];
       if (chosen !== palette) {
         palette = chosen;
         if (calm) $.ui.invalidate("ui.render");
@@ -123,12 +123,12 @@ export const register: Register = (on) => {
       sites.delete(e.requestId);
       return next(e);
     }
-    const columns = birdColumns(e.viewport?.columns);
+    const columns = partyColumns(e.viewport?.columns);
     sites.set(e.requestId, { columns });
     const { Box, Raster } = $.ui.resolve(e);
     return Box({
       flexDirection: "column",
-      children: Raster({ key: BIRD_KEY, columns, rows: BIRD_ROWS, cells: birdFrame(columns, tick, palette) }),
+      children: Raster({ key: PARTY_KEY, columns, rows: PARTY_ROWS, cells: partyFrame(columns, tick, palette) }),
     });
   });
 

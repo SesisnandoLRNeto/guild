@@ -60,7 +60,7 @@ guild cost [slug] [--active]        what each quest spent (tokens, replies, time
 guild log [slug] [--since 7d] [--repo NAME]
                                     the history: quests, decisions, trials, cost; one slug tells its whole story
 guild retro [--since 14d]           the facts a retro needs: overridden calls, skipped trials, stalls, spend
-guild calm on|off|status            draw a blue bird instead of tool calls in guild sessions (opt-in)
+guild calm on|off|status            draw a party walking through a forest instead of tool calls (opt-in)
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
 guild edit [slug|path]              your editor with the file tree: a quest, a folder, or your work root
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
@@ -78,7 +78,7 @@ calm_env() { calm_on && printf 'CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GUILD_CALM=1
 
 cmd_calm() {
   case "${1:-status}" in
-    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the bird instead of tool calls (/bird toggles it inside a session)" ;;
+    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the party instead of tool calls (/calm toggles it inside a session)" ;;
     off) echo off > "$GUILD_HOME/calm"; echo "calm off: guild sessions draw normally again" ;;
     status) calm_on && echo on || echo off ;;
     *) die "usage: guild calm on|off|status" ;;

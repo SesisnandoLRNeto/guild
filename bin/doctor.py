@@ -130,7 +130,7 @@ def check_config():
 
     calm_file = os.path.join(GUILD_HOME, "calm")
     calm = open(calm_file).read().strip() if os.path.exists(calm_file) else "off"
-    line("ok", "calm mode", f"{calm} (the bird; guild calm on|off)")
+    line("ok", "calm mode", f"{calm} (the party; guild calm on|off)")
 
 
 def check_identities():
