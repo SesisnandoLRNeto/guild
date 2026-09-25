@@ -56,7 +56,7 @@ guild up ~/Workspace
 | `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
 | `guild new [dir] [name]` | A plain Claude session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
-| `guild edit [slug\|path]` | Your editor with the file tree: a quest's worktree, any folder, or your work root |
+| `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
 Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
@@ -284,6 +284,8 @@ The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does 
 | click `+ claude` | The green button on the status bar: a new Claude tab |
 | `Ctrl-g` `=` | Put the sidebar back to its size (about a quarter of the window, 24 to 36 columns) |
 | `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
+| `Ctrl-g` `E` | Asks what to open: a quest, a folder or one file |
+| `Ctrl-g` `t` | A plain terminal tab in the current folder |
 | `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |
 

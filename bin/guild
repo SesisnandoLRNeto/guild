@@ -180,7 +180,7 @@ cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${
 # Your editor, the way you already use it: the file tree on the left, any file you want.
 # Takes a quest slug, a path, or nothing (then GUILD_EDIT_ROOT, else ~/Workspace).
 cmd_edit() {
-  local target="${1:-}" dir="" win="edit" editor="${EDITOR:-nvim}"
+  local target="${1:-}" dir="" file="" win="edit" editor="${EDITOR:-nvim}"
   if [ -z "$target" ]; then
     dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
   elif [ -d "$(qdir "$target")" ]; then
@@ -189,8 +189,12 @@ cmd_edit() {
   elif [ -d "$target" ]; then
     dir="$(cd "$target" && pwd)"
     win="edit:$(basename "$dir")"
+  elif [ -f "$target" ]; then          # one file: open it, in its own folder
+    dir="$(cd "$(dirname "$target")" && pwd)"
+    file="$(basename "$target")"
+    win="edit:$file"
   else
-    die "guild edit takes a quest slug, a directory, or nothing"
+    die "guild edit takes a quest slug, a directory, a file, or nothing"
   fi
   tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
   if tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$win"; then
@@ -199,6 +203,7 @@ cmd_edit() {
   fi
   local cmd="$editor ."
   case "$editor" in *vim) cmd="$editor -c 'silent! Neotree show' ." ;; esac   # the tree, like LazyVim opens it
+  [ -n "$file" ] && cmd="$editor '$file'"
   tm new-window -t "$SESSION" -n "$win" -c "$dir" "$cmd; exec \$SHELL"
   tm select-window -t "$SESSION:$win"
   echo "editing $dir in tab $win"
