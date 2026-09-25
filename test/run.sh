@@ -16,6 +16,7 @@ export GUILD_TMUX_SOCKET="guild-test"
 export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
 export GUILD_NO_NOTIFY="1"       # nor a notification
+export GUILD_NO_PR_SYNC="1"      # nor a call to GitHub
 export PATH="$TMP/stub:$PATH"
 mkdir -p "$HOME" "$GUILD_HOME/local" "$GUILD_WORKTREES" "$TMP/stub"
 
@@ -570,6 +571,27 @@ has "board pages get the guild theme" "$(curl -s "${url%/campaign}/b/$bq/$bid/co
 has "and the theme is served" "$(curl -s "${url%/campaign}/theme.css")" "parchment"
 
 
+
+# finished work follows its PR; leftovers never look like decisions
+mkdir -p "$GUILD_HOME/quests/pr1/boards/000001" "$GUILD_HOME/quests/pr1/boards/000002"
+python3 - "$GUILD_HOME" <<'PY'
+import json, sys, time
+h = sys.argv[1]; q = h + "/quests/pr1"
+json.dump({"slug": "pr1", "repo": "/tmp/r", "ticket": "PR-1"}, open(q + "/meta.json", "w"))
+open(q + "/status", "w").write("done\thttps://github.com/Org/r/pull/7\t2026-09-25T10:00:00\n")
+json.dump({"quest": "pr1", "id": "000002", "title": "an old question"}, open(q + "/boards/000002/board.json", "w"))
+json.dump({"https://github.com/Org/r/pull/7": {"slug": "pr1", "state": "open", "review": "review required", "checks": "passing",
+           "number": 7, "title": "t", "at": time.time()}}, open(h + "/.pr-cache.json", "w"))
+PY
+col() { python3 "$REPO/bin/fleet.py" json | python3 -c "import json,sys;b=json.load(sys.stdin);print(next(c['key'] for c in b['columns'] for x in c['cards'] if x['title']=='pr1'))"; }
+is "finished work with an open PR waits in review" "$(col)" "trial"
+hasnt "an empty board folder is not a decision" "$(python3 "$REPO/bin/fleet.py" json)" '"label": "decide"'
+hasnt "nor is an old question of a finished quest" "$(curl -s "${url%/campaign}/docket.json")" "an old question"
+python3 -c "
+import json;p='$GUILD_HOME/.pr-cache.json';c=json.load(open(p));c['https://github.com/Org/r/pull/7']['state']='merged';json.dump(c,open(p,'w'))"
+is "merged, it is returned" "$(col)" "done"
+has "the card carries the PR state" "$(python3 "$REPO/bin/fleet.py" json)" '"state": "merged"'
+rm -rf "$GUILD_HOME/quests/pr1" "$GUILD_HOME/.pr-cache.json"
 
 # ── the docket: every open decision on one page ──────────────────────────────
 section "docket"

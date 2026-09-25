@@ -365,10 +365,12 @@ Why not a bare `Ctrl-k`: every Ctrl letter already means something in Claude Cod
 - **Quest board**: your open Jira tickets that have no quest yet (when `~/.guild/local/jira.json` is set up), and your own to-dos. Post one from the page or with `guild todo add`.
 - **On the road**: quests at work, and every Claude session on this machine that is mid-turn, inside the cockpit or not. Subagents a session is running show on its card as companions.
 - **Awaiting orders**: quests that need a decision, are blocked or stopped, and sessions whose turn ended and wait for you.
-- **Trial**: quests that passed the trial and wait for their PR.
+- **In review**: finished quests whose PR is still open, as GitHub says (draft, open, review required, approved, changes requested, and whether checks pass). Merged or closed, they move to Returned.
 - **Returned**: done and closed in the last week.
 
 Each card shows the model as a wax seal (legendary for Fable, epic for Opus, rare for Sonnet, common for Haiku), what the agent is on, its repo and age, and buttons: go to its tab, reopen a session in the cockpit, pin it, open its wrap-up, decision board, PR or ticket. Sessions are read from Claude Code's own logs, so a spec session you named with `/rename` shows by that name. It refreshes every 3 seconds.
+
+**Labels, like Trello.** Each card carries colored labels at the top: its ticket, in one color per piece of work (quests on the same ticket, or built on each other's branch, share it; a session that talks about the ticket carries it too), then its PR state, review and checks, and the Jira status once Jira is set up. The legend above the columns lists the shared colors; click one, or hover a card, to see only that piece of work. PR states come from `gh`, with the account that owns each repo, refreshed every two minutes by the war table server; `guild prs` shows them in the terminal. Nothing is written to GitHub or Jira.
 
 ### Pins
 

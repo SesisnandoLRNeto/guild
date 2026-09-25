@@ -72,6 +72,7 @@ guild notify test                   check that notifications reach you (Mac, and
 guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest>: <quote>"
                                     a lesson with verbatim quotes from two quests; you accept it on the docket
 guild lessons                       proposed, accepted and rejected lessons
+guild prs                           each quest's PR as GitHub sees it (state, review, checks)
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
                                     data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
@@ -1205,6 +1206,7 @@ case "${1:-}" in
   helper) shift; cmd_helper "$@" ;;
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
+  prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
   lesson) shift; [ "${1:-}" = propose ] || die "usage: guild lesson propose \"<lesson>\" --evidence \"<quest>: <quote>\" (twice or more) [--why \"...\"]"
           python3 "$GUILD_REPO/bin/lessons.py" "$@" ;;
   lessons) shift; python3 "$GUILD_REPO/bin/lessons.py" list ;;

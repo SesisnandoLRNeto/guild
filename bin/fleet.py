@@ -43,8 +43,8 @@ COLUMNS = [
     ("todo", "Quest board", "Open and idle, stopped, or posted"),
     ("road", "On the road", "Agents at work"),
     ("waiting", "Awaiting orders", "A decision only you can make"),
-    ("trial", "Trial", "Reviewed, waiting for the PR"),
-    ("done", "Returned", "Finished in the last week"),
+    ("trial", "In review", "PR open: waiting for review or merge"),
+    ("done", "Returned", "Merged, or closed, in the last week"),
 ]
 QUEST_COLUMN = {
     "working": "road", "checks-baseline": "road", "checks-green": "road", "checks-red": "road",
@@ -262,7 +262,9 @@ def quests():
         meta["open_boards"], meta["wrapup"] = [], ""
         if os.path.isdir(boards):
             for b in sorted(os.listdir(boards)):
-                bj = load_json(os.path.join(boards, b, "board.json"), {})
+                bj = load_json(os.path.join(boards, b, "board.json"), None)
+                if bj is None:
+                    continue                 # not a board (a folder left by a failed open)
                 if bj.get("wrapup"):
                     meta["wrapup"] = b
                 elif not os.path.exists(os.path.join(boards, b, "decision.json")):
@@ -338,6 +340,29 @@ def jira(ttl=300):
     return issues, note
 
 
+def jira_statuses(keys, ttl=300):
+    """{ticket: status name} for the quests' tickets, cached. Empty when Jira is not set up."""
+    keys = sorted(k for k in keys if k)
+    path = os.path.join(GUILD_HOME, ".campaign-tickets.json")
+    cache = load_json(path, {})
+    if cache and time.time() - cache.get("at", 0) < ttl and set(keys) <= set(cache.get("status", {})):
+        return cache["status"]
+    sys.path.insert(0, REPO + "/bin")
+    try:
+        import jira_watch
+        cfg = jira_watch.load_config()
+    except (SystemExit, Exception):
+        return cache.get("status", {})
+    status = {}
+    for k in keys:
+        try:
+            status[k] = jira_watch.api(cfg, "GET", f"/rest/api/3/issue/{k}?fields=status")["fields"]["status"]["name"]
+        except Exception:
+            pass
+    save_json(path, {"at": time.time(), "status": status})
+    return status
+
+
 def todos():
     return load_json(TODO, [])
 
@@ -401,6 +426,10 @@ def board():
     cards, claimed = [], set()
 
     hid = hidden()
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import prs as prmod
+    pr_of = prmod.by_slug()                 # GitHub's view, cached by the war table server
+    ticket_status = jira_statuses({q.get("ticket") for q in qs if q.get("ticket")})
     for q in qs:
         # the quest's own session: the newest one that ran in its worktree
         mine = [s for s in ss if (q.get("worktree") and s["cwd"].startswith(q["worktree"]))
@@ -417,14 +446,20 @@ def board():
             ungraded = not grade and q["state"] in ("done", "trial-pass", "trial-skip")
             links.append({"label": "grade it" if ungraded else "wrap-up", "href": f"/b/{q['slug']}/{q['wrapup']}/",
                           "hot": ungraded})
-        for b in q["open_boards"]:
+        for b in q["open_boards"] if q["state"] not in ("done", "failed") else []:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
+        pr_info = pr_of.get(q["slug"])
         pr = re.search(r"https?://\S+/pull/(\d+)", q["note"] or "")
-        if pr:
+        if pr_info and not pr_info.get("error"):
+            links.append({"label": f"PR #{pr_info['number']}", "href": pr_info["url"]})
+        elif pr:
             links.append({"label": f"PR #{pr.group(1)}", "href": pr.group(0)})
         column = QUEST_COLUMN.get(q["state"], "road")
-        if q["open_boards"]:
+        if q["open_boards"] and q["state"] not in ("done", "failed"):
             column = "waiting"                           # a war table is open: that is a decision
+        # finished work follows its PR: still open means it waits for review; merged means returned
+        if q["state"] in ("done", "trial-pass", "trial-skip") and pr_info and not pr_info.get("error"):
+            column = "trial" if pr_info["state"] in ("open", "draft") else "done"
         done = q["state"] in ("done", "trial-pass", "trial-skip")
         what = summary(q["dir"]) if done else (question_of(q["note"]) if column == "waiting" else q["note"])
         cards.append(card(
@@ -435,7 +470,9 @@ def board():
             agents=(main or {}).get("agents", []), links=links,
             tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True,
             branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", ""),
-            grade=grade, parent=q.get("parent", ""), machine=q.get("machine", "")))
+            grade=grade, parent=q.get("parent", ""), machine=q.get("machine", ""),
+            pr=pr_info if pr_info and not pr_info.get("error") else None,
+            ticket_status=ticket_status.get(q.get("ticket", ""), "")))
 
     party = [{"type": q["slug"], "what": q["state"]} for q in qs if QUEST_COLUMN.get(q["state"]) in ("road", "waiting")]
     qm_boards = pseudo_boards()
@@ -510,7 +547,8 @@ def board():
 
 
 TICKET = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-\d+\b")
-THREAD_COLORS = ["#c0392b", "#2e86c1", "#27ae60", "#8e44ad", "#d35400", "#16a085", "#b7950b", "#c2185b"]
+# Trello's label colors: distinct at a glance, and white text reads on all of them
+THREAD_COLORS = ["#0079bf", "#519839", "#d29034", "#89609e", "#b04632", "#00a3bf", "#cd5a91", "#4d4d4d"]
 
 
 def relate(cards):
@@ -601,6 +639,18 @@ def relate(cards):
     edges = [dict(e, thread=renum[e["thread"]]) for e in edges if e.get("thread") in renum]
     for t in threads:
         t["n"] = renum[t["n"]]
+    # Trello-like labels: every ticket gets a color (its thread's, else its own), on every card
+    # that belongs to it or talks about it
+    color_of = {}
+    for t in threads:
+        for k in t["tickets"]:
+            color_of[k] = t["color"]
+    # a ticket outside every thread gets a color no thread uses, so unrelated work never looks related
+    free = [c for c in THREAD_COLORS if c not in {t["color"] for t in threads}] or THREAD_COLORS
+    for c in cards:
+        keys = ([c["ticket"]] if c.get("ticket") else []) + [k for k in c.get("mentions", []) if k in color_of and k != c.get("ticket")]
+        c["labels"] = [{"text": k, "color": color_of.get(k) or free[sum(map(ord, k)) % len(free)],
+                        "thread": next((t["n"] for t in threads if k in t["tickets"]), None)} for k in keys]
     return threads, edges
 
 

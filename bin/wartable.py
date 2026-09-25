@@ -198,6 +198,10 @@ def docket_items():
             qmeta = json.load(open(os.path.join(qdir, "meta.json")))
         except (OSError, ValueError):
             pass
+        try:
+            qstate = open(os.path.join(qdir, "status")).read().split("\t")[0]
+        except OSError:
+            qstate = ""
         for board in sorted(os.listdir(bdir)):
             d = os.path.join(bdir, board)
             try:
@@ -212,6 +216,8 @@ def docket_items():
                 answer = json.load(open(dec))
                 recent.append(dict(base, answers=answer.get("answers", {}), message=answer.get("message", ""), at=answer.get("at", "")))
                 continue
+            if qstate in ("done", "failed") and not meta.get("wrapup"):
+                continue                     # the quest moved on: an old unanswered question is not a decision
             item = dict(base, questions=board_questions(d, meta), held_until=meta.get("held_until", ""),
                         held_note=meta.get("held_note", ""))
             items.append(item)
@@ -507,9 +513,23 @@ def serve_remote():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
 
 
+def refresh_prs_forever():
+    """Keep the campaign board's PR states fresh without making a page wait on GitHub."""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import prs
+    while True:
+        try:
+            prs.refresh()
+        except Exception:
+            pass
+        time.sleep(120)
+
+
 def serve():
     """Start the server unless one is already up. Writes the port to ~/.guild/.wartable-port."""
     serve_remote()
+    if not os.environ.get("GUILD_NO_PR_SYNC"):
+        threading.Thread(target=refresh_prs_forever, daemon=True).start()
     port = int(os.environ.get("GUILD_BOARD_PORT", "4711"))
     for candidate in range(port, port + 20):
         try:
@@ -550,7 +570,18 @@ def cmd_open(args):
     quest = args["quest"]
     board = args.get("id") or time.strftime("%H%M%S")
     d = board_dir(quest, board)
+    fresh = not os.path.exists(d)
     os.makedirs(d, exist_ok=True)
+    try:
+        write_board(d, quest, board, args)
+    except BaseException:
+        if fresh:                           # a half-made board would look like an open decision forever
+            subprocess.run(["rm", "-rf", d])
+        raise
+    finish_open(quest, board, args)
+
+
+def write_board(d, quest, board, args):
     src = os.path.abspath(args["html"])
     # The page and everything beside it (images, css) move into the board folder.
     srcdir = os.path.dirname(src)
@@ -567,6 +598,8 @@ def cmd_open(args):
                "subtitle": args.get("subtitle", ""), "wrapup": bool(args.get("wrapup")), "created": now()},
               open(os.path.join(d, "board.json"), "w"), indent=2)
 
+
+def finish_open(quest, board, args):
     port = ensure_server()
     url = f"http://127.0.0.1:{port}/b/{quest}/{board}/"
     if args.get("wrapup"):

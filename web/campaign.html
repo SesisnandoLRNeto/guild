@@ -131,25 +131,18 @@
   }
   .post button { font: inherit; font-size: 13px; background: var(--gold); border: 0; border-radius: 3px; padding: 0 10px; cursor: pointer; color: #2a1d14; }
   .more { width: 100%; font: inherit; font-size: 12px; background: transparent; border: 1px dashed var(--frame); color: var(--hint); border-radius: 3px; padding: 4px; cursor: pointer; }
-  .board-wrap { position: relative; }
-  #lines { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
-  #lines path { fill: none; stroke: var(--tc); stroke-width: 2.5; opacity: .45; stroke-linecap: round; transition: opacity .15s, stroke-width .15s; }
-  #lines path.soft { stroke-dasharray: 5 6; opacity: .3; }
-  #lines path.lit { opacity: .95; stroke-width: 3.5; }
   .focusing .card:not(.in-thread) { opacity: .35; }
-  .card.threaded { box-shadow: inset 5px 0 0 var(--tc), 0 2px 0 rgba(0, 0, 0, .15), 0 6px 14px rgba(0, 0, 0, .35); padding-left: 16px; }
   .card.in-thread { transform: rotate(0deg) translateY(-2px); }
-  .tbadge { position: absolute; top: -9px; left: -9px; width: 22px; height: 22px; border-radius: 50%; background: var(--tc);
-    color: #fff5dc; font-weight: 700; font-size: 12px; display: grid; place-items: center; box-shadow: 0 2px 4px rgba(0, 0, 0, .4); }
-  .touches { margin-top: 6px; font-size: 12px; color: var(--ink-dim); display: flex; gap: 5px; align-items: center; }
-  .tdot { width: 18px; height: 18px; border-radius: 50%; background: var(--tc); color: #fff5dc; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; }
+  .labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 7px; }
+  .label { background: var(--lc); color: #fff; font: 700 11px/1 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; letter-spacing: .02em;
+    border-radius: 4px; padding: 4px 8px; }
+  .label.plain { background: rgba(90, 60, 30, .18); color: var(--ink); }
   .threads { padding: 0 24px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--hint); font-size: 12px; }
   .threads:empty { display: none; }
   .tl-title { font-variant: small-caps; letter-spacing: .06em; color: var(--sign-text); font-size: 14px; }
   .tl-hint { font-style: italic; }
   .tchip { font: inherit; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--sign-text);
     background: rgba(0, 0, 0, .25); border: 1px solid var(--tc); border-radius: 999px; padding: 2px 10px 2px 3px; }
-  .tchip b { background: var(--tc); color: #fff5dc; border-radius: 50%; width: 18px; height: 18px; display: inline-grid; place-items: center; }
   .tchip span { opacity: .7; }
   .tchip[aria-pressed="true"] { background: var(--tc); }
   .toast {
@@ -188,7 +181,7 @@
   <span class="note" id="note"></span>
 </div>
 <div class="threads" id="threads" aria-label="Threads of related work"></div>
-<div class="board-wrap"><main id="board" aria-live="polite"></main><svg id="lines" aria-hidden="true"></svg></div>
+<main id="board" aria-live="polite"></main>
 <div class="toast" id="toast" role="status"></div>
 
 <template id="icons">
@@ -260,19 +253,25 @@ function cardHtml(c) {
   if (c.kind !== "todo" && !c.id.startsWith("closed:"))
     acts.push(`<button data-act="pin" data-id="${esc(c.id)}" data-name="${esc(c.title)}" data-tab="${esc(c.tab || "")}" data-on="${c.pinned ? 0 : 1}">${c.pinned ? "Unpin" : "Pin"}</button>`);
   if (c.closable) acts.push(`<button class="close" data-act="close" data-id="${esc(c.id)}" data-tab="${esc(c.tab || "")}" title="${c.tab ? "Close its cockpit tab" : "Hide from the board until it moves again"}">${c.tab ? "Close tab" : "Hide"}</button>`);
-  const t = c.thread;
-  const threads = [t && t.n, ...(c.touches || []).map((x) => x.n)].filter(Boolean);
-  const touches = (c.touches || []).length
-    ? `<div class="touches">works on ${c.touches.map((x) => `<span class="tdot" style="--tc:${x.color}" title="thread ${x.n}: ${esc(x.label)}">${x.n}</span>`).join("")}</div>` : "";
-  return `<article class="card ${c.pinned ? "pinned" : ""} ${sc === "working" ? "working" : ""} ${t ? "threaded" : ""}" style="--tilt:${tilt(c.id)}deg;${t ? `--tc:${t.color}` : ""}" data-kind="${esc(c.kind)}" data-id="${esc(c.id)}" data-threads="${threads.join(" ")}">
+  // Trello-like labels: the ticket in its thread's color, then the PR as GitHub sees it
+  const threads = [c.thread && c.thread.n, ...(c.labels || []).map((l) => l.thread)].filter(Boolean);
+  const pills = (c.labels || []).map((l) => `<span class="label" style="--lc:${l.color}" title="${l.thread ? "same thread as the other " + esc(l.text) + " cards" : esc(l.text)}">${esc(l.text)}</span>`);
+  if (c.ticket_status) pills.push(`<span class="label plain" title="Jira status">${esc(c.ticket_status)}</span>`);
+  if (c.pr) {
+    const pc = { draft: "#8a8f98", open: "#2e86c1", merged: "#8e44ad", closed: "#7c7468" }[c.pr.state] || "#2e86c1";
+    pills.push(`<span class="label" style="--lc:${pc}" title="${esc(c.pr.title || "")}">PR #${c.pr.number} · ${esc(c.pr.state)}</span>`);
+    if (c.pr.review) pills.push(`<span class="label" style="--lc:${c.pr.review === "approved" ? "#27ae60" : c.pr.review === "changes requested" ? "#c0392b" : "#b7950b"}">${esc(c.pr.review)}</span>`);
+    if (c.pr.checks) pills.push(`<span class="label" style="--lc:${{ passing: "#27ae60", failing: "#c0392b", running: "#b7950b" }[c.pr.checks]}">checks ${esc(c.pr.checks)}</span>`);
+  }
+  const labels = pills.length ? `<div class="labels">${pills.join("")}</div>` : "";
+  return `<article class="card ${c.pinned ? "pinned" : ""} ${sc === "working" ? "working" : ""}" style="--tilt:${tilt(c.id)}deg" data-kind="${esc(c.kind)}" data-id="${esc(c.id)}" data-threads="${threads.join(" ")}">
     ${c.pinned ? '<span class="pinhead" title="Pinned"></span>' : ""}
-    ${t ? `<span class="tbadge" title="thread ${t.n}: ${esc(t.label)}">${t.n}</span>` : ""}
+    ${labels}
     <div class="top">${icon(c.orchestrator ? "orchestrator" : c.kind)}<div class="title"><span class="kind">${esc(kindLabel(c))}</span>${esc(c.title)}</div>${seal}</div>
     ${c.what ? `<p class="what">${esc(c.what)}</p>` : ""}
     ${c.last ? `<p class="last">Last asked: ${esc(c.last)}</p>` : ""}
     <div class="meta">${meta.join("")}</div>
     ${party}
-    ${touches}
     ${acts.length ? `<div class="actions">${acts.join("")}</div>` : ""}
   </article>`;
 }
@@ -301,48 +300,22 @@ function render() {
   $("#note").textContent = (data.jira_note ? "Jira is not connected, so tickets are missing. " : "") + `Updated ${data.at}`;
   document.querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === filter)));
   $("#threads").innerHTML = (data.threads || []).length
-    ? `<span class="tl-title">Threads</span>` + data.threads.map((t) =>
-        `<button class="tchip" data-thread="${t.n}" style="--tc:${t.color}" aria-pressed="${String(focusThread === t.n)}"><b>${t.n}</b>${esc(t.label)} <span>${t.size}</span></button>`).join("")
-      + `<span class="tl-hint">Cards on the same ticket, or built on each other's branch. Hover a card to follow its thread.</span>`
+    ? `<span class="tl-title">Labels</span>` + data.threads.map((t) =>
+        `<button class="tchip" data-thread="${t.n}" style="--tc:${t.color}" aria-pressed="${String(focusThread === t.n)}">${esc(t.label)} <span>${t.size} cards</span></button>`).join("")
+      + `<span class="tl-hint">One color per piece of work: the same ticket, or built on each other's branch. Click one to see only its cards.</span>`
     : "";
   applyFocus();
-  requestAnimationFrame(drawLines);
 }
 
-// ── threads: lines between related cards, and a highlight that follows the mouse ──
+// ── labels: hover a card, or click a label chip, to see only that piece of work ──
 let focusThread = null, hoverThread = null;
 function applyFocus() {
   const n = hoverThread || focusThread;
   $("#board").classList.toggle("focusing", !!n);
   document.querySelectorAll(".card").forEach((el) =>
     el.classList.toggle("in-thread", !!n && el.dataset.threads.split(" ").includes(String(n))));
-  document.querySelectorAll("#lines path").forEach((p) => p.classList.toggle("lit", !!n && p.dataset.thread === String(n)));
 }
-function drawLines() {
-  const svg = $("#lines"), main = $("#board");
-  if (!svg || !data) return;
-  const box = main.getBoundingClientRect();
-  svg.setAttribute("width", main.scrollWidth); svg.setAttribute("height", main.scrollHeight);
-  const color = Object.fromEntries((data.threads || []).map((t) => [t.n, t.color]));
-  svg.innerHTML = (data.edges || []).map((e) => {
-    const a = main.querySelector(`[data-id="${CSS.escape(e.from)}"]`), b = main.querySelector(`[data-id="${CSS.escape(e.to)}"]`);
-    if (!a || !b) return "";
-    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-    const ax = ra.left - box.left, ay = ra.top - box.top + ra.height / 2, bx = rb.left - box.left, by = rb.top - box.top + rb.height / 2;
-    let d;
-    if (Math.abs(ra.left - rb.left) < 20) {            // same column: bow out to the right
-      const x = ax + ra.width, x2 = bx + rb.width, bow = Math.max(x, x2) + 26;
-      d = `M${x},${ay} C${bow},${ay} ${bow},${by} ${x2},${by}`;
-    } else {
-      const [l, r, ly, ry] = ra.left < rb.left ? [ax + ra.width, bx, ay, by] : [bx + rb.width, ax, by, ay];
-      const mid = (l + r) / 2;
-      d = `M${l},${ly} C${mid},${ly} ${mid},${ry} ${r},${ry}`;
-    }
-    return `<path d="${d}" data-thread="${e.thread}" class="${e.soft ? "soft" : ""}" style="--tc:${color[e.thread] || "#888"}"><title>${esc(e.why)}</title></path>`;
-  }).join("");
-  applyFocus();
-}
-window.addEventListener("resize", () => requestAnimationFrame(drawLines));
+
 document.addEventListener("mouseover", (ev) => {
   const card = ev.target.closest(".card");
   const n = card && card.dataset.threads ? Number(card.dataset.threads.split(" ")[0]) || null : null;
