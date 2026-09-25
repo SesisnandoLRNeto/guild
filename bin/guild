@@ -35,7 +35,10 @@ guild roster                        list quests and their state
 guild status <slug> <state> [note] [--no-wrapup]
                                     set state: working|blocked|needs-decision|done|failed|stopped|planned
                                     (a code quest needs a wrap-up board before done; --no-wrapup opts out)
-guild wait [timeout-seconds]        block until a new event arrives, then print it (default 1800s)
+guild wait [timeout-seconds] [--for slug,slug]
+                                    block until a new event arrives, then print it (default 1800s);
+                                    --for waits only for those quests, with its own cursor
+guild helper <name> [--tier T] < brief   inside a quest: a helper quest on a branch from yours
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
 guild peek <slug> --calls [n]       the last tool calls and results, from the session log (works with calm on)
 guild send <slug> <message>         type a message into an adventurer's session
@@ -123,10 +126,11 @@ add_sidebar() { # content pane id
 }
 
 # Open a tab: a new window with the side menu, content running CMD. Prints the window id.
-open_tab() { # name dir cmd [--bg]
+open_tab() { # name dir cmd [--bg] [after-window]
   local flag=""; [ "${4:-}" = --bg ] && flag="-d"
-  local wid pid
-  wid=$(tm new-window $flag -P -F '#{window_id}' -t "$SESSION" -n "$1" -c "$2" "$3") || die "could not open tab $1"
+  local wid pid where="$SESSION"
+  [ -n "${5:-}" ] && where="$5" && flag="$flag -a"          # a helper opens right after its parent
+  wid=$(tm new-window $flag -P -F '#{window_id}' -t "$where" -n "$1" -c "$2" "$3") || die "could not open tab $1"
   pid=$(tm display-message -p -t "$wid" '#{pane_id}')
   add_sidebar "$pid"
   tm select-pane -t "$pid"
@@ -318,6 +322,16 @@ cmd_remote() {
       python3 "$GUILD_REPO/bin/notify.py" remote status ;;
     *) python3 "$GUILD_REPO/bin/notify.py" remote "${1:-status}" ;;
   esac
+}
+
+# A helper for the quest you are in: same repo, from your branch, reported to you.
+cmd_helper() { # name [quest options]
+  local name="${1:-}"; shift || true
+  local me; me=$(current_quest)
+  [ -n "$me" ] || die "guild helper runs inside a quest (GUILD_QUEST is not set)"
+  [ -n "$name" ] || die "usage: guild helper <short-name> [--tier T] <<'EOF' brief EOF"
+  local pbranch; pbranch=$(python3 -c "import json;print(json.load(open('$(qdir "$me")/meta.json'))['branch'])")
+  cmd_quest "$me-$name" --parent "$me" --branch "$pbranch--$name" "$@"
 }
 
 cmd_todo() { python3 "$GUILD_REPO/bin/fleet.py" todo "$@"; }
@@ -551,7 +565,7 @@ cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
-  local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget=""
+  local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -562,6 +576,7 @@ cmd_quest() {
       --plan) plan=1; shift ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
+      --parent) parent="$2"; shift 2 ;;
       --brief) brief="$2"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
@@ -569,6 +584,22 @@ cmd_quest() {
       *) die "unknown option $1" ;;
     esac
   done
+  # A helper works for another quest: same repo, from the parent's branch, the parent's ticket.
+  if [ -n "$parent" ]; then
+    need_quest "$parent"
+    local pmeta; pmeta="$(qdir "$parent")/meta.json"
+    [ -z "$(python3 -c "import json;print(json.load(open('$pmeta')).get('parent',''))")" ] || die "a helper cannot start helpers of its own"
+    local max active
+    max=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/local/dispatch.json')).get('helpers_max',2))" 2>/dev/null || echo 2)
+    active=$(for d in "$QUESTS"/*/; do [ -f "$d/meta.json" ] || continue
+      python3 -c "import json,sys;m=json.load(open(sys.argv[1]));s=open(sys.argv[2]).read().split(chr(9))[0]
+print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')" "$d/meta.json" "$d/status" "$parent"; done | grep -c 1 || true)
+    [ "$active" -lt "$max" ] || die "$parent already has $active helpers at work (helpers_max is $max in dispatch.json)"
+    [ -n "$repo" ] || repo=$(python3 -c "import json;print(json.load(open('$pmeta'))['repo'])")
+    [ -n "$base" ] || base=$(python3 -c "import json;print(json.load(open('$pmeta'))['branch'])")
+    [ -n "$ticket" ] || ticket=$(python3 -c "import json;print(json.load(open('$pmeta')).get('ticket',''))")
+    [ -n "$branch" ] || branch="$(python3 -c "import json;print(json.load(open('$pmeta'))['branch'])")--$slug"
+  fi
   [ -n "$repo" ] || die "quest needs --repo"
   local hbin; hbin=$(harness bin "$harness") || exit 1
   command -v "$hbin" >/dev/null || die "$hbin is not installed"
@@ -636,7 +667,7 @@ import json
 json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$branch",
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
-           "effort": "$effort", "budget": float("${budget:-0}") or "",
+           "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
@@ -655,6 +686,29 @@ PY
 The guildmaster wrote down what this repo accepts and what it resists: \`$vision_file\`. Read it before you start.
 When your change goes against it, or it does not say, stop and put the question on the war table. The vision is the guildmaster's, not yours to reinterpret.
 VISION
+  fi
+  if [ -n "$parent" ]; then cat >> "$q/prompt.md" <<HELPER
+
+## You are a helper of \`$parent\`
+
+Another adventurer, working on \`$parent\`, handed you this part. Your branch \`$branch\` starts from its branch; it will merge yours into its own.
+- Do only what your brief asks. Commit on your branch. Do **not** push, and do **not** open a PR: the parent's review and PR cover your work.
+- Run \`guild check\` if your brief has checks. No trial and no wrap-up page are needed.
+- Finish with \`guild status $slug done --no-wrapup "<one line: what you did, and your last commit>"\`. Blocked or unsure: \`guild status $slug blocked "<why>"\`; your parent sees it.
+HELPER
+  else cat >> "$q/prompt.md" <<HELPERS
+
+## Helpers, for big work
+
+When part of your work is independent (a separate module, a batch of tests, a migration while you write the service), you may hand it to a helper instead of doing it in sequence. At most $(python3 -c "import json;print(json.load(open('$GUILD_HOME/local/dispatch.json')).get('helpers_max',2))" 2>/dev/null || echo 2) at a time; never for small work.
+\`\`\`bash
+guild helper <short-name> [--tier light|build] <<'EOF'
+<a brief: intent, the exact files, acceptance as check: lines, what not to touch>
+EOF
+guild wait --for <short-name> --timeout 3600      # in the background; you are woken by its report
+\`\`\`
+Each helper works in its own worktree on a branch from yours. When one reports done, merge its branch into yours (\`git merge $branch--<short-name>\`), run your checks, and carry on. Its work is yours to review.
+HELPERS
   fi
   [ -n "$plan" ] && cat >> "$q/prompt.md" <<PLAN
 
@@ -690,7 +744,7 @@ PLAN
 
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
-  open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg >/dev/null
+  open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -907,17 +961,30 @@ cmd_ask() {
   python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$question" "$@"
 }
 
-cmd_wait() {
-  local timeout="${1:-1800}" cursor_file="$GUILD_HOME/.wait-cursor" cursor size waited=0
+cmd_wait() { # [timeout] [--for slug,slug]
+  local timeout=1800 only="" key=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --for) only="$2"; shift 2 ;;
+      *) timeout="$1"; shift ;;
+    esac
+  done
+  # A parent waiting for its helpers keeps its own cursor, so it never eats the
+  # quartermaster's events (and the quartermaster still sees everything).
+  [ -n "$only" ] && key="-$(echo "$only" | tr -c 'a-z0-9\n' '_')"
+  local cursor_file="$GUILD_HOME/.wait-cursor$key" cursor size waited=0 out
   cursor=$(cat "$cursor_file" 2>/dev/null || echo 0)
   while :; do
     # held decisions whose date came back become events, about once a minute
     [ $((waited % 60)) = 0 ] && python3 "$GUILD_REPO/bin/wartable.py" due 2>/dev/null
     size=$(wc -c < "$EVENTS" | tr -d ' ')
     if [ "$size" -gt "$cursor" ]; then
-      tail -c +"$((cursor + 1))" "$EVENTS"
-      echo "$size" > "$cursor_file"
-      return 0
+      out=$(tail -c +"$((cursor + 1))" "$EVENTS")
+      echo "$size" > "$cursor_file"; cursor=$size
+      if [ -n "$only" ]; then
+        out=$(printf '%s\n' "$out" | awk -F'\t' -v only=",$only," 'index(only, "," $2 ",")')
+      fi
+      [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
     fi
     [ "$waited" -ge "$timeout" ] && { echo "wait: no events in ${timeout}s"; return 0; }
     sleep 2; waited=$((waited + 2))
@@ -1107,6 +1174,7 @@ case "${1:-}" in
   todo) shift; cmd_todo "$@" ;;
   click) shift; cmd_click "$@" ;;
   budget) shift; cmd_budget "$@" ;;
+  helper) shift; cmd_helper "$@" ;;
   remote) shift; cmd_remote "$@" ;;
   lesson) shift; [ "${1:-}" = propose ] || die "usage: guild lesson propose \"<lesson>\" --evidence \"<quest>: <quote>\" (twice or more) [--why \"...\"]"
           python3 "$GUILD_REPO/bin/lessons.py" "$@" ;;

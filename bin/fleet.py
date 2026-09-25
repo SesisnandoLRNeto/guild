@@ -435,7 +435,7 @@ def board():
             agents=(main or {}).get("agents", []), links=links,
             tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True,
             branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", ""),
-            grade=grade))
+            grade=grade, parent=q.get("parent", "")))
 
     party = [{"type": q["slug"], "what": q["state"]} for q in qs if QUEST_COLUMN.get(q["state"]) in ("road", "waiting")]
     qm_boards = pseudo_boards()
@@ -493,6 +493,9 @@ def board():
                           grade=a.get("grade"),
                           repo=os.path.basename(a.get("repo", "")), model=a.get("model", ""), since=a["closed"]))
 
+    for c in cards:                      # a parent lists its helpers like companions
+        kids = [q for q in qs if q.get("parent") and f"quest:{q['parent']}" == c["id"]]
+        c["agents"] = c.get("agents", []) + [{"type": "helper " + k["slug"][len(k["parent"]) + 1:], "what": k["state"]} for k in kids]
     threads, edges = relate(cards)
     by_col = {k: [] for k, _, _ in COLUMNS}
     for c in cards:
@@ -537,7 +540,15 @@ def relate(cards):
     for ticket, group in by_ticket.items():
         for a, b in zip(group, group[1:]):
             union(a["id"], b["id"]); edges.append({"from": a["id"], "to": b["id"], "why": f"same ticket {ticket}"})
+    ids = {c["id"] for c in work}
     for c in work:
+        if c.get("parent") and f"quest:{c['parent']}" in ids:
+            union(c["id"], f"quest:{c['parent']}")
+            edges.append({"from": f"quest:{c['parent']}", "to": c["id"], "why": "helper of " + c["parent"]})
+            continue                                     # its base is the parent's branch: one edge is enough
+    for c in work:
+        if c.get("parent"):
+            continue
         base = re.sub(r"^(origin|upstream)/", "", c.get("base", ""))
         other = by_branch.get((c.get("repo_path", ""), base))
         if other and other is not c:

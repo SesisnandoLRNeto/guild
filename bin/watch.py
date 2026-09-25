@@ -273,7 +273,9 @@ def row_for(it, width, highlight, spend):
     dot_color = COLORS.get(state.split(" +")[0], SUBTEXT)
     dot = "●" if state in ("working", "needs-decision", "blocked", "failed") else "○"
     tag = chip(it["repo"]) if it["repo"] else kind_chip(it["kind"])
-    name = f"{TEXT if highlight else SUBTEXT}{BOLD if highlight else ''}{it['name']}{RESET}"
+    parent = (it.get("quest") or {}).get("parent")
+    label = f"└ {it['name'][len(parent) + 1:] if it['name'].startswith(parent + '-') else it['name']}" if parent else it["name"]
+    name = f"{TEXT if highlight else SUBTEXT}{BOLD if highlight else ''}{label}{RESET}"
     mark = f" {YELLOW}*{RESET}" if it["extra"] == "board" else ""
     num = f"{it['n']}" if it["n"] is not None and it["n"] < 10 else " "
     rows = [(f"{DIM}{num}{RESET} {dot_color}{dot}{RESET} {tag} {name}{mark}", it["action"], highlight)]

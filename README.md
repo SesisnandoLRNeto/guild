@@ -300,6 +300,8 @@ guild quest big-sweep --repo ~/code/app --harness openrouter --tier build < brie
 
 **Effort and budget.** Each tier also carries an effort level (Claude's `--effort`, Codex's reasoning effort): plan and deep run high, build medium, light low. Override with `--effort`. Every quest can have a dollar cap: `--budget 40`, a rule's `budget`, or `budget_default` in `dispatch.json` (30 in the example). Past the cap, the adventurer's tools pause (the hook still lets it run `guild` commands), and the docket asks you: raise by $10, $25 or $50, or stop. `guild budget <slug> [N | +N]` shows or changes a cap by hand. Claude Code's own `--max-budget-usd` works only in print mode, so guild enforces the cap itself, from the same cost numbers as `guild cost`.
 
+**Helpers, for big work.** Inside a quest, `guild helper <name> [--tier light|build] < brief` starts a helper quest: same repo, a worktree on `<parent branch>--<name>`, the parent's ticket. The parent waits with `guild wait --for <slug>` (its own cursor, so the quartermaster still sees every event), then merges the helper's branch and reviews it. Helpers do not push or open PRs, and cannot start helpers of their own; `helpers_max` in `dispatch.json` caps them (2 by default). In the side menu a helper sits right after its parent (`└ name`); on the campaign board it joins the parent's thread and shows on the parent's card.
+
 You rarely type these. The quartermaster matches each task to a rule in `~/.guild/local/dispatch.json` (copied from `config/dispatch.example.json`) and says which rule it used. The default rule is "build with a plan first". Change the map in `harnesses.json` and the rules in `dispatch.json`; name a model yourself and it wins.
 
 ## The cockpit

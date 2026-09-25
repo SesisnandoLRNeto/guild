@@ -766,6 +766,32 @@ out=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$GUILD_HOME
 is "the quartermaster cannot write lessons by hand" "$code" "2"
 rm -rf "$GUILD_HOME/quests/la" "$GUILD_HOME/quests/lb"
 
+# helpers: a quest hands an independent part to a helper on a branch from its own
+section "helpers"
+echo "parent work" | "$GUILD" quest pa --repo "$REPO_A" >/dev/null 2>&1
+pbranch=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/pa/meta.json'))['branch'])")
+has "a quest learns it may start helpers" "$(cat "$GUILD_HOME/quests/pa/prompt.md")" "guild helper <short-name>"
+echo "write the tests" | GUILD_QUEST=pa "$GUILD" helper tests >/dev/null 2>&1
+hm="$GUILD_HOME/quests/pa-tests/meta.json"
+is "the helper knows its parent" "$(python3 -c "import json;print(json.load(open('$hm'))['parent'])")" "pa"
+is "and starts from the parent's branch" "$(python3 -c "import json;print(json.load(open('$hm'))['base'])")" "$pbranch"
+is "on a branch the parent can merge" "$(python3 -c "import json;print(json.load(open('$hm'))['branch'])")" "$pbranch--tests"
+has "it is told not to open a PR" "$(cat "$GUILD_HOME/quests/pa-tests/prompt.md")" "do **not** open a PR"
+pos=$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W' | grep -n -x -e pa -e pa-tests | cut -d: -f1 | tr '\n' ' ')
+has "its tab opens right after the parent's" "$pos" "$(( $(echo $pos | cut -d' ' -f1) + 1 ))"
+echo "two" | GUILD_QUEST=pa "$GUILD" helper docs >/dev/null 2>&1
+out=$(echo "three" | GUILD_QUEST=pa "$GUILD" helper more 2>&1)
+has "helpers are capped" "$out" "already has 2 helpers"
+out=$(echo "deep" | GUILD_QUEST=pa-tests "$GUILD" helper deeper 2>&1)
+has "a helper cannot start helpers" "$out" "cannot start helpers"
+qm_cursor=$(cat "$GUILD_HOME/.wait-cursor" 2>/dev/null || echo none)
+"$GUILD" status pa-tests done --no-wrapup "tests written, abc123" >/dev/null 2>&1
+out=$("$GUILD" wait 6 --for pa-tests)
+has "the parent waits for its helper's report" "$out" "tests written"
+is "without moving the quartermaster's cursor" "$(cat "$GUILD_HOME/.wait-cursor" 2>/dev/null || echo none)" "$qm_cursor"
+has "the board joins them in one thread" "$(python3 "$REPO/bin/fleet.py" json)" "helper of pa"
+for s in pa-docs pa-tests pa; do "$GUILD" close $s --force >/dev/null 2>&1; done
+
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
 CK="$TMP/cockpit-home"; mkdir -p "$CK/local"
