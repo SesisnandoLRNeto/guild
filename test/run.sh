@@ -531,6 +531,28 @@ has "and the card shows the question" "$board" "Should I keep the old endpoint?"
 is "a session that just finished is idle on the quest board" "$(col_of quiet)" "todo"
 curl -s -X POST "${url}/close" -d '{"id":"session:22222222-2222-2222-2222-222222222222"}' >/dev/null
 hasnt "Hide takes an idle session off the board" "$(python3 "$REPO/bin/fleet.py" json)" '"title": "quiet"'
+# threads: quests on the same ticket, or built on each other's branch, share a number and a color
+for s in tA tB tC; do mkdir -p "$GUILD_HOME/quests/$s"; done
+python3 - "$GUILD_HOME/quests" <<'PY'
+import json, sys
+q = sys.argv[1]
+for slug, ticket, branch, base in [("tA", "ABC-7", "ABC-7/schema", "origin/main"), ("tB", "ABC-7", "ABC-7/api", "origin/main"),
+                                   ("tC", "ABC-9", "ABC-9/ui", "origin/ABC-7/schema")]:
+    json.dump({"slug": slug, "repo": "/tmp/r", "ticket": ticket, "branch": branch, "base": base, "harness": "claude", "model": "sonnet"},
+              open(f"{q}/{slug}/meta.json", "w"))
+    open(f"{q}/{slug}/status", "w").write("working\tbusy\t2026-09-25T10:00:00\n")
+PY
+board=$(python3 "$REPO/bin/fleet.py" json)
+has "quests on one ticket form a thread" "$board" "same ticket ABC-7"
+has "a quest built on another's branch joins its thread" "$board" "built on ABC-7/schema"
+has "the thread is named by its tickets" "$board" '"label": "ABC-7 + ABC-9"'
+rm -rf "$GUILD_HOME/quests/tA" "$GUILD_HOME/quests/tB" "$GUILD_HOME/quests/tC"
+# the war table dresses every board page in the guild theme
+bpage=$(ls -d "$GUILD_HOME"/quests/*/boards/*/ 2>/dev/null | head -1)
+bq=$(basename "$(dirname "$(dirname "$bpage")")"); bid=$(basename "$bpage")
+has "board pages get the guild theme" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'href="/theme.css"'
+has "and the theme is served" "$(curl -s "${url%/campaign}/theme.css")" "parchment"
+
 
 
 # ── backend impact: data model, impact, business rules ───────────────────────

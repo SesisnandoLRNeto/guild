@@ -297,6 +297,7 @@ def archived(days=DONE_DAYS):
         if meta and not meta.get("pseudo") and "/.guild-" not in meta.get("repo", ""):   # not guild's own smoke runs
             meta["closed"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(d)))
             meta["summary"] = summary(d)
+            meta["archive"] = os.path.basename(d)
             out.append(meta)
     return out
 
@@ -426,7 +427,8 @@ def board():
             repo=os.path.basename(q.get("repo", "")), model=q.get("model") or (main or {}).get("model", ""),
             harness=q.get("harness", ""), phase=q.get("phase", ""), since=q["since"],
             agents=(main or {}).get("agents", []), links=links,
-            tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True))
+            tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True,
+            branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", "")))
 
     party = [{"type": q["slug"], "what": q["state"]} for q in qs if QUEST_COLUMN.get(q["state"]) in ("road", "waiting")]
     qm_boards = pseudo_boards()
@@ -460,7 +462,8 @@ def board():
             state=state, repo=os.path.basename(s["cwd"]), model=s["model"],
             agents=s["agents"] + (party if is_qm else []), links=links,
             since=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - s["age"])),
-            tab=tab, pinned=key in pinned, orchestrator=is_qm, closable=not is_qm))
+            tab=tab, pinned=key in pinned, orchestrator=is_qm, closable=not is_qm,
+            mentions=sorted(set(TICKET.findall(" ".join([name, s["title"], s["prompt"], s["last_text"][-2000:]]))))))
 
     quest_tickets = {q.get("ticket") for q in qs if q.get("ticket")}
     issues, jira_note = jira()
@@ -475,12 +478,14 @@ def board():
                           title=t["text"], what="", state="done" if t.get("done") else "to do",
                           since=t.get("at", ""), n=n, pinned=False))
     for a in archived():
-        if f"closed:{a['slug']}" in hid:
+        if f"closed:{a['archive']}" in hid:
             continue
-        cards.append(card(id=f"closed:{a['slug']}", kind="quest", column="done", title=a["slug"],
+        cards.append(card(id=f"closed:{a['archive']}", kind="quest", column="done", title=a["slug"],
                           ticket=a.get("ticket", ""), what=a.get("summary") or "closed", state="closed", closable=True,
+                          branch=a.get("branch", ""), base=a.get("base", ""), repo_path=a.get("repo", ""),
                           repo=os.path.basename(a.get("repo", "")), model=a.get("model", ""), since=a["closed"]))
 
+    threads, edges = relate(cards)
     by_col = {k: [] for k, _, _ in COLUMNS}
     for c in cards:
         by_col[c["column"]].append(c)
@@ -490,7 +495,94 @@ def board():
         len([a for a in c["agents"] if a["type"] not in {q["slug"] for q in qs}]) for c in cards)
     return {"columns": [{"key": k, "title": t, "hint": h, "cards": by_col[k]} for k, t, h in COLUMNS],
             "counts": {"agents": agents_live, "waiting": len(by_col["waiting"]), "todo": len(by_col["todo"])},
-            "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}
+            "threads": threads, "edges": edges, "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}
+
+
+TICKET = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-\d+\b")
+THREAD_COLORS = ["#c0392b", "#2e86c1", "#27ae60", "#8e44ad", "#d35400", "#16a085", "#b7950b", "#c2185b"]
+
+
+def relate(cards):
+    """Which cards belong to the same piece of work. Quests join a thread when they share a
+    ticket, or when one is built on the other's branch; each thread gets a number and a color.
+    Sessions do not join threads (one session often talks about many tickets), but get a line
+    to every thread whose ticket they mention."""
+    parent = {}
+
+    def find(x):
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    work = [c for c in cards if c["kind"] in ("quest", "jira") and not c.get("orchestrator")]
+    edges = []
+    by_ticket, by_branch = {}, {}
+    for c in work:
+        if c.get("ticket"):
+            by_ticket.setdefault(c["ticket"], []).append(c)
+        if c.get("branch"):
+            by_branch[(c.get("repo_path", ""), c["branch"])] = c
+    for ticket, group in by_ticket.items():
+        for a, b in zip(group, group[1:]):
+            union(a["id"], b["id"]); edges.append({"from": a["id"], "to": b["id"], "why": f"same ticket {ticket}"})
+    for c in work:
+        base = re.sub(r"^(origin|upstream)/", "", c.get("base", ""))
+        other = by_branch.get((c.get("repo_path", ""), base))
+        if other and other is not c:
+            union(c["id"], other["id"]); edges.append({"from": other["id"], "to": c["id"], "why": f"built on {base}"})
+    groups = {}
+    for c in work:
+        groups.setdefault(find(c["id"]), []).append(c)
+    threads, n = [], 0
+    for root, members in sorted(groups.items(), key=lambda kv: min(m["id"] for m in kv[1])):
+        tickets = sorted({m["ticket"] for m in members if m.get("ticket")})
+        if all(m["state"] == "closed" for m in members) and not tickets:
+            continue                                     # old runs with no ticket are history, not a thread
+        n += 1
+        color = THREAD_COLORS[(n - 1) % len(THREAD_COLORS)]
+        label = " + ".join(tickets) if tickets else members[0]["title"]
+        threads.append({"n": n, "label": label, "color": color, "cards": [m["id"] for m in members], "tickets": tickets})
+        for m in members:
+            m["thread"] = {"n": n, "color": color, "label": label}
+    for t in threads:
+        for e in edges:
+            if e["from"] in t["cards"]:
+                e["thread"] = t["n"]
+    # sessions: a line to each thread whose ticket they talk about
+    for c in cards:
+        if c["kind"] != "session":
+            continue
+        touched = [t for t in threads if set(t["tickets"]) & set(c.get("mentions", []))]
+        c["touches"] = [{"n": t["n"], "color": t["color"], "label": t["label"]} for t in touched]
+        for t in touched:
+            target = next(m for m in cards if m["id"] in t["cards"] and m.get("ticket") in c["mentions"])
+            edges.append({"from": c["id"], "to": target["id"], "why": "talks about " + ", ".join(
+                sorted(set(t["tickets"]) & set(c["mentions"]))), "thread": t["n"], "soft": True})
+    for t in threads:
+        t["size"] = len(t["cards"]) + sum(1 for c in cards if any(x["n"] == t["n"] for x in c.get("touches", [])))
+    # a thread of one card that nothing points at is just a card: no number, no color
+    lone = {t["n"] for t in threads if t["size"] < 2}
+    for c in cards:
+        if c.get("thread", {}).get("n") in lone:
+            del c["thread"]
+    threads = [t for t in threads if t["n"] not in lone]
+    renum = {t["n"]: i for i, t in enumerate(threads, 1)}          # no gaps in the numbers
+    for t in threads:
+        t["color"] = THREAD_COLORS[(renum[t["n"]] - 1) % len(THREAD_COLORS)]
+    for c in cards:
+        if "thread" in c:
+            c["thread"]["n"] = renum[c["thread"]["n"]]
+            c["thread"]["color"] = THREAD_COLORS[(c["thread"]["n"] - 1) % len(THREAD_COLORS)]
+        c["touches"] = [dict(x, n=renum[x["n"]], color=THREAD_COLORS[(renum[x["n"]] - 1) % len(THREAD_COLORS)])
+                        for x in c.get("touches", []) if x["n"] in renum]
+    edges = [dict(e, thread=renum[e["thread"]]) for e in edges if e.get("thread") in renum]
+    for t in threads:
+        t["n"] = renum[t["n"]]
+    return threads, edges
 
 
 def _neg(since):

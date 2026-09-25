@@ -1,0 +1,50 @@
+/* The guild theme for war table pages: a parchment sheet on a wooden table.
+   The war table adds this file to every board page it serves, after the page's own styles,
+   so reports written from the template (and older ones) pick it up without a rewrite. */
+html:root {
+  --bg: #efe2c2; --card: #f6ecd2; --line: #cdb88e; --text: #2d2216; --dim: #6e5a41;
+  --accent: #8a4b12; --ok: #3f7d3a; --bad: #a8322a; --warn: #9a6a12;
+  color-scheme: light;
+  background-color: #22170f;
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 190, 110, .10), transparent 60%),
+    repeating-linear-gradient(0deg, #2a1d14 0 46px, #1a110b 46px 48px, #22170f 48px 94px, #1a110b 94px 96px);
+}
+html:root body {
+  max-width: 1000px; margin: 20px auto 40px; padding: 34px 44px 48px;
+  background: linear-gradient(170deg, #f3e7c9, #e6d5ad); color: var(--text);
+  font: 15px/1.62 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  border-radius: 3px; box-shadow: 0 2px 0 rgba(0, 0, 0, .2), 0 14px 34px rgba(0, 0, 0, .5);
+}
+html:root h1, html:root h2, html:root h3, html:root h4 {
+  font-family: inherit; font-variant: small-caps; letter-spacing: .03em; color: #4a2f1a;
+}
+html:root h1 { font-size: 26px; margin: 0 0 6px; }
+html:root h2 { font-size: 19px; margin: 30px 0 10px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+html:root h3 { font-size: 16px; }
+html:root p.lead, html:root .lead { color: var(--dim); font-style: italic; }
+html:root a { color: var(--accent); }
+html:root code, html:root pre:not(.mermaid) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  background: rgba(90, 60, 30, .10); border-radius: 3px;
+}
+html:root code { padding: 0 4px; }
+html:root pre:not(.mermaid) { padding: 10px 12px; overflow-x: auto; }
+html:root table { border-collapse: collapse; width: 100%; font-size: 14px; }
+html:root th, html:root td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+html:root th { color: var(--dim); font-variant: small-caps; letter-spacing: .04em; font-weight: 700; }
+html:root figure { background: var(--card); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 2px 6px rgba(60, 40, 20, .18); }
+html:root .note { background: var(--card); border-left: 3px solid var(--accent); }
+html:root .tag { color: var(--accent); }
+html:root .pass { color: var(--ok); font-weight: 600; }
+html:root .fail { color: var(--bad); font-weight: 600; }
+html:root pre.mermaid { background: rgba(255, 250, 235, .55); border: 1px solid var(--line); border-radius: 4px; padding: 10px; }
+html:root hr { border: 0; border-top: 1px solid var(--line); }
+html:root ::selection { background: rgba(217, 164, 65, .45); }
+@media (max-width: 700px) { html:root body { margin: 0; padding: 20px 16px 32px; border-radius: 0; } }
+html:root .guild-impact { --gi-warn: #9a6a12; --gi-accent: #8a4b12; }
+html:root { --panel: var(--card); }
+/* guild ask pages: the suggested option carries the seal red, readable on parchment */
+html:root .opt { background: rgba(255, 250, 235, .6); border-color: var(--line); }
+html:root .opt.suggested { border-left-color: #a8322a; }
+html:root .opt.suggested .id { color: #a8322a; font-weight: 700; }

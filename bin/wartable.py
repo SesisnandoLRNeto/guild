@@ -68,6 +68,22 @@ def list_boards():
     return out
 
 
+# Added to every board page: the parchment theme, after the page's own styles so it wins,
+# and a light color scheme for Mermaid, so diagrams read on parchment.
+THEME = (b'<link rel="stylesheet" href="/theme.css">'
+         b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
+         b'return /prefers-color-scheme:\\s*dark/.test(q)?{matches:false,media:q,addEventListener:function(){},'
+         b'removeEventListener:function(){},addListener:function(){},removeListener:function(){}}:m.call(window,q);};})();</script>')
+
+
+def themed(html):
+    low = html.lower()
+    i = low.find(b"</head>")
+    if i < 0:
+        i = low.find(b"<body")
+    return html[:i] + THEME + html[i:] if i >= 0 else THEME + html
+
+
 def fleet():
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import fleet as mod
@@ -138,6 +154,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 return self.send(200, self.render_index())
+            if path == "/theme.css":         # the guild look for every board page
+                with open(os.path.join(WEB, "theme.css"), "rb") as f:
+                    return self.send(200, f.read(), "text/css; charset=utf-8")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
             if path == "/campaign.json":
@@ -174,7 +193,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ".mp4": "video/mp4", ".webm": "video/webm",
             }.get(os.path.splitext(target)[1].lower(), "application/octet-stream")
             with open(target, "rb") as f:
-                return self.send(200, f.read(), ctype)
+                body = f.read()
+            if target.endswith(".html"):
+                body = themed(body)
+            return self.send(200, body, ctype)
         except Exception as e:  # never take the server down for one bad request
             return self.send(500, f"error: {e}")
 

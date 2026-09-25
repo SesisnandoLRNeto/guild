@@ -101,6 +101,6 @@ Write `decisions.json` beside the page and pass `--decisions`:
 - Start from `~/Workspace/guild/web/board-template.html`. It already has the colors, the option grid, the numbers table and dark and light support. Copy it, then replace the content.
 - One self-contained HTML file, plus images in a subfolder. Relative paths only.
 - No CDNs and no network calls. The board must work offline.
-- Support dark and light with `prefers-color-scheme`. The shell around your page already does.
+- The war table dresses every page in the guild theme (a parchment sheet on a wooden table, serif small-caps headings) when it serves it. Use the template's tokens (`--card`, `--line`, `--text`, `--dim`, `--accent`, `--ok`, `--bad`) instead of hard-coded colors, so your page takes the theme. Mermaid is drawn in its light variant to read on parchment.
 - It has to read well in a 900px wide frame. The side panel takes the rest.
 - Plain B1 English, no emojis, no em dashes.
