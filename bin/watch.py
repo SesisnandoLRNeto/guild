@@ -180,18 +180,23 @@ def panel(title, rows, width, focused=False):
 
 
 # One letter each, like the deck. They work while the sidebar has focus (click it, or Ctrl-g Ctrl-h).
+# The same letters work after Ctrl-g from anywhere, so one set of keys to learn.
 KEYS = [("n", "New", ("new",)), ("t", "Term", ("term",)), ("b", "Board", ("campaign",)),
-        ("w", "War", ("board",)), ("p", "Pins", ("pins",)), ("1-9", "Jump", None),
+        ("g", "War", ("board",)), ("p", "Pins", ("pins",)), ("0-9", "Tab", None), ("x", "Close", None),
         ("?", "Keys", ("keys",)), ("q", "Back", ("back",))]
 
 
-def footer(width):
-    """The deck's help bar: key:Action pairs on the surface color, wrapped to the width."""
-    lines, spans, line, col = [], [], "", 1
+def footer(width, focused=False):
+    """The deck's help bar. It says which way the keys work right now: a green dot means this
+    menu has the keyboard, so plain letters work; ^g means press Ctrl-g first (from anywhere)."""
+    lead = f"{GREEN}●{RESET}{SURFACE_BG} " if focused else f"{BOLD}{YELLOW}^g{RESET}{SURFACE_BG} "
+    lines, spans, line, col = [], [], lead, 3
     for key, label, action in KEYS:
+        if key == "q" and not focused:
+            continue
         chunk = f"{key}:{label}"
-        if col + len(chunk) - 1 > width and line:
-            lines.append(line); line, col = "", 1
+        if col + len(chunk) - 1 > width and line.strip():
+            lines.append(line); line, col = "   ", 4
         if action:
             spans.append((len(lines), col, col + len(chunk) - 1, action))
         line += f"{BOLD}{TEXT}{key}{RESET}{SURFACE_BG}{SUBTEXT}:{label}{RESET}{SURFACE_BG} "
@@ -200,52 +205,106 @@ def footer(width):
     return [fill(l, width, SURFACE_BG) for l in lines], spans
 
 
+def tmux_out(*args):
+    try:
+        return subprocess.run(["tmux", "-L", SOCKET, *args], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def my_window():
+    """(is this tab the one on screen, its window id), or (True, None) outside tmux."""
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return True, None
+    out = tmux_out("display-message", "-p", "-t", pane, "#{window_active}\t#{window_id}\t#{session_attached}").strip().split("\t")
+    if len(out) < 3:
+        return True, None
+    return out[0] == "1" and out[2] != "0", out[1]
+
+
+def tab_kind(name, quests):
+    if name == "qm":
+        return "qm"
+    if name in quests:
+        return "quest"
+    return {"shell": "term", "deck": "deck", "jira": "jira"}.get(name.split(":")[0].split("-")[0],
+            "edit" if name.startswith("edit") else "ai" if name.startswith(("claude", "codex", "openrouter")) else "tab")
+
+
+KIND_CHIP = {"qm": "#f9e2af", "term": "#89b4fa", "edit": "#a6e3a1", "ai": "#cba6f7", "deck": "#94e2d5",
+             "jira": "#fab387", "tab": "#bac2de"}
+
+
+def kind_chip(kind):
+    return f"{bg(KIND_CHIP.get(kind, '#bac2de'))}{DARK} {kind:<4} {RESET}"
+
+
 def items(quests, pins):
-    """Everything a number or the selection can open: pins first, then quests."""
+    """Every open tab, numbered like the tab strip, then quests that have no tab yet."""
+    by_slug = {q["slug"]: q for q in quests}
     out = []
-    for r in pins or []:
-        out.append({"kind": "pin", "name": r["name"], "state": r["state"], "repo": "",
-                    "action": ("pin", r["key"], r["tab"]), "extra": "" if r["open"] else "closed tab"})
+    for line in tmux_out("list-windows", "-t", SESSION, "-F", "#{window_index}\t#{window_id}\t#{window_name}\t#{window_active}").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 4:
+            continue
+        index, wid, name, active = parts
+        kind = tab_kind(name, by_slug)
+        q = by_slug.get(name)
+        out.append({"n": int(index), "name": name, "kind": kind, "state": q["state"] if q else ("working" if kind in ("qm", "ai") else ""),
+                    "repo": os.path.basename(q["repo"]) if q else "", "quest": q, "active": active == "1",
+                    "action": ("win", wid), "extra": "board" if q and q["boards"] else "", "tab": True})
+    open_names = {it["name"] for it in out}
     for q in quests:
-        out.append({"kind": "quest", "name": q["slug"], "state": q["state"],
-                    "repo": "qm" if q.get("pseudo") else os.path.basename(q["repo"]),
-                    "action": ("board",) if q.get("pseudo") else ("quest", q["slug"]), "quest": q,
-                    "extra": "board" if q["boards"] else ""})
+        if q["slug"] not in open_names and not q.get("pseudo") and q["state"] not in ("done",):
+            out.append({"n": None, "name": q["slug"], "kind": "quest", "state": q["state"], "repo": os.path.basename(q["repo"]),
+                        "quest": q, "active": False, "action": ("quest", q["slug"]), "extra": "no tab", "tab": False})
     return out
 
 
-def row_for(n, it, width, selected, spend):
-    dot_color = COLORS.get(it["state"].split(" +")[0], SUBTEXT)
-    dot = "●" if it["state"] in ("working", "your turn", "needs-decision", "blocked", "failed") or it["state"].startswith("working") else "○"
-    tag = chip(it["repo"]) + " " if it["repo"] else f"{MAUVE}pin{RESET}  "
-    name = f"{TEXT if selected else SUBTEXT}{it['name']}{RESET}"
+def row_for(it, width, highlight, spend):
+    state = it["state"]
+    dot_color = COLORS.get(state.split(" +")[0], SUBTEXT)
+    dot = "●" if state in ("working", "needs-decision", "blocked", "failed") else "○"
+    tag = chip(it["repo"]) if it["repo"] else kind_chip(it["kind"])
+    name = f"{TEXT if highlight else SUBTEXT}{BOLD if highlight else ''}{it['name']}{RESET}"
     mark = f" {YELLOW}*{RESET}" if it["extra"] == "board" else ""
-    rows = [(f"{DIM}{n if n < 10 else ' '}{RESET} {dot_color}{dot}{RESET} {tag}{name}{mark}", it["action"], selected)]
-    if selected:                                   # the selected row opens up, like a deck preview
-        detail = [SHORT_STATE.get(it["state"], it["state"])]
-        q = it.get("quest")
-        if q:
-            if (spend or {}).get(q["slug"]):
-                detail.append(money(spend[q["slug"]]))
-            if q.get("model"):
-                detail.append(q["model"])
-        if it["extra"] and it["extra"] != "board":
-            detail.append(it["extra"])
-        rows.append((f"    {DIM}{' · '.join(detail)}{RESET}", it["action"], selected))
+    num = f"{it['n']}" if it["n"] is not None and it["n"] < 10 else " "
+    rows = [(f"{DIM}{num}{RESET} {dot_color}{dot}{RESET} {tag} {name}{mark}", it["action"], highlight)]
+    if highlight and it.get("quest"):                   # the current tab opens up, like a deck preview
+        q = it["quest"]
+        detail = [SHORT_STATE.get(state, state)]
+        if (spend or {}).get(q["slug"]):
+            detail.append(money(spend[q["slug"]]))
+        if q.get("model"):
+            detail.append(q["model"])
+        rows.append((f"    {DIM}{' · '.join(detail)}{RESET}", it["action"], highlight))
     return rows
 
 
-def draw(quests, width, height, spend=None, pins=None, selected=0, focused=False):
-    """Every line of the sidebar with what a click on it does."""
+def pin_rows(pins, width):
+    rows = []
+    for r in pins or []:
+        color = COLORS.get(r["state"].split(" +")[0], SUBTEXT)
+        where = "" if r["open"] else f" {DIM}(closed){RESET}"
+        rows.append((f"  {color}●{RESET} {kind_chip('pin')} {SUBTEXT}{r['name']}{RESET}{where}", ("pin", r["key"], r["tab"]), False))
+    return rows
+
+
+def draw(quests, width, height, spend=None, pins=None, selected=None, focused=False):
+    """Every line of the side menu with what a click on it does, and the numbered items."""
     title = " ○ GUILD │ QUARTERMASTER"
     out = [(fill(f"{BLUE}{BOLD}{title}", width, SURFACE_BG), None)]
     listing = items(quests, pins)
-    pin_rows, quest_rows = [], []
-    for n, it in enumerate(listing, 1):
-        (pin_rows if it["kind"] == "pin" else quest_rows).extend(row_for(n, it, width, focused and n - 1 == selected, spend))
-    if pin_rows:
-        out += panel("Pinned", pin_rows, width, focused)
-    out += panel("Quests", quest_rows or [(f"{DIM}no quests yet{RESET}", None, False)], width, focused)
+    if pins:
+        out += panel("Pinned", pin_rows(pins, width), width)
+    rows = []
+    for i, it in enumerate(listing):
+        if not it["tab"] and i and listing[i - 1]["tab"]:
+            rows.append((f"{DIM}  not open{RESET}", None, False))
+        highlight = (i == selected) if (focused and selected is not None) else it["active"]
+        rows += row_for(it, width, highlight, spend)
+    out += panel("Tabs", rows or [(f"{DIM}no tabs{RESET}", None, False)], width, focused)
     room = height - len(out) - 2 - 3                   # activity borders, and a footer of up to three lines
     if room > 1:
         acts = [(f"{COLORS.get(st, SUBTEXT)}●{RESET} {t}", ("quest", slug) if slug else None, False)
@@ -281,15 +340,32 @@ def act(action):
     guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
     tmux = ["tmux", "-L", SOCKET]
     kind = action[0]
-    if kind == "quest":
+
+    def show(target):                      # switch the content, and keep typing in the content, not the menu
+        if subprocess.run(tmux + ["select-window", "-t", target], capture_output=True).returncode:
+            return False
+        panes = subprocess.run(tmux + ["list-panes", "-t", target, "-F", "#{pane_id} #{@guild_sidebar}"],
+                               capture_output=True, text=True).stdout.split("\n")
+        content = [p.split()[0] for p in panes if p.strip() and not p.strip().endswith(" 1")]
+        if content:
+            subprocess.run(tmux + ["select-pane", "-t", content[0]], capture_output=True)
+        return True
+
+    if kind == "win":
+        show(action[1])
+    elif kind == "close":
+        subprocess.run(tmux + ["kill-window", "-t", action[1]], capture_output=True)
+    elif kind == "quest":
         slug = action[1]
-        if subprocess.run(tmux + ["select-window", "-t", f"{SESSION}:{slug}"], capture_output=True).returncode:
+        if not show(f"{SESSION}:{slug}"):
             subprocess.run([guild, "revive", slug], capture_output=True)
-            subprocess.run(tmux + ["select-window", "-t", f"{SESSION}:{slug}"], capture_output=True)
+            show(f"{SESSION}:{slug}")
     elif kind == "pin":
         key, tab = action[1], action[2]
-        if tab:
-            subprocess.run(tmux + ["select-window", "-t", f"{SESSION}:{tab}"], capture_output=True)
+        wid = [l.split("\t")[0] for l in tmux_out("list-windows", "-t", SESSION, "-F", "#{window_id}\t#W").splitlines()
+               if l.split("\t")[-1] == tab] if tab else []
+        if wid:
+            show(wid[0])
         elif key.startswith("session:"):
             subprocess.run([guild, "new", "--resume", key.split(":", 1)[1]], capture_output=True)
         elif key.startswith("quest:"):
@@ -297,13 +373,13 @@ def act(action):
     elif kind == "new":
         subprocess.run([guild, "new"], capture_output=True)
     elif kind == "term":
-        subprocess.run(tmux + ["new-window", "-t", SESSION, "-n", "shell", "-c", os.environ.get("GUILD_EDIT_ROOT", os.path.expanduser("~/Workspace"))], capture_output=True)
+        subprocess.run([guild, "term"], capture_output=True)
     elif kind == "board":
         subprocess.run(["sh", "-c", f"'{guild}' board url | head -1 | xargs open"], capture_output=True)
     elif kind == "campaign":
         subprocess.run([guild, "campaign"], capture_output=True)
-    elif kind == "back":
-        subprocess.run(tmux + ["select-pane", "-t", f"{SESSION}:qm.1"], capture_output=True)
+    elif kind == "back":                     # from the menu back to this tab's content
+        subprocess.run(tmux + ["select-pane", "-t", os.environ.get("TMUX_PANE", ""), "-R"], capture_output=True)
     elif kind == "keys":                      # the same menu as Ctrl-g ?, typed into the newest client
         client = subprocess.run(tmux + ["list-clients", "-F", "#{client_activity} #{client_name}"],
                                 capture_output=True, text=True).stdout.split("\n")
@@ -350,14 +426,25 @@ def main():
     selected, focused = 0, False
     try:
         buf = ""
+        shown = False
         while True:
+            # Every tab draws this menu; only the tab on screen does the work. The others wait,
+            # and draw at once when you switch to them.
+            visible, _ = my_window()
+            if not visible:
+                shown = False
+                time.sleep(0.4)
+                continue
+            if not shown:
+                sys.stdout.write("\033[?1000h\033[?1006h\033[?1004h\033[?25l" if interactive else "")
+                shown = True
             # the pane's real size, read every tick, so a resize never makes lines wrap
             size = shutil.get_terminal_size((30, 20))
             width, height = size.columns, size.lines
             quests = read_quests()
             mark_tabs(quests)
             lines, listing = draw(quests, width, height, costs(), pinned(), selected, focused)
-            foot, spans = footer(width)
+            foot, spans = footer(width, focused)
             lines = lines[:max(0, height - len(foot))]
             body = [l if l.startswith(SURFACE_BG) else fill(l, width, BASE_BG) for l, _ in lines]
             body += [BASE_BG + " " * width + RESET] * max(0, height - len(foot) - len(body))
@@ -391,6 +478,8 @@ def main():
                         redraw = True
                     elif m.group(5):                      # focus in or out
                         focused = m.group(5) == "I"; redraw = True
+                        if focused:                       # the selection starts on the tab you are in
+                            selected = next((i for i, it in enumerate(listing) if it["active"]), 0)
                     elif m.group(6):                      # arrows move the selection
                         selected = max(0, min(len(listing) - 1, selected + (1 if m.group(6) == "B" else -1))); redraw = True
                     elif m.group(7):
@@ -399,9 +488,15 @@ def main():
                             selected = max(0, min(len(listing) - 1, selected + (1 if ch == "j" else -1)))
                         elif ch in "\r\n" and listing:
                             act(listing[selected]["action"])
-                        elif ch.isdigit() and ch != "0" and int(ch) <= len(listing):
-                            selected = int(ch) - 1
-                            act(listing[selected]["action"])
+                        elif ch.isdigit():                # the same number as the tab strip
+                            hit = [i for i, it in enumerate(listing) if it["n"] == int(ch)]
+                            if hit:
+                                selected = hit[0]
+                                act(listing[selected]["action"])
+                        elif ch == "x" and listing:       # close a terminal or editor tab, never an agent
+                            it = listing[min(selected, len(listing) - 1)]
+                            if it["tab"] and it["kind"] in ("term", "edit"):
+                                act(("close", it["action"][1]))
                         else:
                             for key, _, action in KEYS:
                                 if key == ch and action:

@@ -96,6 +96,47 @@ cmd_calm() {
 
 # The cockpit: window "qm" holds the sidebar and the quartermaster, every quest gets its
 # own tab, and claude-deck gets one too when it is installed.
+# ── tabs: every tab is the same side menu on the left and its own content on the right ──
+# Switching tabs changes only the content: the side menu is drawn in each tab, at the same
+# width, by `guild watch`, and only the visible one does any work.
+side_width() {
+  local w; w=$(tm display-message -p '#{client_width}' 2>/dev/null)
+  [ -n "$w" ] && [ "$w" -gt 0 ] 2>/dev/null || w=$(tm display-message -p -t "$SESSION" '#{window_width}' 2>/dev/null || echo 120)
+  local side=$(( w * 28 / 100 )); [ "$side" -lt 24 ] && side=24; [ "$side" -gt 36 ] && side=36
+  echo "$side"
+}
+
+add_sidebar() { # content pane id
+  local sid
+  sid=$(tm split-window -hbd -l "$(side_width)" -t "$1" -P -F '#{pane_id}' "guild watch; exec \$SHELL") || return 0
+  tm set-option -p -t "$sid" @guild_sidebar 1
+}
+
+# Open a tab: a new window with the side menu, content running CMD. Prints the window id.
+open_tab() { # name dir cmd [--bg]
+  local flag=""; [ "${4:-}" = --bg ] && flag="-d"
+  local wid pid
+  wid=$(tm new-window $flag -P -F '#{window_id}' -t "$SESSION" -n "$1" -c "$2" "$3") || die "could not open tab $1"
+  pid=$(tm display-message -p -t "$wid" '#{pane_id}')
+  add_sidebar "$pid"
+  tm select-pane -t "$pid"
+  echo "$wid"
+}
+
+# The content pane of a tab (never the side menu), so peek and send reach the agent.
+content_pane() { # window target
+  tm list-panes -t "$1" -F '#{pane_id} #{@guild_sidebar}' 2>/dev/null | awk '$2 != "1" {print $1; exit}'
+}
+
+# A tab by its name. Names like edit:x hold a colon, which tmux reads as a separator, so ids it is.
+window_by_name() { tm list-windows -t "$SESSION" -F '#{window_id}	#W' 2>/dev/null | awk -F'\t' -v w="$1" '$2 == w {print $1; exit}'; }
+
+cmd_term() { # a plain terminal tab, in a folder
+  local dir="${1:-${GUILD_EDIT_ROOT:-$HOME/Workspace}}"
+  [ -d "$dir" ] || dir="$HOME"
+  open_tab shell "$dir" "exec \$SHELL" >/dev/null
+}
+
 cmd_up() {
   local dir="${1:-$HOME}"
   if ! tm has-session -t "$SESSION" 2>/dev/null; then
@@ -115,10 +156,11 @@ cmd_up() {
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
       "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
     cmd_layout
-    command -v claude-deck >/dev/null && tm new-window -d -t "$SESSION" -n deck "claude-deck; exec \$SHELL"
+    tm set-option -p -t "$SESSION:qm.0" @guild_sidebar 1
+    command -v claude-deck >/dev/null && open_tab deck "$dir" "claude-deck; exec \$SHELL" --bg >/dev/null
     # The Jira watcher gets its own tab when jira.json says "watch": true, so you can see what it does.
     python3 -c "import json,sys;sys.exit(0 if json.load(open('$GUILD_HOME/local/jira.json')).get('watch') else 1)" 2>/dev/null \
-      && tm new-window -d -t "$SESSION" -n jira "guild jira watch; exec \$SHELL"
+      && open_tab jira "$dir" "guild jira watch; exec \$SHELL" --bg >/dev/null
     tm select-window -t "$SESSION:qm"
     tm select-pane -t "$SESSION:qm.1"
     cmd_revive >/dev/null 2>&1 || true   # quests that outlived the last session get their windows back
@@ -138,7 +180,7 @@ cmd_revive() {
     state=$(cut -f1 "$d/status" 2>/dev/null)
     case "$state" in working|needs-decision|blocked|stopped) ;; *) continue ;; esac
     tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$slug" && continue
-    tm new-window -d -t "$SESSION" -n "$slug" "GUILD_RESUME=1 bash '$d/launch.sh'"
+    open_tab "$slug" "$HOME" "GUILD_RESUME=1 bash '$d/launch.sh'" --bg >/dev/null
     event "$slug" "$state" "window revived after a restart"
     echo "revived $slug ($state)"
     revived=$((revived + 1))
@@ -180,7 +222,8 @@ cmd_new() {
     else
       eval "$(python3 -c "import sys,shlex;sys.path.insert(0,'$GUILD_REPO/bin');import fleet;s=fleet.session_by_id('$sid') or {};print('dir=%s name=%s' % (shlex.quote(s.get('cwd','')), shlex.quote(s.get('name') or 'claude:$sid'[:15])))")"
     fi
-    if tm list-windows -t "$SESSION" -F '#W' | grep -qx "$name"; then tm select-window -t "$SESSION:$name"; return; fi
+    local have; have=$(window_by_name "$name")
+    if [ -n "$have" ]; then tm select-window -t "$have"; return; fi
   fi
   [ -n "$dir" ] || dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
   dir="$(cd "$dir" 2>/dev/null && pwd)" || die "no such folder: $dir"
@@ -195,8 +238,7 @@ cmd_new() {
   mkdir -p "$GUILD_HOME/tabs"
   python3 -c "import json,sys;json.dump(dict(zip(['name','dir','harness','session','model','created'],sys.argv[1:7])),open(sys.argv[7],'w'),indent=2)" \
     "$win" "$dir" "$harness_name" "$sid" "$model" "$(now)" "$GUILD_HOME/tabs/$(echo "$win" | tr ':/' '__').json"
-  tm new-window -t "$SESSION" -n "$win" -c "$dir" "model='$model'; $(calm_env | sed 's/^\(.\)/export \1/;s/ $/;/')$cmd; exec \$SHELL"
-  tm select-window -t "$SESSION:$win"
+  open_tab "$win" "$dir" "model='$model'; $(calm_env | sed 's/^\(.\)/export \1/;s/ $/;/')$cmd; exec \$SHELL" >/dev/null
 }
 
 # Pins keep the sessions you care about at the top of the sidebar and the campaign board.
@@ -219,8 +261,8 @@ cmd_pins() { # [menu [client]]
     local go
     case "$key" in
       quest:*) go="run-shell \"guild revive '${key#quest:}' >/dev/null; tmux -L $SOCKET select-window -t '$SESSION:${key#quest:}'\"" ;;
-      session:*) if [ -n "$tab" ]; then go="select-window -t '$SESSION:$tab'"; else go="run-shell \"guild new --resume '${key#session:}'\""; fi ;;
-      *) go="select-window -t '$SESSION:${key#tab:}'" ;;
+      session:*) if [ -n "$tab" ]; then go="select-window -t '$(window_by_name "$tab")'"; else go="run-shell \"guild new --resume '${key#session:}'\""; fi ;;
+      *) go="select-window -t '$(window_by_name "${key#tab:}")'" ;;
     esac
     args+=("$name  ($state)" "$n" "$go")
   done < <(python3 "$GUILD_REPO/bin/fleet.py" pins)
@@ -232,7 +274,7 @@ cmd_pins() { # [menu [client]]
 cmd_click() { # range client path
   case "${1:-}" in
     newtab) cmd_new "${3:-}" ;;
-    newterm) tm new-window -t "$SESSION" -n shell -c "${3:-$HOME}" ;;
+    newterm) cmd_term "${3:-}" ;;
     campaign) cmd_campaign >/dev/null ;;
     pins) cmd_pins menu "${2:-}" ;;
   esac
@@ -254,11 +296,21 @@ cmd_shot() { python3 "$GUILD_REPO/bin/shot.py" "$@"; }
 # narrow windows (a 99-column terminal squeezed the sidebar down to one column).
 cmd_layout() {
   tm has-session -t "$SESSION" 2>/dev/null || return 0
-  local w side
-  w=$(tm display-message -p -t "$SESSION:qm" '#{window_width}' 2>/dev/null) || return 0
-  side=$(( w * 28 / 100 )); [ "$side" -lt 24 ] && side=24; [ "$side" -gt 36 ] && side=36
-  tm set-window-option -t "$SESSION:qm" main-pane-width "$side" >/dev/null
-  tm select-layout -t "$SESSION:qm" main-vertical >/dev/null
+  local side wid panes sid
+  side=$(side_width)
+  for wid in $(tm list-windows -t "$SESSION" -F '#{window_id}'); do
+    # a pane started as `guild watch` is a side menu, even from before the flag existed
+    tm list-panes -t "$wid" -F '#{pane_id} #{pane_start_command}' | awk '/guild watch/ {print $1}' |
+      while read -r p; do tm set-option -p -t "$p" @guild_sidebar 1; done
+    sid=$(tm list-panes -t "$wid" -F '#{pane_id} #{@guild_sidebar}' | awk '$2 == "1" {print $1; exit}')
+    panes=$(tm list-panes -t "$wid" | wc -l | tr -d ' ')
+    if [ -z "$sid" ] && [ "$panes" = 1 ]; then
+      add_sidebar "$(tm display-message -p -t "$wid" '#{pane_id}')"
+      sid=$(tm list-panes -t "$wid" -F '#{pane_id} #{@guild_sidebar}' | awk '$2 == "1" {print $1; exit}')
+    fi
+    [ -n "$sid" ] && tm resize-pane -t "$sid" -x "$side" 2>/dev/null
+  done
+  return 0
 }
 
 cmd_watch() { GUILD_TMUX_SOCKET="$SOCKET" python3 "$GUILD_REPO/bin/watch.py" "${1:-2}"; }
@@ -283,15 +335,15 @@ cmd_edit() {
     die "guild edit takes a quest slug, a directory, a file, or nothing"
   fi
   tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
-  if tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$win"; then
-    tm select-window -t "$SESSION:$win"
+  local have; have=$(window_by_name "$win")
+  if [ -n "$have" ]; then
+    tm select-window -t "$have"
     return
   fi
   local cmd="$editor ."
   case "$editor" in *vim) cmd="$editor -c 'silent! Neotree show' ." ;; esac   # the tree, like LazyVim opens it
   [ -n "$file" ] && cmd="$editor '$file'"
-  tm new-window -t "$SESSION" -n "$win" -c "$dir" "$cmd; exec \$SHELL"
-  tm select-window -t "$SESSION:$win"
+  open_tab "$win" "$dir" "$cmd; exec \$SHELL" >/dev/null
   echo "editing $dir in tab $win"
 }
 
@@ -579,7 +631,7 @@ PLAN
 
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
-  tm new-window -d -t "$SESSION" -n "$slug" "bash '$q/launch.sh'"
+  open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg >/dev/null
   echo "quest $slug: $harness${model:+/$model} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -715,7 +767,8 @@ if cut >= 0:
 PY2
   printf 'working\t%s\t%s\n' "plan approved, building on $build" "$(now)" > "$q/status"
   event "$1" planned "${2:-plan approved} -> building on $build"
-  tm run-shell -b "sleep 2; tmux -L '$SOCKET' respawn-window -k -t '$SESSION:$1' \"GUILD_RESUME=1 GUILD_HANDOFF=1 bash '$q/launch.sh'\"" 2>/dev/null || true
+  local pane; pane=$(content_pane "$SESSION:$1")
+  [ -n "$pane" ] && tm run-shell -b "sleep 2; tmux -L '$SOCKET' respawn-pane -k -t '$pane' \"GUILD_RESUME=1 GUILD_HANDOFF=1 bash '$q/launch.sh'\"" 2>/dev/null || true
   echo "plan phase over: $1 restarts on $build in a moment"
 }
 
@@ -818,14 +871,15 @@ cmd_peek() {
     python3 "$GUILD_REPO/bin/calls.py" "$wt" "${3:-15}"
     return
   fi
-  tm capture-pane -p -t "$SESSION:$1" -S "-${2:-40}"
+  tm capture-pane -p -t "$(content_pane "$SESSION:$1")" -S "-${2:-40}"
 }
 
 cmd_send() {
   need_quest "$1"
-  tm send-keys -t "$SESSION:$1" -l "$2"
+  local pane; pane=$(content_pane "$SESSION:$1")
+  tm send-keys -t "$pane" -l "$2"
   sleep 0.3
-  tm send-keys -t "$SESSION:$1" Enter
+  tm send-keys -t "$pane" Enter
   printf 'working\t%s\t%s\n' "resumed after message" "$(now)" > "$(qdir "$1")/status"
   event "$1" message "guildmaster: ${2:0:80}"
 }
@@ -990,6 +1044,7 @@ case "${1:-}" in
   pins) shift; cmd_pins "$@" ;;
   todo) shift; cmd_todo "$@" ;;
   click) shift; cmd_click "$@" ;;
+  term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;

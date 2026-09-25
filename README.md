@@ -314,7 +314,8 @@ You rarely type these. The quartermaster matches each task to a rule in `~/.guil
  guild   0 qm   1 deck   2 pay-rate   3 layouts*    2 working · 1 waiting on you
 ```
 
-- **Left pane**: the sidebar, laid out like claude-deck: a title bar, thin panels with the title in the border (Pinned, Quests, Activity), numbered rows with a colored chip per repo and a state dot, and a `key:Action` help bar at the bottom. Click the sidebar (or `Ctrl-g Ctrl-h`) and single letters work, like in the deck: `n` new Claude tab, `t` terminal, `b` campaign board, `w` war table, `p` pins, `1`-`9` jump to that row, `j`/`k` or arrows then Enter, `?` every key, `q` back to the quartermaster. The focused pane has a green border. Everything is clickable too: a row jumps to its tab, a help bar entry runs it. The whole cockpit uses the deck's blue-grey surface (Catppuccin Mocha), not terminal black.
+- **One screen, like herdr**: every tab carries the same side menu at the same width, so switching tabs changes only the content on the right. New Claude tabs, terminals (`Ctrl-g t`) and editors (`Ctrl-g e`) open as tabs inside the cockpit, never as a separate window. The tab strip sits on top.
+- **The side menu**, laid out like claude-deck: a title bar, thin panels with the title in the border (Pinned, Tabs, Activity), rows numbered like the tab strip with a colored chip per repo or kind (`term`, `edit`, `ai`, `qm`), the tab you are on highlighted, and a `key:Action` help bar. Click a row to switch to that tab. The help bar says which way the keys work right now: a green dot means the side menu has focus and plain letters work (`n` new Claude tab, `t` terminal, `b` board, `g` war table, `p` pins, `0`-`9` tab, `x` close a terminal or editor tab, `?` every key, `q` back); `^g` means press `Ctrl-g` first, from anywhere, with the same letters. The whole cockpit uses the deck's blue-grey surface (Catppuccin Mocha).
 - **Right pane**: the quartermaster. The only session you talk to.
 - **One tab per quest**, plus a `deck` tab running [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) when it is installed. The deck speaks tmux, so from that tab you can mirror, jump to or type into any adventurer's pane. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
 - **Status bar**: every tab is a button, click it to switch. On the right, buttons for `+claude`, `+term`, `board` (the campaign) and `pins`, then how many quests are working, how many wait on you, how many boards are open.
@@ -336,7 +337,7 @@ Why not a bare `Ctrl-k`: every Ctrl letter already means something in Claude Cod
 | `Ctrl-g` `t` | A plain terminal tab in the current folder |
 | `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
 | `Ctrl-g` `E` | Asks what to open: a quest, a folder or one file |
-| `Ctrl-g` `k` | Open the campaign board in the browser |
+| `Ctrl-g` `b` (or `k`) | Open the campaign board in the browser |
 | `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `p` | Pin or unpin the current tab (it goes to the top of the sidebar) |
 | `Ctrl-g` `P` | Menu of pinned sessions: pick one to jump to it, or to reopen it if its tab is gone |
