@@ -111,6 +111,9 @@
   .party li { font-size: 12px; display: flex; gap: 6px; align-items: baseline; }
   .party li b { font-variant: small-caps; color: var(--epic); }
   .party li span { color: var(--ink-dim); overflow-wrap: anywhere; }
+  .party li.party-head { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+  .actions .close { margin-left: auto; }
+  .actions .close.armed { background: var(--bad); border-color: var(--bad); color: #fff5dc; }
   .actions { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
   .actions a, .actions button {
     font: inherit; font-size: 12px; color: var(--ink); background: rgba(255, 255, 255, .35); border: 1px solid var(--rule);
@@ -149,7 +152,7 @@
   <div class="tally">
     <div class="banner"><b id="n-agents">0</b><span>on the road</span></div>
     <div class="banner"><b id="n-waiting">0</b><span>await you</span></div>
-    <div class="banner"><b id="n-todo">0</b><span>posted</span></div>
+    <div class="banner"><b id="n-todo">0</b><span>idle / posted</span></div>
   </div>
 </header>
 <div class="toolbar" role="toolbar" aria-label="Filter cards">
@@ -193,7 +196,7 @@ function ago(since) {
 
 function stateClass(s) {
   if (["working", "checks-green", "checks-baseline", "planned", "message", "acceptance"].includes(s)) return "working";
-  if (["your turn", "needs-decision", "to do"].includes(s)) return "turn";
+  if (["asks you", "needs-decision", "to do"].includes(s)) return "turn";
   if (["blocked", "failed", "stopped", "checks-red"].includes(s)) return "bad";
   if (["done", "closed", "trial-pass"].includes(s)) return "done";
   return "";
@@ -217,8 +220,9 @@ function cardHtml(c) {
   if (c.repo) meta.push(`<span>${esc(c.repo)}</span>`);
   if (c.harness && c.harness !== "claude") meta.push(`<span>${esc(c.harness)}</span>`);
   if (c.since) meta.push(`<span>${esc(ago(c.since))}</span>`);
+  // helpers running in parallel: subagents of a session, or the quests the quartermaster sent out
   const party = (c.agents || []).length
-    ? `<ul class="party" aria-label="Companions">${c.agents.map((a) => `<li><b>${esc(a.type)}</b><span>${esc(a.what)}</span></li>`).join("")}</ul>` : "";
+    ? `<ul class="party" aria-label="Running in parallel"><li class="party-head">${c.orchestrator ? "Party on quests" : "Companions at work"}</li>${c.agents.map((a) => `<li><b>${esc(a.type)}</b><span>${esc(STATE_WORD[a.what] || a.what)}</span></li>`).join("")}</ul>` : "";
   const acts = [];
   if (c.tab) acts.push(`<button class="go" data-act="jump" data-tab="${esc(c.tab)}">Go to tab</button>`);
   else if (c.kind === "session" && c.state !== "working") acts.push(`<button data-act="jump" data-session="${esc(c.id.slice(8))}">Reopen in cockpit</button>`);
@@ -228,6 +232,7 @@ function cardHtml(c) {
     : `<button data-act="done" data-n="${c.n}">Mark done</button>`);
   if (c.kind !== "todo" && !c.id.startsWith("closed:"))
     acts.push(`<button data-act="pin" data-id="${esc(c.id)}" data-name="${esc(c.title)}" data-tab="${esc(c.tab || "")}" data-on="${c.pinned ? 0 : 1}">${c.pinned ? "Unpin" : "Pin"}</button>`);
+  if (c.closable) acts.push(`<button class="close" data-act="close" data-id="${esc(c.id)}" data-tab="${esc(c.tab || "")}" title="${c.tab ? "Close its cockpit tab" : "Hide from the board until it moves again"}">${c.tab ? "Close tab" : "Hide"}</button>`);
   return `<article class="card ${c.pinned ? "pinned" : ""} ${sc === "working" ? "working" : ""}" style="--tilt:${tilt(c.id)}deg" data-kind="${esc(c.kind)}">
     ${c.pinned ? '<span class="pinhead" title="Pinned"></span>' : ""}
     <div class="top">${icon(c.orchestrator ? "orchestrator" : c.kind)}<div class="title"><span class="kind">${esc(kindLabel(c))}</span>${esc(c.title)}</div>${seal}</div>
@@ -295,6 +300,14 @@ document.addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-act]");
   if (!b) return;
   const d = b.dataset;
+  if (d.act === "close") {                 // two steps, on the button itself: no browser dialog
+    if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Sure?"; b.classList.add("armed"); busy = true;
+      setTimeout(() => { busy = false; if (b.isConnected) { b.dataset.armed = ""; b.textContent = d.tab ? "Close tab" : "Hide"; b.classList.remove("armed"); } }, 3000);
+      return; }
+    busy = false;
+    act("/campaign/close", { id: d.id, tab: d.tab || "" }, "Closed");
+    return;
+  }
   if (d.act === "jump") act("/campaign/jump", { tab: d.tab || "", session: d.session || "" }, "Done");
   if (d.act === "pin") act("/campaign/pin", { id: d.id, name: d.name, tab: d.tab, on: d.on === "1" }, d.on === "1" ? "Pinned to the sidebar" : "Unpinned");
   if (d.act === "done") act("/campaign/todo", { done: Number(d.n) }, "Marked done");

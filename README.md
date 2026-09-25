@@ -17,7 +17,7 @@ Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate
 
 ## Install
 
-Needs `tmux`, `git`, `gh`, `python3` and Claude Code. Optional: `nvim` (or set `$EDITOR`) for `guild edit`, and [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) for the `deck` tab.
+Needs `tmux`, `git`, `gh`, `python3` and Claude Code. Optional: `nvim` (or set `$EDITOR`) for `guild edit`, and [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) if you want its tab (`GUILD_DECK=1 guild up`).
 
 ```sh
 git clone https://github.com/SesisnandoLRNeto/guild ~/Workspace/guild
@@ -311,13 +311,13 @@ You rarely type these. The quartermaster matches each task to a rule in `~/.guil
 │  07:14 done      │                                             │
 │   docs: PR #12   │                                             │
 └──────────────────┴─────────────────────────────────────────────┘
- guild   0 qm   1 deck   2 pay-rate   3 layouts*    2 working · 1 waiting on you
+ guild   0 qm   1 pay-rate   2 layouts*    2 working · 1 waiting on you
 ```
 
 - **One screen, like herdr**: every tab carries the same side menu at the same width, so switching tabs changes only the content on the right. New Claude tabs, terminals (`Ctrl-g t`) and editors (`Ctrl-g e`) open as tabs inside the cockpit, never as a separate window. The tab strip sits on top.
 - **The side menu**, laid out like claude-deck: a title bar, thin panels with the title in the border (Pinned, Tabs, Activity), rows numbered like the tab strip with a colored chip per repo or kind (`term`, `edit`, `ai`, `qm`), the tab you are on highlighted, and a `key:Action` help bar. Click a row to switch to that tab. The help bar says which way the keys work right now: a green dot means the side menu has focus and plain letters work (`n` new Claude tab, `t` terminal, `b` board, `g` war table, `p` pins, `0`-`9` tab, `x` close a terminal or editor tab, `?` every key, `q` back); `^g` means press `Ctrl-g` first, from anywhere, with the same letters. The whole cockpit uses the deck's blue-grey surface (Catppuccin Mocha).
 - **Right pane**: the quartermaster. The only session you talk to.
-- **One tab per quest**, plus a `deck` tab running [claude-deck](https://github.com/SesisnandoLRNeto/claude-deck) when it is installed. The deck speaks tmux, so from that tab you can mirror, jump to or type into any adventurer's pane. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
+- **One tab per quest**, plus your terminals, editors and Claude tabs. The side menu and the campaign board show what claude-deck used to, so its tab is off by default; `GUILD_DECK=1 guild up` brings it back. A tab whose program exits closes itself. A tab is marked when its quest wants you: `*` waiting on a decision, `!` blocked or failed, `?` stopped without a report, `+` done.
 - **Status bar**: every tab is a button, click it to switch. On the right, buttons for `+claude`, `+term`, `board` (the campaign) and `pins`, then how many quests are working, how many wait on you, how many boards are open.
 
 ### Keys

@@ -217,9 +217,15 @@ def my_window():
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return True, None
-    out = tmux_out("display-message", "-p", "-t", pane, "#{window_active}\t#{window_id}\t#{session_attached}").strip().split("\t")
-    if len(out) < 3:
+    out = tmux_out("display-message", "-p", "-t", pane,
+                   "#{window_active}\t#{window_id}\t#{session_attached}\t#{window_panes}\t#{window_name}").strip().split("\t")
+    if len(out) < 5:
         return True, None
+    # The program in this tab has exited and left only the menu: close the tab instead of
+    # stretching the menu over the whole screen. The quartermaster's tab always stays.
+    if out[3] == "1" and out[4] != "qm":
+        tmux_out("kill-window", "-t", out[1])
+        sys.exit(0)
     return out[0] == "1" and out[2] != "0", out[1]
 
 

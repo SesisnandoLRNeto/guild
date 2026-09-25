@@ -157,7 +157,8 @@ cmd_up() {
       "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
     cmd_layout
     tm set-option -p -t "$SESSION:qm.0" @guild_sidebar 1
-    command -v claude-deck >/dev/null && open_tab deck "$dir" "claude-deck; exec \$SHELL" --bg >/dev/null
+    # The side menu and the campaign board cover what the deck showed; it stays one flag away.
+    [ -n "${GUILD_DECK:-}" ] && command -v claude-deck >/dev/null && open_tab deck "$dir" "claude-deck; exec \$SHELL" --bg >/dev/null
     # The Jira watcher gets its own tab when jira.json says "watch": true, so you can see what it does.
     python3 -c "import json,sys;sys.exit(0 if json.load(open('$GUILD_HOME/local/jira.json')).get('watch') else 1)" 2>/dev/null \
       && open_tab jira "$dir" "guild jira watch; exec \$SHELL" --bg >/dev/null

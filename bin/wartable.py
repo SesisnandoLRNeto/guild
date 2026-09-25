@@ -90,6 +90,18 @@ def campaign_action(action, body):
             subprocess.run([guild, "new", "--resume", sid], check=True, capture_output=True)
             return {"ok": True, "did": "reopened it in a new cockpit tab"}
         raise ValueError("nothing to jump to")
+    if action == "close":                 # close the tab (the quest itself stays), or hide the card
+        card_id, tab = body.get("id", ""), body.get("tab", "")
+        if tab:
+            wins = subprocess.run(["tmux", "-L", socket_name, "list-windows", "-t", "guild", "-F", "#{window_id}\t#W"],
+                                  capture_output=True, text=True).stdout.splitlines()
+            wid = [w.split("\t")[0] for w in wins if w.split("\t")[-1] == tab]
+            if tab == "qm" or not wid:
+                raise ValueError("that tab cannot be closed from here")
+            subprocess.run(["tmux", "-L", socket_name, "kill-window", "-t", wid[0]], check=True)
+            return {"ok": True, "did": f"closed the {tab} tab" + (" (the quest is kept: guild revive brings it back)" if card_id.startswith("quest:") else "")}
+        f.hide(card_id)
+        return {"ok": True, "did": "hidden from the board until it moves again"}
     if action == "pin":
         f.set_pin_key(body["id"], body.get("name", body["id"]), body.get("tab", ""), bool(body.get("on")))
         return {"ok": True}
@@ -168,7 +180,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
-        c = re.match(r"^/campaign/(jump|pin|todo)$", path)
+        c = re.match(r"^/campaign/(jump|pin|todo|close)$", path)
         if c:
             length = int(self.headers.get("Content-Length", 0))
             try:

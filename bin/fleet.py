@@ -25,6 +25,10 @@ QUESTS = os.path.join(GUILD_HOME, "quests")
 TABS = os.path.join(GUILD_HOME, "tabs")
 PINS = os.path.join(GUILD_HOME, "pins.json")
 TODO = os.path.join(GUILD_HOME, "todo.json")
+HIDDEN = os.path.join(GUILD_HOME, "campaign-hidden.json")
+# A turn that ends on one of these is waiting for your decision, not just for your next message.
+ASKS = re.compile(r"\?\s*$|\b(pick one|say \(?a\)?|which (one|option)|do you want|should i|would you like|"
+                  r"your call|approve|confirm|let me know|choose|option \(?[ab]\)?)\b", re.I)
 JIRA_CACHE = os.path.join(GUILD_HOME, ".campaign-jira.json")
 PROJECTS = os.environ.get("GUILD_CLAUDE_PROJECTS", os.path.expanduser("~/.claude/projects"))
 SOCKET = os.environ.get("GUILD_TMUX_SOCKET", "guild")
@@ -36,16 +40,16 @@ SESSION_HOURS = 12         # idle sessions older than this leave the board
 DONE_DAYS = 7
 
 COLUMNS = [
-    ("todo", "Quest board", "Posted, nobody on it yet"),
+    ("todo", "Quest board", "Open and idle, stopped, or posted"),
     ("road", "On the road", "Agents at work"),
-    ("waiting", "Awaiting orders", "Your call, your turn, or stuck"),
+    ("waiting", "Awaiting orders", "A decision only you can make"),
     ("trial", "Trial", "Reviewed, waiting for the PR"),
     ("done", "Returned", "Finished in the last week"),
 ]
 QUEST_COLUMN = {
     "working": "road", "checks-baseline": "road", "checks-green": "road", "checks-red": "road",
     "acceptance": "road", "message": "road", "planned": "road",
-    "needs-decision": "waiting", "blocked": "waiting", "failed": "waiting", "stopped": "waiting",
+    "needs-decision": "waiting", "blocked": "waiting", "failed": "waiting", "stopped": "todo",
     "trial-pass": "trial", "trial-skip": "trial", "done": "done",
 }
 
@@ -125,7 +129,7 @@ def read_session(path):
     entries = tail_entries(path)
     s = {"id": os.path.splitext(os.path.basename(path))[0], "path": path, "name": "", "title": "",
          "prompt": "", "model": "", "cwd": "", "state": "idle", "entrypoint": "", "agents": []}
-    last = None
+    last, last_text = None, ""
     for e in entries:
         t = e.get("type")
         if t == "custom-title":
@@ -142,6 +146,8 @@ def read_session(path):
             s["model"] = (e.get("message") or {}).get("model", s["model"])
         if t in ("user", "assistant") and not e.get("isSidechain") and not e.get("isMeta"):
             last = e
+            if t == "assistant" and text_of(e.get("message")).strip():
+                last_text = text_of(e.get("message")).strip()
             if t == "user" and text_of(e.get("message")).strip() and not s["prompt"]:
                 s["prompt"] = text_of(e.get("message"))
         elif t == "system" and e.get("subtype") == "turn_duration":
@@ -151,15 +157,64 @@ def read_session(path):
     ended = last is None or last.get("type") == "system" or (
         last.get("type") == "assistant" and (last.get("message") or {}).get("stop_reason") == "end_turn")
     s["state"] = "idle" if ended or age > WORKING_SECONDS else "working"
+    s["last_text"] = last_text
+    # a question tool waiting for an answer is a decision, not work
+    pending = [c.get("name") for c in ((last or {}).get("message") or {}).get("content", []) or []
+               if isinstance(c, dict) and c.get("type") == "tool_use"] if (last or {}).get("type") == "assistant" else []
+    s["asking"] = "AskUserQuestion" in pending or (ended and bool(last_text) and bool(ASKS.search(last_text[-400:])))
+    s["question"] = question_of(last_text) if s["asking"] else ""
     sub = os.path.join(os.path.dirname(path), s["id"], "subagents")
     for log in glob.glob(os.path.join(sub, "*.jsonl")):
-        if time.time() - os.path.getmtime(log) > SUBAGENT_SECONDS:
+        # a subagent is running while its log has not ended on a final reply, and still moves
+        if time.time() - os.path.getmtime(log) > 1800 or subagent_done(log):
             continue
         meta = load_json(log[:-len(".jsonl")] + ".meta.json", {})
         s["agents"].append({"type": meta.get("agentType", "agent"), "what": meta.get("description", "")})
     if s["agents"]:
         s["state"] = "working"
     return s
+
+
+def subagent_done(log):
+    try:
+        last = tail_entries(log, 65536)[-1]
+    except (IndexError, OSError):
+        return False
+    return last.get("type") == "assistant" and (last.get("message") or {}).get("stop_reason") == "end_turn"
+
+
+def question_of(text):
+    """The sentence that asks: the last one with a question mark, else the last line."""
+    flat = re.sub(r"[*_`#>]+", "", text).strip()
+    asks = re.findall(r"[^.!?\n]*\?", flat)
+    q = (asks[-1] if asks else flat.splitlines()[-1] if flat else "").strip(" -")
+    return q[:180]
+
+
+def summary(qdir, meta=None):
+    """What a quest did, in one line: its wrap-up's title, else the brief's intent."""
+    boards = os.path.join(qdir, "boards")
+    if os.path.isdir(boards):
+        for b in sorted(os.listdir(boards), reverse=True):
+            bj = load_json(os.path.join(boards, b, "board.json"), {})
+            if bj.get("wrapup") and bj.get("title"):
+                return bj["title"][:160]
+    try:
+        brief = open(os.path.join(qdir, "brief.md")).read()
+    except OSError:
+        return ""
+    m = re.search(r"intent\W*[:\n]\s*(.+)", brief, re.I)
+    line = m.group(1) if m else next((l for l in brief.splitlines() if l.strip() and not l.startswith("#")), "")
+    line = re.sub(r"[*_`#>]+", "", line).strip()
+    return (line[:157] + "...") if len(line) > 160 else line
+
+
+def hidden():
+    return load_json(HIDDEN, {})
+
+
+def hide(card_id):
+    h = hidden(); h[card_id] = time.time(); save_json(HIDDEN, h)
 
 
 def sessions(hours=24):
@@ -216,6 +271,23 @@ def quests():
     return out
 
 
+def pseudo_boards():
+    """Open war table boards that belong to no quest (the quartermaster's own questions)."""
+    out = []
+    if not os.path.isdir(QUESTS):
+        return out
+    for slug in sorted(os.listdir(QUESTS)):
+        meta = load_json(os.path.join(QUESTS, slug, "meta.json"), None)
+        if not meta or not meta.get("pseudo"):
+            continue
+        bdir = os.path.join(QUESTS, slug, "boards")
+        for b in sorted(os.listdir(bdir)) if os.path.isdir(bdir) else []:
+            if not os.path.exists(os.path.join(bdir, b, "decision.json")):
+                bj = load_json(os.path.join(bdir, b, "board.json"), {})
+                out.append({"href": f"/b/{slug}/{b}/", "title": bj.get("title", b)})
+    return out
+
+
 def archived(days=DONE_DAYS):
     out, cutoff = [], time.time() - days * 86400
     for d in glob.glob(os.path.join(QUESTS, "_archive", "*")):
@@ -224,6 +296,7 @@ def archived(days=DONE_DAYS):
         meta = load_json(os.path.join(d, "meta.json"), None)
         if meta and not meta.get("pseudo") and "/.guild-" not in meta.get("repo", ""):   # not guild's own smoke runs
             meta["closed"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(d)))
+            meta["summary"] = summary(d)
             out.append(meta)
     return out
 
@@ -323,6 +396,7 @@ def board():
     tab_of = {t["session"]: t["name"] for t in ts if t.get("session")}
     cards, claimed = [], set()
 
+    hid = hidden()
     for q in qs:
         # the quest's own session: the newest one that ran in its worktree
         mine = [s for s in ss if (q.get("worktree") and s["cwd"].startswith(q["worktree"]))
@@ -330,21 +404,32 @@ def board():
         for s in mine:
             claimed.add(s["id"])
         main = max(mine, key=lambda s: -s["age"], default=None)
+        key = f"quest:{q['slug']}"
+        if key in hid and key not in pinned:
+            continue
         links = []
         if q["wrapup"]:
             links.append({"label": "wrap-up", "href": f"/b/{q['slug']}/{q['wrapup']}/"})
         for b in q["open_boards"]:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
-        if re.match(r"https?://\S+/pull/\d+", q["note"] or ""):
-            links.append({"label": "PR", "href": q["note"].split()[0]})
+        pr = re.search(r"https?://\S+/pull/(\d+)", q["note"] or "")
+        if pr:
+            links.append({"label": f"PR #{pr.group(1)}", "href": pr.group(0)})
+        column = QUEST_COLUMN.get(q["state"], "road")
+        if q["open_boards"]:
+            column = "waiting"                           # a war table is open: that is a decision
+        done = q["state"] in ("done", "trial-pass", "trial-skip")
+        what = summary(q["dir"]) if done else (question_of(q["note"]) if column == "waiting" else q["note"])
         cards.append(card(
-            id=f"quest:{q['slug']}", kind="quest", column=QUEST_COLUMN.get(q["state"], "road"),
-            title=q["slug"], ticket=q.get("ticket", ""), what=q["note"], state=q["state"],
+            id=key, kind="quest", column=column,
+            title=q["slug"], ticket=q.get("ticket", ""), what=what or q["note"], state=q["state"],
             repo=os.path.basename(q.get("repo", "")), model=q.get("model") or (main or {}).get("model", ""),
             harness=q.get("harness", ""), phase=q.get("phase", ""), since=q["since"],
             agents=(main or {}).get("agents", []), links=links,
-            tab=q["slug"] if q["slug"] in live else "", pinned=f"quest:{q['slug']}" in pinned))
+            tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True))
 
+    party = [{"type": q["slug"], "what": q["state"]} for q in qs if QUEST_COLUMN.get(q["state"]) in ("road", "waiting")]
+    qm_boards = pseudo_boards()
     for s in ss:
         if s["id"] in claimed:
             continue
@@ -358,16 +443,24 @@ def board():
             continue
         if s["state"] == "idle" and s["age"] > SESSION_HOURS * 3600 and key not in pinned:
             continue
+        if key in hid and key not in pinned and hid[key] > time.time() - s["age"]:
+            continue                                     # hidden, and nothing happened since
         name = "quartermaster" if is_qm else (s["name"] or s["title"] or os.path.basename(s["cwd"]) or s["id"][:8])
-        what = s["title"] if s["name"] and s["title"] != s["name"] else ""
         prompt = re.sub(r"\s+", " ", s["prompt"]).strip()
+        links = [{"label": "decide: " + b["title"][:28], "href": b["href"]} for b in qm_boards] if is_qm else []
+        if s["state"] == "working" and not s["asking"]:
+            column, state, what = "road", "working", (s["title"] if s["title"] and s["title"] != s["name"] else "") or prompt[:140]
+        elif s["asking"] or links:
+            column, state, what = "waiting", "asks you", s["question"] or (links and "a board is open on the war table") or ""
+        else:
+            column, state, what = "todo", "idle", (s["title"] if s["title"] and s["title"] != s["name"] else "") or prompt[:140]
         cards.append(card(
-            id=key, kind="session", column="road" if s["state"] == "working" else "waiting",
-            title=name, what=what or prompt[:140], last=prompt[:140] if what else "",
-            state="working" if s["state"] == "working" else "your turn",
-            repo=os.path.basename(s["cwd"]), model=s["model"], agents=s["agents"],
+            id=key, kind="session", column=column, title=name, what=what,
+            last=prompt[:140] if column != "road" and prompt[:140] != what else "",
+            state=state, repo=os.path.basename(s["cwd"]), model=s["model"],
+            agents=s["agents"] + (party if is_qm else []), links=links,
             since=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - s["age"])),
-            tab=tab, pinned=key in pinned, orchestrator=is_qm))
+            tab=tab, pinned=key in pinned, orchestrator=is_qm, closable=not is_qm))
 
     quest_tickets = {q.get("ticket") for q in qs if q.get("ticket")}
     issues, jira_note = jira()
@@ -382,8 +475,10 @@ def board():
                           title=t["text"], what="", state="done" if t.get("done") else "to do",
                           since=t.get("at", ""), n=n, pinned=False))
     for a in archived():
+        if f"closed:{a['slug']}" in hid:
+            continue
         cards.append(card(id=f"closed:{a['slug']}", kind="quest", column="done", title=a["slug"],
-                          ticket=a.get("ticket", ""), what="closed", state="closed",
+                          ticket=a.get("ticket", ""), what=a.get("summary") or "closed", state="closed", closable=True,
                           repo=os.path.basename(a.get("repo", "")), model=a.get("model", ""), since=a["closed"]))
 
     by_col = {k: [] for k, _, _ in COLUMNS}
@@ -391,7 +486,8 @@ def board():
         by_col[c["column"]].append(c)
     for k in by_col:      # pinned first, then the newest
         by_col[k].sort(key=lambda c: (0 if c.get("pinned") else 1, _neg(c.get("since", ""))))
-    agents_live = sum(1 for c in cards if c["column"] == "road") + sum(len(c["agents"]) for c in cards)
+    agents_live = sum(1 for c in cards if c["column"] == "road") + sum(
+        len([a for a in c["agents"] if a["type"] not in {q["slug"] for q in qs}]) for c in cards)
     return {"columns": [{"key": k, "title": t, "hint": h, "cards": by_col[k]} for k, t, h in COLUMNS],
             "counts": {"agents": agents_live, "waiting": len(by_col["waiting"]), "todo": len(by_col["todo"])},
             "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}

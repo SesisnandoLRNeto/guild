@@ -511,6 +511,27 @@ has "and the model's rank" "$board" '"rank": "epic"'
 url=$("$GUILD" campaign --url)
 has "guild campaign serves the board" "$(curl -s "${url}.json")" '"columns"'
 has "and the page" "$(curl -s "$url")" "The Guild Campaign"
+# a session whose turn ended on a question waits for you; one that just ended is idle
+pa="$HOME/.claude/projects/-tmp-ask"; mkdir -p "$pa"
+python3 - "$pa" <<'PY'
+import json, sys
+def log(path, name, text):
+    rows = [{"type": "custom-title", "customTitle": name},
+            {"type": "user", "entrypoint": "cli", "cwd": "/tmp/ask", "message": {"content": "go"}},
+            {"type": "assistant", "cwd": "/tmp/ask", "message": {"model": "claude-sonnet-5", "stop_reason": "end_turn", "content": [{"type": "text", "text": text}]}},
+            {"type": "system", "subtype": "turn_duration"}]
+    open(path, "w").write("\n".join(json.dumps(r) for r in rows) + "\n")
+log(sys.argv[1] + "/11111111-1111-1111-1111-111111111111.jsonl", "asker", "Two ways to do it. Should I keep the old endpoint?")
+log(sys.argv[1] + "/22222222-2222-2222-2222-222222222222.jsonl", "quiet", "Done, the tests pass.")
+PY
+board=$(python3 "$REPO/bin/fleet.py" json)
+col_of() { python3 -c "import json,sys;b=json.loads(sys.argv[1]);print(next(c['key'] for c in b['columns'] for x in c['cards'] if x['title']==sys.argv[2]))" "$board" "$1"; }
+is "a session that asks you something awaits orders" "$(col_of asker)" "waiting"
+has "and the card shows the question" "$board" "Should I keep the old endpoint?"
+is "a session that just finished is idle on the quest board" "$(col_of quiet)" "todo"
+curl -s -X POST "${url}/close" -d '{"id":"session:22222222-2222-2222-2222-222222222222"}' >/dev/null
+hasnt "Hide takes an idle session off the board" "$(python3 "$REPO/bin/fleet.py" json)" '"title": "quiet"'
+
 
 # ── backend impact: data model, impact, business rules ───────────────────────
 section "backend impact"
