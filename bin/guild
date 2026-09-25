@@ -26,6 +26,7 @@ usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
 guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light] [--plan]
+                   [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
                                     create a worktree + branch quest/<slug> and launch an adventurer
@@ -60,6 +61,7 @@ guild campaign                      the campaign board: every agent, ticket and 
 guild docket                        every open decision on one page: rule, hold until a date, send all (Ctrl-g g)
 guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
 guild harnesses                     the agent CLIs guild knows and their model tiers
+guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
                                     data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
@@ -280,6 +282,24 @@ cmd_click() { # range client path
     campaign) cmd_campaign >/dev/null ;;
     pins) cmd_pins menu "${2:-}" ;;
   esac
+}
+
+# A quest's dollar cap: show it, set it, or raise it (+N).
+cmd_budget() { # slug [N|+N]
+  local slug="${1:-}" value="${2:-}"
+  [ -n "$slug" ] || die "usage: guild budget <slug> [dollars | +dollars]"
+  need_quest "$slug"
+  if [ -n "$value" ]; then
+    python3 - "$(qdir "$slug")/meta.json" "$value" <<'PY'
+import json, sys
+path, value = sys.argv[1], sys.argv[2]
+m = json.load(open(path))
+cap = float(m.get("budget") or 0)
+m["budget"] = cap + float(value[1:]) if value.startswith("+") else float(value)
+json.dump(m, open(path, "w"), indent=2)
+PY
+  fi
+  python3 "$GUILD_REPO/bin/budget.py" show "$slug"
 }
 
 cmd_todo() { python3 "$GUILD_REPO/bin/fleet.py" todo "$@"; }
@@ -513,7 +533,7 @@ cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
-  local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch=""
+  local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -522,6 +542,8 @@ cmd_quest() {
       --model) model="$2"; shift 2 ;;
       --tier) tier="$2"; shift 2 ;;
       --plan) plan=1; shift ;;
+      --effort) effort="$2"; shift 2 ;;
+      --budget) budget="$2"; shift 2 ;;
       --brief) brief="$2"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
@@ -533,13 +555,20 @@ cmd_quest() {
   local hbin; hbin=$(harness bin "$harness") || exit 1
   command -v "$hbin" >/dev/null || die "$hbin is not installed"
   # A tier names the kind of work (plan, build, deep, light); the harness maps it to a model.
-  [ -z "$model" ] && [ -n "$tier" ] && { model=$(harness tier "$harness" "$tier") || exit 1; }
+  if [ -z "$model" ] && [ -n "$tier" ]; then
+    model=$(harness tier "$harness" "$tier") || exit 1
+    [ -n "$effort" ] || effort=$(harness tier "$harness" "$tier" --effort)
+  fi
   # --plan: think on the plan tier first, then build on the chosen model (or the build tier).
-  local build_model=""
+  local build_model="" build_effort=""
   if [ -n "$plan" ]; then
     build_model="${model:-$(harness tier "$harness" build)}" || exit 1
+    build_effort="${effort:-$(harness tier "$harness" "${tier:-build}" --effort)}"
     model=$(harness tier "$harness" plan) || exit 1
+    effort=$(harness tier "$harness" plan --effort)
   fi
+  # a dollar cap: --budget, else the default in dispatch.json ("budget_default"), else none
+  [ -n "$budget" ] || budget=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/local/dispatch.json')).get('budget_default',''))" 2>/dev/null || true)
   repo="$(cd "$repo" && git rev-parse --show-toplevel)" || die "not a git repo: $repo"
   local q; q="$(qdir "$slug")"
   [ -e "$q" ] && die "quest '$slug' already exists"
@@ -588,7 +617,8 @@ cmd_quest() {
 import json
 json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$branch",
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
-           "phase": "${plan:+plan}", "build_model": "$build_model",
+           "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
+           "effort": "$effort", "budget": float("${budget:-0}") or "",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
@@ -627,7 +657,7 @@ PLAN
     [ -n "$ghu" ] && echo "export GH_TOKEN=\"\$(gh auth token --user '$ghu')\""
     # The gh shim gates `gh pr create` for every harness, not only the ones with hooks.
     echo "export PATH='$GUILD_REPO/bin/shims':\$PATH"
-    echo "model=\"\$(cat '$q/model' 2>/dev/null)\""
+    echo "model=\"\$(cat '$q/model' 2>/dev/null)\" effort=\"\$(cat '$q/effort' 2>/dev/null)\""
     echo 'first="Start the quest."; [ "${GUILD_RESUME:-}" = 1 ] && first="You were interrupted by a restart. Check what you already did (git log, git status, the quest status), then carry on."'
     echo '[ "${GUILD_HANDOFF:-}" = 1 ] && first="The plan was approved, and you now run on the build model. Build what plan.md says, then finish the quest as usual."'
     harness launch "$harness" slug="$slug" qdir="$q" worktree="$wt" guild_home="$GUILD_HOME" \
@@ -638,11 +668,12 @@ PLAN
   } > "$q/launch.sh"
   chmod +x "$q/launch.sh"
   printf '%s\n' "$model" > "$q/model"
+  printf '%s\n' "$effort" > "$q/effort"
 
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
   open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg >/dev/null
-  echo "quest $slug: $harness${model:+/$model} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
+  echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
 cmd_roster() {
@@ -764,6 +795,7 @@ handoff() { # slug note
   build=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_model',''))")
   [ "$phase" = plan ] || die "quest $1 is not in a plan phase (start it with --plan)"
   printf '%s\n' "$build" > "$q/model"
+  python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_effort',''))" > "$q/effort"
   python3 - "$q/meta.json" <<'PY2'
 import json, sys
 m = json.load(open(sys.argv[1])); m["phase"] = "build"; m["model"] = m.get("build_model", "")
@@ -1056,6 +1088,7 @@ case "${1:-}" in
   pins) shift; cmd_pins "$@" ;;
   todo) shift; cmd_todo "$@" ;;
   click) shift; cmd_click "$@" ;;
+  budget) shift; cmd_budget "$@" ;;
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
   docket) shift; cmd_docket "$@" ;;

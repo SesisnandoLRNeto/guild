@@ -140,6 +140,18 @@ def answer_board(quest, board, payload):
     if meta.get("wrapup"):
         grade_wrapup(quest, board, meta, decision)
         return
+    if meta.get("kind") == "budget":         # raise the cap, or stop the quest
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import budget
+        what, cap = budget.apply(quest, decision["answers"].get("choice", "stop"))
+        if what == "raised":
+            record(quest, "working", f"budget raised to ${cap:g}")
+            nudge(quest, f"The guildmaster raised your budget to ${cap:g}. Carry on.")
+        else:
+            record(quest, "failed", f"stopped at the ${cap:g} budget" + (f": {decision['message']}" if decision["message"] else ""))
+            nudge(quest, "The guildmaster stopped this quest at its budget. Commit what is done, report "
+                         "`guild status <slug> failed \"stopped at budget\"` if you have not, and end your turn.")
+        return
     picked = ", ".join(f"{k}={v}" for k, v in decision["answers"].items()) or "message only"
     record(quest, "working", f"war table answered ({meta.get('title', board)}): {picked}")
     if meta.get("held_until"):           # it stopped waiting when you held it: wake it up

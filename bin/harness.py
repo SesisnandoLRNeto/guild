@@ -7,7 +7,7 @@ harnesses with the same shape, so a new CLI (Gemini, opencode, aider...) is conf
   harness.py list                         name, binary, hooks, tiers
   harness.py bin <name>                   the binary to look for on PATH
   harness.py hooks <name>                 exit 0 when the harness runs guild's hooks
-  harness.py tier <name> <tier>           the model a tier maps to on that harness
+  harness.py tier <name> <tier> [--effort] the model (or the effort) a tier maps to on that harness
   harness.py launch <name> KEY=VALUE...   bash lines that start (or resume) a quest
   harness.py tab <name> KEY=VALUE...      the command for a plain tab (resume=1 to reopen)
 
@@ -48,10 +48,27 @@ def model_args(h):
     return "${model:+" + flag.replace("{model}", '"$model"') + "}"
 
 
+def effort_args(h):
+    """The effort flag, only when $effort is set at run time."""
+    flag = h.get("effort_flag", "")
+    if not flag:
+        return ""
+    return "${effort:+" + flag.replace("{effort}", '"$effort"') + "}"
+
+
+def tier_of(h, tier):
+    """A tier is a model name, or {"model": ..., "effort": ...}."""
+    t = h.get("tiers", {}).get(tier)
+    if isinstance(t, dict):
+        return t.get("model", ""), t.get("effort", "")
+    return (t or ""), ""
+
+
 def expand(template, h, values):
     q = values.get("qdir", "")
     special = {
         "model_args": model_args(h),
+        "effort_args": effort_args(h),
         "prompt": f'"$(cat {shlex.quote(q + "/prompt.md")})"',
         "kickoff": f'"$first Your brief is in {q}/brief.md"',
         "prompt_and_kickoff": f'"$(cat {shlex.quote(q + "/prompt.md")})"$\'\\n\\n\'"$first Your brief is in {q}/brief.md"',
@@ -89,7 +106,7 @@ def main():
     cmd, rest = (sys.argv[1] if len(sys.argv) > 1 else "list"), sys.argv[2:]
     if cmd == "list":
         for name, h in sorted(load().items()):
-            tiers = " ".join(f"{t}={h['tiers'][t]}" for t in TIERS if t in h.get("tiers", {}))
+            tiers = " ".join(f"{t}={'/'.join(x for x in tier_of(h, t) if x)}" for t in TIERS if t in h.get("tiers", {}))
             print(f"{name:<12} bin={h.get('bin', name):<8} hooks={'yes' if h.get('hooks') else 'no ':<3} {tiers}")
     elif cmd == "bin":
         print(get(rest[0]).get("bin", rest[0]))
@@ -99,10 +116,10 @@ def main():
         name, tier = rest[0], rest[1]
         if tier not in TIERS:
             raise SystemExit(f"unknown tier {tier} ({', '.join(TIERS)})")
-        model = get(name).get("tiers", {}).get(tier)
+        model, effort = tier_of(get(name), tier)
         if not model:
             raise SystemExit(f"harness {name} has no model for tier {tier}; set it under tiers in harnesses.json")
-        print(model)
+        print(effort if "--effort" in rest else model)
     elif cmd == "launch":
         h, values = get(rest[0]), parse_kv(rest[1:])
         lines = env_lines(h)

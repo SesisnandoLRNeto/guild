@@ -599,6 +599,24 @@ curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"
 python3 "$REPO/bin/wartable.py" due; python3 "$REPO/bin/wartable.py" due
 is "a held decision comes back once when its date passes" "$(grep -c 'due again: Pick a color' "$GUILD_HOME/events.log")" "1"
 rm -rf "$dq"
+# effort per tier, and a dollar cap per quest
+echo x | "$GUILD" quest ef --repo "$REPO_A" --tier plan --budget 2 >/dev/null 2>&1
+is "a tier brings its effort" "$(cat "$GUILD_HOME/quests/ef/effort")" "high"
+has "and the launch passes it to the harness" "$(cat "$GUILD_HOME/quests/ef/launch.sh")" '--effort "$effort"'
+python3 -c "import json,time;json.dump({'at':time.time(),'costs':{'ef':2.5}},open('$GUILD_HOME/.cost-cache.json','w'))"
+out=$(echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | GUILD_QUEST=ef "$REPO/hooks/worker-guard.sh" 2>&1); code=$?
+is "past the cap, tools pause" "$code" "2"
+has "and the adventurer is told to wait for the docket" "$out" "Budget reached"
+echo '{"tool_name":"Bash","tool_input":{"command":"guild board wait 1 --timeout 60"}}' | GUILD_QUEST=ef "$REPO/hooks/worker-guard.sh" >/dev/null 2>&1
+is "guild commands still run, so it can wait for the answer" "$?" "0"
+bb=$(cat "$GUILD_HOME"/quests/ef/.budget-asked-2)
+has "the cap question is on the docket" "$(curl -s "${url%/campaign}/docket.json")" "reached its \$2 budget"
+curl -s -X POST "${url%/campaign}/docket/rule" -d "{\"quest\":\"ef\",\"board\":\"$bb\",\"answers\":{\"choice\":\"raise10\"}}" >/dev/null
+is "raising the cap applies at once" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/ef/meta.json'))['budget'])")" "12.0"
+echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | GUILD_QUEST=ef "$REPO/hooks/worker-guard.sh" >/dev/null 2>&1
+is "and tools run again" "$?" "0"
+rm -f "$GUILD_HOME/.cost-cache.json"; "$GUILD" close ef --force >/dev/null 2>&1
+
 
 # ── backend impact: data model, impact, business rules ───────────────────────
 section "backend impact"

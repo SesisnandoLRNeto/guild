@@ -294,6 +294,8 @@ guild quest typo      --repo ~/code/web --tier light < brief.md           # haik
 guild quest big-sweep --repo ~/code/app --harness openrouter --tier build < brief.md
 ```
 
+**Effort and budget.** Each tier also carries an effort level (Claude's `--effort`, Codex's reasoning effort): plan and deep run high, build medium, light low. Override with `--effort`. Every quest can have a dollar cap: `--budget 40`, a rule's `budget`, or `budget_default` in `dispatch.json` (30 in the example). Past the cap, the adventurer's tools pause (the hook still lets it run `guild` commands), and the docket asks you: raise by $10, $25 or $50, or stop. `guild budget <slug> [N | +N]` shows or changes a cap by hand. Claude Code's own `--max-budget-usd` works only in print mode, so guild enforces the cap itself, from the same cost numbers as `guild cost`.
+
 You rarely type these. The quartermaster matches each task to a rule in `~/.guild/local/dispatch.json` (copied from `config/dispatch.example.json`) and says which rule it used. The default rule is "build with a plan first". Change the map in `harnesses.json` and the rules in `dispatch.json`; name a model yourself and it wins.
 
 ## The cockpit

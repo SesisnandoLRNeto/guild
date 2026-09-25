@@ -21,6 +21,16 @@ v = i.get("command") if t == "Bash" else (i.get("file_path") or i.get("notebook_
 print(t, (v or "?").replace("\n", " "))
 ' <<<"$input")
 
+# The budget: past the quest's dollar cap, every tool waits for the guildmaster, except the
+# guild commands the adventurer needs to ask and to wait for the answer.
+case "$tool:$target" in
+  Bash:guild\ *|Bash:*/guild\ *) ;;
+  *)
+    if msg=$(python3 "$(dirname "$(readlink -f "$0")")/../bin/budget.py" check "$GUILD_QUEST" 2>/dev/null); then :; else
+      [ $? = 3 ] && { echo "Blocked: $msg" >&2; exit 2; }
+    fi ;;
+esac
+
 case "$tool" in
   Edit|Write|MultiEdit|NotebookEdit)
     case "$target" in
