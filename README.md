@@ -127,6 +127,8 @@ It counts the things worth learning from: **where your call differed from the ag
 
 The quartermaster reads that file before writing any brief, so a lesson written on Friday changes Monday's work. A lesson that stops showing up in the evidence gets removed.
 
+**Lessons need evidence.** A lesson is proposed with `guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest>: <quote>"`. It needs verbatim quotes from at least two different quests, and guild checks each quote really is in that quest's brief, report, trial, boards, your grade notes, events or session log. The proposal becomes a docket row; only what you accept reaches `lessons.md` (with its evidence), and a hook stops the quartermaster from writing that file by hand. `guild lessons` lists them all.
+
 ## Acceptance as checks (EDD)
 
 "The agent says it works" is not evidence. A brief's `Acceptance:` block can hold checks:

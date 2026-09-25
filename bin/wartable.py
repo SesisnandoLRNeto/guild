@@ -146,6 +146,12 @@ def answer_board(quest, board, payload):
     if meta.get("wrapup"):
         grade_wrapup(quest, board, meta, decision)
         return
+    if meta.get("kind") == "lesson":         # accepted lessons reach lessons.md, rejected ones are kept apart
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import lessons
+        status = lessons.decide(meta["lesson"], decision["answers"].get("lesson", "reject"), decision.get("message", ""))
+        record(quest, "working", f"lesson {status}: {meta.get('title', board)}")
+        return
     if meta.get("kind") == "budget":         # raise the cap, or stop the quest
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import budget

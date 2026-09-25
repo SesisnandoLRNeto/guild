@@ -747,6 +747,25 @@ hasnt "without the note's text" "$push" "SARA-999"
 has "and the push links to the remote docket" "$push" "k=k3y-for-tests"
 rm -f "$GUILD_HOME/local/remote.json"
 
+# lessons need quotes from two quests, checked, and your yes
+section "lessons"
+for s in la lb; do mkdir -p "$GUILD_HOME/quests/$s"; echo '{"slug":"'$s'","repo":"/tmp/r"}' > "$GUILD_HOME/quests/$s/meta.json"; done
+echo "Intent: add a greeting. The brief does not say where the file goes." > "$GUILD_HOME/quests/la/brief.md"
+printf '2026-09-25T10:00:00\tlb\tneeds-decision\twhich file name should the greeting use\n' >> "$GUILD_HOME/events.log"
+out=$("$GUILD" lesson propose "Name every file in the brief." --evidence "la: the brief does not say where the file goes" 2>&1)
+has "one quest is not enough" "$out" "at least two different quests"
+out=$("$GUILD" lesson propose "Name every file in the brief." --evidence "la: the brief does not say where the file goes" --evidence "lb: this sentence was never written anywhere" 2>&1)
+has "a quote that is not there is refused" "$out" "the quote is not in quest lb"
+out=$("$GUILD" lesson propose "Name every file in the brief." --evidence "la: the brief does not say where the file goes" --evidence "lb: which file name should the greeting use" 2>&1)
+has "two real quotes make a proposal" "$out" "on the docket"
+lb=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/lessons-proposed.json'))[0]['board'])")
+has "the lesson is a docket row" "$(curl -s "${url%/campaign}/docket.json")" "Keep this lesson?"
+curl -s -X POST "${url%/campaign}/docket/rule" -d "{\"quest\":\"lessons\",\"board\":\"$lb\",\"answers\":{\"lesson\":\"accept\"}}" >/dev/null
+has "accepted, it lands in lessons.md with its evidence" "$(cat "$GUILD_HOME/lessons.md")" 'la: "the brief does not say where the file goes"'
+out=$(echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$GUILD_HOME/lessons.md\"}}" | "$REPO/hooks/qm-guard.sh" 2>&1); code=$?
+is "the quartermaster cannot write lessons by hand" "$code" "2"
+rm -rf "$GUILD_HOME/quests/la" "$GUILD_HOME/quests/lb"
+
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
 CK="$TMP/cockpit-home"; mkdir -p "$CK/local"

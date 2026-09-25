@@ -23,6 +23,12 @@ print(row.get("tool_name", "?"), i.get("file_path") or i.get("notebook_path") or
 case "$tool" in Edit|Write|NotebookEdit|MultiEdit) ;; *) exit 0 ;; esac
 [ "$path" = "?" ] && exit 0
 
+# Lessons need evidence and the guildmaster's yes: they go through `guild lesson propose`.
+case "$path" in "$GUILD_HOME"/lessons.md|"$GUILD_HOME"/lessons-proposed.json)
+  echo "Blocked: lessons are not written by hand. Propose one with quotes from two quests: guild lesson propose \"<lesson>\" --evidence \"<quest>: <quote>\" --evidence \"<quest>: <quote>\". The guildmaster accepts it on the docket." >&2
+  exit 2 ;;
+esac
+
 # Guild's own state is always writable: briefs, boards, notes, its own config.
 case "$path" in "$GUILD_HOME"/*) exit 0 ;; esac
 

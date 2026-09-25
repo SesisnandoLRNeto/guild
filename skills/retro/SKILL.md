@@ -1,6 +1,6 @@
 ---
 name: retro
-description: Turn the guild's own history into lessons. Reads what quests cost, which recommendations the guildmaster overruled, which trials were skipped and where work stalled, then writes a few durable lessons to ~/.guild/lessons.md. Use when the guildmaster says retro, what did we learn, how are we doing, or at the end of a week.
+description: Turn the guild's own history into lessons. Reads what quests cost, which recommendations the guildmaster overruled, which trials were skipped and where work stalled, then proposes a few durable lessons, each backed by quotes from two quests, for the guildmaster to accept. Use when the guildmaster says retro, what did we learn, how are we doing, or at the end of a week.
 ---
 
 # Retro
@@ -28,23 +28,22 @@ Read a few real briefs and decisions behind the numbers (`guild log <slug>`). Co
 - **Acceptance.** First-pass rate by model (did the quest meet its own checks on the first real run?), weak checks (already green before any work), and code quests that had no checks at all. A model with a low first-pass rate on a task type is a routing lesson for `dispatch.json`; weak checks are a lesson about how acceptance gets written.
 - **Very short briefs.** Check whether they correlate with escalations.
 
-## 3. Write the lessons
+## 3. Propose the lessons
 
-Append to `~/.guild/lessons.md`, newest first, each one:
+You do not write `~/.guild/lessons.md` (a hook refuses it). You propose, with evidence, and the guildmaster accepts on the docket:
 
-```markdown
-## 2026-09-23
-- **Name the file names.** ask-e2e escalated to ask which file name to use; the brief said "a greeting file".
-  Evidence: ask-e2e, 1 escalation, recommendation overruled.
-  Apply: in a brief, name every artifact the quest will create.
+```bash
+guild lesson propose "In a brief, name every file the quest will create." \
+  --evidence "ask-e2e: which file name should the greeting use" \
+  --evidence "hello-test: the brief does not say where the file goes" \
+  --why "two quests escalated for a name the brief could have given"
 ```
 
 Rules for a lesson:
+- **Evidence from two different quests at least**, each a verbatim quote (12+ characters) from what that quest left behind: its brief, report, trial, boards, your grade notes, its events or its session log. Guild checks every quote and refuses the lesson when one is not really there. One quest is an anecdote, not a pattern.
 - It must change what someone does next time. "Be more careful" is not a lesson.
-- It must name its evidence: the quests it came from.
 - Three to five per retro, maximum. A long file is an unread file.
-- If a lesson repeats one already in the file, sharpen the old one instead of adding a second.
-- Remove a lesson when the evidence stops appearing. Write down that you removed it and why.
+- Each proposal is a row on the docket (accept or reject). Accepted ones land in `lessons.md` with their evidence; rejected ones stay in `guild lessons` so you do not propose them again.
 
 ## 4. Close the loop
 

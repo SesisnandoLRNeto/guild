@@ -64,6 +64,9 @@ guild harnesses                     the agent CLIs guild knows and their model t
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
 guild notify test                   check that notifications reach you (Mac, and ntfy if set)
+guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest>: <quote>"
+                                    a lesson with verbatim quotes from two quests; you accept it on the docket
+guild lessons                       proposed, accepted and rejected lessons
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
                                     data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
@@ -1105,6 +1108,9 @@ case "${1:-}" in
   click) shift; cmd_click "$@" ;;
   budget) shift; cmd_budget "$@" ;;
   remote) shift; cmd_remote "$@" ;;
+  lesson) shift; [ "${1:-}" = propose ] || die "usage: guild lesson propose \"<lesson>\" --evidence \"<quest>: <quote>\" (twice or more) [--why \"...\"]"
+          python3 "$GUILD_REPO/bin/lessons.py" "$@" ;;
+  lessons) shift; python3 "$GUILD_REPO/bin/lessons.py" list ;;
   notify) shift; python3 "$GUILD_REPO/bin/notify.py" "${@:-test}" ;;
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
