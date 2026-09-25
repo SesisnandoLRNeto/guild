@@ -70,8 +70,34 @@ def mark_tabs(quests):
                         "@guildstate", mark], capture_output=True)
 
 
-def draw(quests, width, spend=None):
-    lines = [f"{BOLD}fleet{RESET}", ""]
+def pinned():
+    """Pinned quests and sessions, from fleet.py, which reads the session logs."""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    try:
+        import fleet
+        return fleet.pin_rows()
+    except Exception:
+        return []
+
+
+PIN_COLORS = {"working": COLORS["working"], "your turn": COLORS["needs-decision"], "gone": DIM, "closed": DIM}
+
+
+def draw_pins(rows, width):
+    if not rows:
+        return []
+    lines = [f"{BOLD}pinned{RESET}  {DIM}^g P{RESET}"]
+    for r in rows:
+        state = r["state"]
+        color = PIN_COLORS.get(state.split(" +")[0], COLORS.get(state, DIM))
+        where = "" if r["open"] else f" {DIM}(closed tab){RESET}"
+        lines.append(f"  {color}●{RESET} {r['name']}{where}")
+        lines.append(f"    {DIM}{SHORT_STATE.get(state, state)}{RESET}")
+    return lines + [""]
+
+
+def draw(quests, width, spend=None, pins=None):
+    lines = draw_pins(pins or [], width) + [f"{BOLD}fleet{RESET}", ""]
     by_repo = {}
     for q in quests:
         by_repo.setdefault(os.path.basename(q["repo"]), []).append(q)
@@ -183,7 +209,8 @@ def main():
         quests = read_quests()
         mark_tabs(quests)
         spend = costs()
-        sys.stdout.write("\033[H\033[2J" + "\n".join(fit(l, width) for l in draw(quests, width, spend)) + "\n")
+        rows = draw(quests, width, spend, pinned())
+        sys.stdout.write("\033[H\033[2J" + "\n".join(fit(l, width) for l in rows) + "\n")
         sys.stdout.flush()
         time.sleep(interval)
 

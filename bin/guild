@@ -25,14 +25,14 @@ current_quest() { echo "${1:-${GUILD_QUEST:-}}"; }
 usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
-guild quest <slug> --repo PATH [--base REF] [--harness claude|openrouter|codex] [--model M]
+guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light] [--plan]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
 guild status <slug> <state> [note] [--no-wrapup]
-                                    set state: working|blocked|needs-decision|done|failed|stopped
+                                    set state: working|blocked|needs-decision|done|failed|stopped|planned
                                     (a code quest needs a wrap-up board before done; --no-wrapup opts out)
 guild wait [timeout-seconds]        block until a new event arrives, then print it (default 1800s)
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
@@ -52,7 +52,13 @@ guild board list | guild board url   boards and their state, or the war table ad
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
                                     put the question on the war table as a page and open it (inside a quest)
 guild pool list|drop [repo]          the warm worktree pool quests are started from
-guild new [dir] [name]              a plain Claude session in a new cockpit tab (Ctrl-g n, or click + claude)
+guild new [dir] [name] [--harness H] [--model M | --tier T] [--resume SESSION]
+                                    a plain agent session in a new cockpit tab (Ctrl-g n, or click + claude)
+guild pin [tab] | unpin [tab]       keep a quest or session at the top of the sidebar (Ctrl-g p toggles)
+guild pins [menu]                   the pinned list; menu jumps to one (Ctrl-g P)
+guild campaign                      the campaign board: every agent, ticket and to-do as a kanban (Ctrl-g k)
+guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
+guild harnesses                     the agent CLIs guild knows and their model tiers
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
@@ -148,18 +154,84 @@ cmd_retro() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" retro
 
 cmd_doctor() { GUILD_TMUX_SOCKET="$SOCKET" GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/doctor.py" "$@"; }
 
-# A plain Claude session in its own cockpit tab, for work that is not a quest: reading,
-# planning, a quick question. Named after the folder unless you give it a name.
+# A plain agent session in its own cockpit tab, for work that is not a quest: reading,
+# planning, a spec, something personal. Named after the folder unless you give it a name.
+# Its session id is kept in ~/.guild/tabs, so a pin can reopen it after a restart.
 cmd_new() {
-  local dir="${1:-}" name="${2:-}"
-  [ -n "$dir" ] || dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
-  dir="$(cd "$dir" 2>/dev/null && pwd)" || die "no such folder: ${1:-}"
-  [ -n "$name" ] || name="claude:$(basename "$dir")"
+  local dir="" name="" harness_name="claude" model="" tier="" resume=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --harness) harness_name="$2"; shift 2 ;;
+      --model) model="$2"; shift 2 ;;
+      --tier) tier="$2"; shift 2 ;;
+      --resume) resume="$2"; shift 2 ;;
+      *) if [ -z "$dir" ]; then dir="$1"; else name="$1"; fi; shift ;;
+    esac
+  done
   tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+  local sid="" tabfile=""
+  if [ -n "$resume" ]; then        # reopen a known session: its tab record, or its log, says where
+    sid="$resume"
+    tabfile=$(grep -l "\"$sid\"" "$GUILD_HOME"/tabs/*.json 2>/dev/null | head -1 || true)
+    if [ -n "$tabfile" ]; then
+      eval "$(python3 -c "import json,shlex;t=json.load(open('$tabfile'));print('dir=%s name=%s harness_name=%s' % (shlex.quote(t['dir']), shlex.quote(t['name']), shlex.quote(t.get('harness','claude'))))")"
+    else
+      eval "$(python3 -c "import sys,shlex;sys.path.insert(0,'$GUILD_REPO/bin');import fleet;s=fleet.session_by_id('$sid') or {};print('dir=%s name=%s' % (shlex.quote(s.get('cwd','')), shlex.quote(s.get('name') or 'claude:$sid'[:15])))")"
+    fi
+    if tm list-windows -t "$SESSION" -F '#W' | grep -qx "$name"; then tm select-window -t "$SESSION:$name"; return; fi
+  fi
+  [ -n "$dir" ] || dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
+  dir="$(cd "$dir" 2>/dev/null && pwd)" || die "no such folder: $dir"
+  [ -z "$model" ] && [ -n "$tier" ] && { model=$(harness tier "$harness_name" "$tier") || exit 1; }
+  [ -n "$name" ] || name="$harness_name:$(basename "$dir")"
   local n=1 win="$name"
-  while tm list-windows -t "$SESSION" -F '#W' | grep -qx "$win"; do n=$((n + 1)); win="$name-$n"; done
-  tm new-window -t "$SESSION" -n "$win" -c "$dir" "$(calm_env)claude -n '$win'; exec \$SHELL"
+  if [ -z "$resume" ]; then
+    while tm list-windows -t "$SESSION" -F '#W' | grep -qx "$win"; do n=$((n + 1)); win="$name-$n"; done
+    sid=$(uuidgen | tr 'A-Z' 'a-z')
+  fi
+  local cmd; cmd=$(harness tab "$harness_name" name="$win" session="$sid" ${resume:+resume=1}) || exit 1
+  mkdir -p "$GUILD_HOME/tabs"
+  python3 -c "import json,sys;json.dump(dict(zip(['name','dir','harness','session','model','created'],sys.argv[1:7])),open(sys.argv[7],'w'),indent=2)" \
+    "$win" "$dir" "$harness_name" "$sid" "$model" "$(now)" "$GUILD_HOME/tabs/$(echo "$win" | tr ':/' '__').json"
+  tm new-window -t "$SESSION" -n "$win" -c "$dir" "model='$model'; $(calm_env | sed 's/^\(.\)/export \1/;s/ $/;/')$cmd; exec \$SHELL"
   tm select-window -t "$SESSION:$win"
+}
+
+# Pins keep the sessions you care about at the top of the sidebar and the campaign board.
+cmd_pin() {
+  local how="${1:-toggle}" target="${2:-}"
+  [ -n "$target" ] || target=$(tm display-message -p '#W' 2>/dev/null) || die "which tab? guild pin <tab or slug>"
+  local out; out=$(python3 "$GUILD_REPO/bin/fleet.py" "$how" "$target") || exit 1
+  echo "$out"
+  tm display-message "$out" 2>/dev/null || true
+}
+
+# The pinned list as a tmux menu: pick one to jump to it, or to reopen it when its tab is gone.
+cmd_pins() {
+  if [ "${1:-}" != menu ]; then python3 "$GUILD_REPO/bin/fleet.py" pins; return; fi
+  local args=() key name state tab n=0
+  while IFS=$'\t' read -r key name state tab; do
+    n=$((n + 1))
+    local go
+    case "$key" in
+      quest:*) go="run-shell \"guild revive '${key#quest:}' >/dev/null; tmux -L $SOCKET select-window -t '$SESSION:${key#quest:}'\"" ;;
+      session:*) if [ -n "$tab" ]; then go="select-window -t '$SESSION:$tab'"; else go="run-shell \"guild new --resume '${key#session:}'\""; fi ;;
+      *) go="select-window -t '$SESSION:${key#tab:}'" ;;
+    esac
+    args+=("$name  ($state)" "$n" "$go")
+  done < <(python3 "$GUILD_REPO/bin/fleet.py" pins)
+  [ ${#args[@]} -gt 0 ] || { tm display-message "nothing pinned yet: Ctrl-g p pins the current tab"; return; }
+  tm display-menu -T "#[bold] pinned " -x C -y C "${args[@]}"
+}
+
+cmd_todo() { python3 "$GUILD_REPO/bin/fleet.py" todo "$@"; }
+
+# The campaign board: quests, sessions, subagents, tickets and to-dos as one kanban.
+cmd_campaign() {
+  local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+  local url="http://127.0.0.1:$port/campaign"
+  echo "$url"
+  [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
 }
 
 cmd_shot() { python3 "$GUILD_REPO/bin/shot.py" "$@"; }
@@ -251,7 +323,7 @@ os.replace(tmp, path)
 PY
 }
 
-harness_bin() { case "$1" in codex) echo codex ;; *) echo claude ;; esac; }
+harness() { python3 "$GUILD_REPO/bin/harness.py" "$@"; }   # harnesses are config: config/harnesses.json
 
 # Version managers (jenv, nvm, asdf, pyenv) read a pin file from the working directory.
 # Those files are often untracked, so a fresh worktree would not have one, and the manager
@@ -365,13 +437,15 @@ cmd_quest() {
   local slug="${1:-}"; shift || true
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
-  local repo="" base="" harness="claude" model="" brief="" ticket="" fresh="" branch=""
+  local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
       --base) base="$2"; shift 2 ;;
       --harness) harness="$2"; shift 2 ;;
       --model) model="$2"; shift 2 ;;
+      --tier) tier="$2"; shift 2 ;;
+      --plan) plan=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
@@ -380,8 +454,16 @@ cmd_quest() {
     esac
   done
   [ -n "$repo" ] || die "quest needs --repo"
-  case "$harness" in claude|openrouter|codex) ;; *) die "unknown harness $harness (claude, openrouter or codex)" ;; esac
-  command -v "$(harness_bin "$harness")" >/dev/null || die "$(harness_bin "$harness") is not installed"
+  local hbin; hbin=$(harness bin "$harness") || exit 1
+  command -v "$hbin" >/dev/null || die "$hbin is not installed"
+  # A tier names the kind of work (plan, build, deep, light); the harness maps it to a model.
+  [ -z "$model" ] && [ -n "$tier" ] && { model=$(harness tier "$harness" "$tier") || exit 1; }
+  # --plan: think on the plan tier first, then build on the chosen model (or the build tier).
+  local build_model=""
+  if [ -n "$plan" ]; then
+    build_model="${model:-$(harness tier "$harness" build)}" || exit 1
+    model=$(harness tier "$harness" plan) || exit 1
+  fi
   repo="$(cd "$repo" && git rev-parse --show-toplevel)" || die "not a git repo: $repo"
   local q; q="$(qdir "$slug")"
   [ -e "$q" ] && die "quest '$slug' already exists"
@@ -429,7 +511,8 @@ cmd_quest() {
   python3 - "$q/meta.json" <<PY
 import json
 json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$branch",
-           "base": "$base", "harness": "$harness", "model": "$model",
+           "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
+           "phase": "${plan:+plan}", "build_model": "$build_model",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
@@ -449,6 +532,15 @@ The guildmaster wrote down what this repo accepts and what it resists: \`$vision
 When your change goes against it, or it does not say, stop and put the question on the war table. The vision is the guildmaster's, not yours to reinterpret.
 VISION
   fi
+  [ -n "$plan" ] && cat >> "$q/prompt.md" <<PLAN
+
+## You start in the plan phase
+
+You run on a planning model now. Do not change code yet.
+1. Read the brief and the code, then write the plan to \`$q/plan.md\`: the steps, the files, the risks, how you will prove it works.
+2. Put the plan on the war table for the guildmaster: \`guild ask "Approve the plan?" --detail "<a short summary, and the path to plan.md>" --option "go=Approve: build it" --option "change=Change it: I will say what"\`, then wait with \`guild board wait\`.
+3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If a change is asked, update the plan and ask again.
+PLAN
 
   { echo "#!/usr/bin/env bash"
     echo "cd '$wt'"
@@ -459,32 +551,17 @@ VISION
     [ -n "$ghu" ] && echo "export GH_TOKEN=\"\$(gh auth token --user '$ghu')\""
     # The gh shim gates `gh pr create` for every harness, not only the ones with hooks.
     echo "export PATH='$GUILD_REPO/bin/shims':\$PATH"
-    echo 'resume=""; [ "${GUILD_RESUME:-}" = 1 ] && resume="--continue"'
+    echo "model=\"\$(cat '$q/model' 2>/dev/null)\""
     echo 'first="Start the quest."; [ "${GUILD_RESUME:-}" = 1 ] && first="You were interrupted by a restart. Check what you already did (git log, git status, the quest status), then carry on."'
-    case "$harness" in
-      claude)
-        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \$resume \\"
-        echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
-        echo "  \"\$first Your brief is in $q/brief.md\"" ;;
-      openrouter)
-        # Claude Code speaks its own protocol to OpenRouter's Anthropic-compatible endpoint.
-        # ANTHROPIC_API_KEY must be empty, or Claude Code goes to Anthropic instead.
-        [ -f "$GUILD_HOME/local/env" ] && echo "set -a; . '$GUILD_HOME/local/env'; set +a"
-        echo "[ -n \"\${OPENROUTER_API_KEY:-}\" ] || { echo 'guild: no OPENROUTER_API_KEY (put it in $GUILD_HOME/local/env)'; exec \$SHELL; }"
-        echo "export ANTHROPIC_BASE_URL='https://openrouter.ai/api' ANTHROPIC_AUTH_TOKEN=\"\$OPENROUTER_API_KEY\" ANTHROPIC_API_KEY=''"
-        echo "claude --settings '$GUILD_HOME/worker-settings.json' --permission-mode auto -n 'quest:$slug' \$resume \\"
-        echo "  --add-dir '$q' ${model:+--model '$model'} --append-system-prompt \"\$(cat '$q/prompt.md')\" \\"
-        echo "  \"\$first Your brief is in $q/brief.md\"" ;;
-      codex)
-        # workspace-write keeps Codex inside the worktree; --add-dir lets it report to guild.
-        echo '[ "${GUILD_RESUME:-}" = 1 ] && exec codex resume --last'
-        echo "codex -C '$wt' --add-dir '$GUILD_HOME' -s workspace-write -a never ${model:+-m '$model'} \\"
-        echo "  \"\$(cat '$q/prompt.md')"$'\n\n'"Start the quest. Your brief is in $q/brief.md\"" ;;
-      *) die "unknown harness $harness (claude, openrouter or codex)" ;;
-    esac
+    echo '[ "${GUILD_HANDOFF:-}" = 1 ] && first="The plan was approved, and you now run on the build model. Build what plan.md says, then finish the quest as usual."'
+    harness launch "$harness" slug="$slug" qdir="$q" worktree="$wt" guild_home="$GUILD_HOME" \
+      settings="$GUILD_HOME/worker-settings.json" || exit 1
+    # Any harness, hooks or not: if it exits while the quest still says working, say so.
+    echo "[ \"\$(cut -f1 '$q/status')\" = working ] && '$GUILD_REPO/bin/guild' status '$slug' stopped 'the $harness process exited without a report'"
     echo "exec \$SHELL"
   } > "$q/launch.sh"
   chmod +x "$q/launch.sh"
+  printf '%s\n' "$model" > "$q/model"
 
   printf 'working\tlaunched\t%s\n' "$(now)" > "$q/status"
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
@@ -563,7 +640,8 @@ cmd_status() {
     esac
   done
   need_quest "$slug"
-  case "$state" in working|blocked|needs-decision|done|failed|stopped) ;; *) die "bad state $state" ;; esac
+  case "$state" in working|blocked|needs-decision|done|failed|stopped|planned) ;; *) die "bad state $state" ;; esac
+  [ "$state" = planned ] && { handoff "$slug" "$note"; return; }
   # Every decision reaches the guildmaster as a page on the war table, never as a line of
   # terminal text. Without a board, guild builds one from the question itself.
   # Did this quest change code? Then "done" owes the guildmaster a wrap-up page.
@@ -588,6 +666,32 @@ cmd_status() {
   [ "$state" = done ] && [ -n "${GUILD_NO_WRAPUP:-}" ] && note="$note (no wrap-up)"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
+}
+
+# The end of a quest's plan phase: same conversation, build model. The restart runs from
+# the tmux server a moment later, because this command runs inside the pane it replaces.
+handoff() { # slug note
+  local q; q="$(qdir "$1")"
+  local phase build
+  phase=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('phase',''))")
+  build=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_model',''))")
+  [ "$phase" = plan ] || die "quest $1 is not in a plan phase (start it with --plan)"
+  printf '%s\n' "$build" > "$q/model"
+  python3 - "$q/meta.json" <<'PY2'
+import json, sys
+m = json.load(open(sys.argv[1])); m["phase"] = "build"; m["model"] = m.get("build_model", "")
+json.dump(m, open(sys.argv[1], "w"), indent=2)
+# the resumed session reads prompt.md again: it must not still say "do not change code"
+p = sys.argv[1].replace("meta.json", "prompt.md")
+text = open(p).read()
+cut = text.find("## You start in the plan phase")
+if cut >= 0:
+    open(p, "w").write(text[:cut] + "## The plan phase is over\n\nThe guildmaster approved `plan.md`. Build it now, on the build model, then finish the quest as usual.\n")
+PY2
+  printf 'working\t%s\t%s\n' "plan approved, building on $build" "$(now)" > "$q/status"
+  event "$1" planned "${2:-plan approved} -> building on $build"
+  tm run-shell -b "sleep 2; tmux -L '$SOCKET' respawn-window -k -t '$SESSION:$1' \"GUILD_RESUME=1 GUILD_HANDOFF=1 bash '$q/launch.sh'\"" 2>/dev/null || true
+  echo "plan phase over: $1 restarts on $build in a moment"
 }
 
 # Boards that are not about a real quest (the quartermaster's own questions, a repo's
@@ -805,6 +909,12 @@ case "${1:-}" in
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;
   new) shift; cmd_new "$@" ;;
+  pin) shift; cmd_pin toggle "${1:-}" ;;
+  unpin) shift; cmd_pin unpin "${1:-}" ;;
+  pins) shift; cmd_pins "$@" ;;
+  todo) shift; cmd_todo "$@" ;;
+  campaign) shift; cmd_campaign "$@" ;;
+  harnesses) harness list ;;
   layout) cmd_layout ;;
   check) shift; cmd_check "$@" ;;
   vision) shift; cmd_vision "$@" ;;

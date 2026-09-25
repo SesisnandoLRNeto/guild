@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guild Campaign</title>
+<style>
+  :root {
+    --wood-1: #2a1d14; --wood-2: #22170f; --wood-line: #1a110b; --frame: #4a3322;
+    --sign: #5b3e28; --sign-text: #f3e2bd; --hint: #c9b08a;
+    --paper: #efe2c2; --paper-2: #e4d3ab; --ink: #2d2216; --ink-dim: #6e5a41; --rule: #cdb88e;
+    --gold: #d9a441; --epic: #8e5bd1; --rare: #3f7fc4; --common: #7c7468;
+    --working: #3f8f5a; --turn: #c07a1c; --bad: #b0412e; --done: #5d7a3a;
+    --pin: #b3372c; --glow: rgba(217, 164, 65, .35);
+    --body-bg: #1b120c;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --wood-1: #b08a5e; --wood-2: #a47f54; --wood-line: #8d6a44; --frame: #7a5a3a;
+      --sign: #6b4a2f; --hint: #f1e3c4; --body-bg: #a07a50; --glow: rgba(217, 164, 65, .5);
+    }
+  }
+  :root[data-theme="light"] {
+    --wood-1: #b08a5e; --wood-2: #a47f54; --wood-line: #8d6a44; --frame: #7a5a3a;
+    --sign: #6b4a2f; --hint: #f1e3c4; --body-bg: #a07a50; --glow: rgba(217, 164, 65, .5);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink); background-color: var(--body-bg);
+    background-image:
+      radial-gradient(ellipse at 50% 0%, rgba(255, 190, 110, .10), transparent 60%),
+      repeating-linear-gradient(0deg, var(--wood-1) 0 46px, var(--wood-line) 46px 48px, var(--wood-2) 48px 94px, var(--wood-line) 94px 96px);
+    font: 14px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  header > div:first-child { min-width: 0; }
+  header { padding: 22px 24px 8px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 28px; }
+  h1 {
+    margin: 0; color: var(--sign-text); font-size: 28px; letter-spacing: .06em; font-variant: small-caps;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+  }
+  .sub { color: var(--hint); margin: 2px 0 0; font-style: italic; }
+  .tally { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+  .banner {
+    background: var(--sign); color: var(--sign-text); padding: 6px 12px 8px; border-radius: 3px 3px 10px 10px;
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25), 0 3px 8px rgba(0, 0, 0, .35); text-align: center; min-width: 92px;
+  }
+  .banner b { display: block; font-size: 20px; line-height: 1.1; }
+  .banner span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--hint); }
+  .toolbar { padding: 4px 24px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--hint); font-size: 12px; }
+  .chip {
+    border: 1px solid var(--frame); background: rgba(0, 0, 0, .18); color: var(--sign-text);
+    padding: 3px 10px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .chip[aria-pressed="true"] { background: var(--gold); color: #2a1d14; border-color: var(--gold); }
+  .toolbar .note { margin-left: auto; font-style: italic; }
+  main {
+    display: grid; grid-template-columns: repeat(5, minmax(230px, 1fr)); gap: 14px; padding: 0 24px 32px; align-items: start;
+  }
+  .column {
+    background: rgba(0, 0, 0, .22); border: 2px solid var(--frame); border-radius: 6px; padding: 0 10px 12px;
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, .35); min-height: 180px;
+  }
+  .sign {
+    margin: -2px -12px 12px; padding: 9px 12px 8px; background: var(--sign); border-radius: 6px 6px 2px 2px;
+    color: var(--sign-text); box-shadow: 0 3px 0 rgba(0, 0, 0, .3); position: relative;
+  }
+  .sign h2 { margin: 0; font-size: 16px; font-variant: small-caps; letter-spacing: .05em; display: flex; justify-content: space-between; }
+  .sign h2 .n { align-self: flex-start; background: rgba(0, 0, 0, .3); border-radius: 999px; padding: 0 8px; font-size: 13px; }
+  .sign p { margin: 1px 0 0; font-size: 12px; color: var(--hint); font-style: italic; }
+  .sign::before, .sign::after {
+    content: ""; position: absolute; top: 8px; width: 6px; height: 6px; border-radius: 50%;
+    background: #2a1d14; box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .2);
+  }
+  .sign::before { left: 5px; } .sign::after { right: 5px; }
+  .empty { color: var(--hint); font-style: italic; text-align: center; padding: 18px 4px; font-size: 13px; }
+
+  .card {
+    position: relative; background: linear-gradient(170deg, var(--paper), var(--paper-2)); border-radius: 3px;
+    padding: 10px 12px 10px; margin: 0 0 12px; box-shadow: 0 2px 0 rgba(0, 0, 0, .15), 0 6px 14px rgba(0, 0, 0, .35);
+    transform: rotate(var(--tilt, 0deg)); transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .card:hover { transform: rotate(0deg) translateY(-2px); box-shadow: 0 2px 0 rgba(0, 0, 0, .15), 0 10px 20px rgba(0, 0, 0, .4); }
+  .card.pinned { box-shadow: 0 0 0 2px var(--pin), 0 6px 14px rgba(0, 0, 0, .35); }
+  .card.working { box-shadow: 0 0 0 2px var(--glow), 0 6px 14px rgba(0, 0, 0, .35); }
+  .card.pinned.working { box-shadow: 0 0 0 2px var(--pin), 0 0 16px var(--glow); }
+  .pinhead {
+    position: absolute; top: -6px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #e86a5c, var(--pin) 60%, #6d1a13); box-shadow: 0 2px 2px rgba(0, 0, 0, .4);
+  }
+  .top { display: flex; gap: 8px; align-items: flex-start; }
+  .icon { flex: none; width: 22px; height: 22px; color: var(--ink-dim); margin-top: 1px; }
+  .title { font-weight: 700; font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; flex: 1; }
+  .kind { display: block; font-weight: 400; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+  .seal {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff5dc;
+    font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+    background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .35), transparent 45%), var(--seal, var(--common));
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, .12), 0 2px 3px rgba(0, 0, 0, .35); transform: rotate(-8deg);
+  }
+  .seal.legendary { --seal: var(--gold); } .seal.epic { --seal: var(--epic); }
+  .seal.rare { --seal: var(--rare); } .seal.common { --seal: var(--common); }
+  .what { margin: 6px 0 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+  .last { margin: 4px 0 0; color: var(--ink-dim); font-size: 12px; font-style: italic; overflow-wrap: anywhere; }
+  .meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--ink-dim); align-items: center; }
+  .state { font-weight: 700; display: inline-flex; align-items: center; gap: 5px; color: var(--ink); }
+  .state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--common)); }
+  .state.working { --dot: var(--working); } .state.working::before { animation: breathe 1.6s ease-in-out infinite; }
+  .state.turn { --dot: var(--turn); } .state.bad { --dot: var(--bad); } .state.done { --dot: var(--done); }
+  @keyframes breathe { 50% { opacity: .35; transform: scale(.75); } }
+  .party { margin: 8px 0 0; padding: 6px 0 0; border-top: 1px dashed var(--rule); list-style: none; }
+  .party li { font-size: 12px; display: flex; gap: 6px; align-items: baseline; }
+  .party li b { font-variant: small-caps; color: var(--epic); }
+  .party li span { color: var(--ink-dim); overflow-wrap: anywhere; }
+  .actions { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .actions a, .actions button {
+    font: inherit; font-size: 12px; color: var(--ink); background: rgba(255, 255, 255, .35); border: 1px solid var(--rule);
+    border-radius: 3px; padding: 2px 8px; cursor: pointer; text-decoration: none;
+  }
+  .actions a:hover, .actions button:hover { background: var(--gold); border-color: #a87a25; }
+  .actions .go { background: var(--sign); color: var(--sign-text); border-color: var(--sign); }
+  .post { display: flex; gap: 6px; margin-bottom: 12px; }
+  .post input {
+    flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 3px; border: 1px solid var(--rule);
+    background: var(--paper); color: var(--ink);
+  }
+  .post button { font: inherit; font-size: 13px; background: var(--gold); border: 0; border-radius: 3px; padding: 0 10px; cursor: pointer; color: #2a1d14; }
+  .more { width: 100%; font: inherit; font-size: 12px; background: transparent; border: 1px dashed var(--frame); color: var(--hint); border-radius: 3px; padding: 4px; cursor: pointer; }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--sign); color: var(--sign-text);
+    padding: 8px 14px; border-radius: 4px; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.on { opacity: 1; }
+  @media (max-width: 1200px) { main { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 820px) {
+    header, .toolbar { padding-left: 16px; padding-right: 16px; }
+    main { grid-template-columns: minmax(0, 1fr); padding: 0 16px 24px; }
+    .tally { margin-left: 0; }
+    .toolbar .note { margin-left: 0; width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .card, .state.working::before { transition: none; animation: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>The Guild Campaign</h1>
+    <p class="sub">Every quest, every adventurer and every posted ticket, as it stands right now.</p>
+  </div>
+  <div class="tally">
+    <div class="banner"><b id="n-agents">0</b><span>on the road</span></div>
+    <div class="banner"><b id="n-waiting">0</b><span>await you</span></div>
+    <div class="banner"><b id="n-todo">0</b><span>posted</span></div>
+  </div>
+</header>
+<div class="toolbar" role="toolbar" aria-label="Filter cards">
+  <button class="chip" data-kind="all" aria-pressed="true">All</button>
+  <button class="chip" data-kind="quest" aria-pressed="false">Quests</button>
+  <button class="chip" data-kind="session" aria-pressed="false">Sessions</button>
+  <button class="chip" data-kind="jira" aria-pressed="false">Tickets</button>
+  <button class="chip" data-kind="todo" aria-pressed="false">To-dos</button>
+  <span class="note" id="note"></span>
+</div>
+<main id="board" aria-live="polite"></main>
+<div class="toast" id="toast" role="status"></div>
+
+<template id="icons">
+  <!-- small line icons, drawn for this page -->
+  <svg data-icon="quest" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5 20.5 3.5 20.5 9.5 10 20 4 14z"/><path d="M7 17 3.5 20.5"/><path d="M5 12l7 7"/></svg>
+  <svg data-icon="session" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 7.5 8.5c-.8 1-1.2 2.3-1.2 3.6V21h11.4v-8.9c0-1.3-.4-2.6-1.2-3.6z"/><circle cx="12" cy="12" r="2.3"/></svg>
+  <svg data-icon="orchestrator" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 18.5h17l-1.5-10-4.5 4-2.5-7-2.5 7-4.5-4z"/><path d="M4 21h16"/></svg>
+  <svg data-icon="jira" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H8a2 2 0 0 1-2-2z"/><path d="M6 4a2 2 0 0 0-2 2v2h2"/><path d="M9.5 9h6M9.5 12.5h6M9.5 16h3.5"/></svg>
+  <svg data-icon="todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 3.5C12 4.5 7 10 5 20"/><path d="M20 3.5c-1 5-4 8.5-9.5 9.5"/><path d="M4 20.5h6"/></svg>
+</template>
+
+<script>
+const COLS_LIMIT = { done: 6 };
+let data = null, filter = "all", expanded = {}, busy = false;
+try { filter = localStorage.getItem("campaign-filter") || "all"; } catch (e) {}
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const icon = (name) => { const s = $(`[data-icon="${name}"]`, $("#icons").content); return s ? s.outerHTML.replace("<svg", '<svg class="icon" aria-hidden="true"') : ""; };
+
+function ago(since) {
+  if (!since) return "";
+  const t = new Date(since.length === 19 ? since : since.replace("Z", "")).getTime();
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
+  return `${Math.round(m / 1440)}d ago`;
+}
+
+function stateClass(s) {
+  if (["working", "checks-green", "checks-baseline", "planned", "message", "acceptance"].includes(s)) return "working";
+  if (["your turn", "needs-decision", "to do"].includes(s)) return "turn";
+  if (["blocked", "failed", "stopped", "checks-red"].includes(s)) return "bad";
+  if (["done", "closed", "trial-pass"].includes(s)) return "done";
+  return "";
+}
+const STATE_WORD = { "needs-decision": "your call", "checks-green": "checks green", "checks-red": "checks red",
+  "checks-baseline": "baseline", "trial-pass": "trial passed", "trial-skip": "trial skipped", "planned": "building" };
+
+function kindLabel(c) {
+  if (c.orchestrator) return "orchestrator";
+  if (c.kind === "quest") return c.phase === "plan" ? "quest, planning" : "quest";
+  return { session: "session", jira: "ticket", todo: "your to-do" }[c.kind] || c.kind;
+}
+
+function tilt(id) { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 5) - 2) * 0.35; }
+
+function cardHtml(c) {
+  const sc = stateClass(c.state);
+  const seal = c.model ? `<div class="seal ${c.rank || "common"}" title="${esc(c.model)}${c.rank ? " (" + c.rank + ")" : ""}">${esc(c.model.replace(/^(opus|sonnet|haiku|fable).*$/, "$1").slice(0, 6))}</div>` : "";
+  const meta = [`<span class="state ${sc}">${esc(STATE_WORD[c.state] || c.state)}</span>`];
+  if (c.ticket && c.ticket !== c.title) meta.push(`<span>${esc(c.ticket)}</span>`);
+  if (c.repo) meta.push(`<span>${esc(c.repo)}</span>`);
+  if (c.harness && c.harness !== "claude") meta.push(`<span>${esc(c.harness)}</span>`);
+  if (c.since) meta.push(`<span>${esc(ago(c.since))}</span>`);
+  const party = (c.agents || []).length
+    ? `<ul class="party" aria-label="Companions">${c.agents.map((a) => `<li><b>${esc(a.type)}</b><span>${esc(a.what)}</span></li>`).join("")}</ul>` : "";
+  const acts = [];
+  if (c.tab) acts.push(`<button class="go" data-act="jump" data-tab="${esc(c.tab)}">Go to tab</button>`);
+  else if (c.kind === "session" && c.state !== "working") acts.push(`<button data-act="jump" data-session="${esc(c.id.slice(8))}">Reopen in cockpit</button>`);
+  for (const l of c.links || []) acts.push(`<a href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`);
+  if (c.kind === "todo") acts.push(c.state === "done"
+    ? `<button data-act="drop" data-n="${c.n}">Remove</button>`
+    : `<button data-act="done" data-n="${c.n}">Mark done</button>`);
+  if (c.kind !== "todo" && !c.id.startsWith("closed:"))
+    acts.push(`<button data-act="pin" data-id="${esc(c.id)}" data-name="${esc(c.title)}" data-tab="${esc(c.tab || "")}" data-on="${c.pinned ? 0 : 1}">${c.pinned ? "Unpin" : "Pin"}</button>`);
+  return `<article class="card ${c.pinned ? "pinned" : ""} ${sc === "working" ? "working" : ""}" style="--tilt:${tilt(c.id)}deg" data-kind="${esc(c.kind)}">
+    ${c.pinned ? '<span class="pinhead" title="Pinned"></span>' : ""}
+    <div class="top">${icon(c.orchestrator ? "orchestrator" : c.kind)}<div class="title"><span class="kind">${esc(kindLabel(c))}</span>${esc(c.title)}</div>${seal}</div>
+    ${c.what ? `<p class="what">${esc(c.what)}</p>` : ""}
+    ${c.last ? `<p class="last">Last asked: ${esc(c.last)}</p>` : ""}
+    <div class="meta">${meta.join("")}</div>
+    ${party}
+    ${acts.length ? `<div class="actions">${acts.join("")}</div>` : ""}
+  </article>`;
+}
+
+function render() {
+  if (!data) return;
+  const board = $("#board");
+  const draft = $("#post-input")?.value || "", focused = document.activeElement?.id === "post-input";
+  board.innerHTML = data.columns.map((col) => {
+    let cards = col.cards.filter((c) => filter === "all" || c.kind === filter);
+    const total = cards.length, limit = COLS_LIMIT[col.key];
+    if (limit && !expanded[col.key]) cards = cards.slice(0, limit);
+    const post = col.key === "todo"
+      ? `<form class="post" id="post"><input id="post-input" placeholder="Post a quest of your own" aria-label="New to-do" maxlength="200"><button>Post</button></form>` : "";
+    const more = limit && total > limit ? `<button class="more" data-more="${col.key}">${expanded[col.key] ? "Show fewer" : `Show all ${total}`}</button>` : "";
+    return `<section class="column" aria-label="${esc(col.title)}">
+      <div class="sign"><h2>${esc(col.title)} <span class="n">${total}</span></h2><p>${esc(col.hint)}</p></div>
+      ${post}${cards.map(cardHtml).join("") || `<div class="empty">${col.key === "todo" ? "No tickets posted. Add one above." : "Nothing here."}</div>`}${more}
+    </section>`;
+  }).join("");
+  const input = $("#post-input");
+  if (input) { input.value = draft; if (focused) input.focus(); }
+  $("#n-agents").textContent = data.counts.agents;
+  $("#n-waiting").textContent = data.counts.waiting;
+  $("#n-todo").textContent = data.counts.todo;
+  $("#note").textContent = (data.jira_note ? "Jira is not connected, so tickets are missing. " : "") + `Updated ${data.at}`;
+  document.querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === filter)));
+}
+
+async function load() {
+  if (busy) return;
+  try {
+    const r = await fetch("/campaign.json", { cache: "no-store" });
+    data = await r.json();
+    render();
+  } catch (e) { $("#note").textContent = "The war table server is not answering. Run guild campaign again."; }
+}
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 2200); }
+
+async function act(path, body, msg) {
+  busy = true;
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const out = await r.json();
+    if (out.error) throw new Error(out.error);
+    toast(out.did || msg);
+  } catch (e) { toast(`Could not do that: ${e.message}`); }
+  busy = false;
+  load();
+}
+
+document.addEventListener("click", (ev) => {
+  const chip = ev.target.closest(".chip");
+  if (chip) { filter = chip.dataset.kind; try { localStorage.setItem("campaign-filter", filter); } catch (e) {} render(); return; }
+  const more = ev.target.closest("[data-more]");
+  if (more) { expanded[more.dataset.more] = !expanded[more.dataset.more]; render(); return; }
+  const b = ev.target.closest("button[data-act]");
+  if (!b) return;
+  const d = b.dataset;
+  if (d.act === "jump") act("/campaign/jump", { tab: d.tab || "", session: d.session || "" }, "Done");
+  if (d.act === "pin") act("/campaign/pin", { id: d.id, name: d.name, tab: d.tab, on: d.on === "1" }, d.on === "1" ? "Pinned to the sidebar" : "Unpinned");
+  if (d.act === "done") act("/campaign/todo", { done: Number(d.n) }, "Marked done");
+  if (d.act === "drop") act("/campaign/todo", { drop: Number(d.n) }, "Removed");
+});
+document.addEventListener("submit", (ev) => {
+  if (ev.target.id !== "post") return;
+  ev.preventDefault();
+  const v = $("#post-input").value.trim();
+  if (!v) return;
+  $("#post-input").value = "";
+  act("/campaign/todo", { add: v }, "Posted on the quest board");
+});
+
+load();
+setInterval(load, 3000);
+</script>
+</body>
+</html>

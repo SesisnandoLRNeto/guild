@@ -225,7 +225,7 @@ has "its window is back" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -
 has "the revived launch continues instead of restarting" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "continue"
 
 mkdir -p "$WT/node_modules" && echo cached > "$WT/node_modules/dep.txt"   # ignored build output
-is "a carried toolchain pin alone is not a change" "$(cd "$REPO" && GUILD_HOME="$GUILD_HOME" bash -c 'source <(sed -n "/^TOOLCHAIN_PINS=/p;/^worktree_dirty()/,/^}/p" bin/guild); worktree_dirty "'"$WT"'"' | wc -l | tr -d ' ')" "0"
+is "a carried toolchain pin alone is not a change" "$(cd "$REPO" && GUILD_HOME="$GUILD_HOME" bash -c 'eval "$(sed -n "/^TOOLCHAIN_PINS=/p;/^worktree_dirty()/,/^}/p" bin/guild)"; worktree_dirty "'"$WT"'"' | wc -l | tr -d ' ')" "0"
 echo "work in progress" > "$WT/unsaved.txt"
 out=$("$GUILD" close alpha 2>&1); has "a dirty worktree is protected" "$out" "uncommitted"
 [ -d "$GUILD_HOME/quests/alpha" ] && ok "a protected quest stays live" || bad "a protected quest stays live"
@@ -441,6 +441,76 @@ has "and its result" "$out" "baseline recorded"
 # the suite only ever stops its own war table
 [ -f "$GUILD_HOME/.wartable-pid" ] && kill -0 "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null \
   && ok "the war table records its own pid" || bad "the war table records its own pid"
+
+# ── harnesses, tiers and the plan handoff ────────────────────────────────────
+section "harnesses and routing"
+out=$("$GUILD" harnesses)
+has "harnesses come from config" "$out" "codex"
+has "each harness maps tiers to models" "$out" "light=haiku"
+cat > "$GUILD_HOME/local/harnesses.json" <<'JSON'
+{ "fakecli": { "bin": "claude", "hooks": false, "model_flag": "--use {model}",
+               "start": "claude --fake-cli {slug} {model_args} {kickoff}", "tab": "claude --fake-tab {name}",
+               "tiers": { "build": "fake-build" } } }
+JSON
+echo "do it" | "$GUILD" quest hx --repo "$REPO_A" --harness fakecli --tier build >/dev/null 2>&1
+has "a harness added in local config launches" "$(cat "$GUILD_HOME/quests/hx/launch.sh")" "--fake-cli"
+is "a tier becomes that harness's model" "$(cat "$GUILD_HOME/quests/hx/model")" "fake-build"
+has "a harness without hooks still reports a silent exit" "$(cat "$GUILD_HOME/quests/hx/launch.sh")" "exited without a report"
+"$GUILD" close hx --force >/dev/null 2>&1
+out=$(echo x | "$GUILD" quest hy --repo "$REPO_A" --harness nope 2>&1)
+has "an unknown harness is refused" "$out" "unknown harness nope"
+echo x | "$GUILD" quest hl --repo "$REPO_A" --tier light >/dev/null 2>&1
+is "--tier light runs on haiku" "$(cat "$GUILD_HOME/quests/hl/model")" "haiku"
+"$GUILD" close hl --force >/dev/null 2>&1
+echo x | "$GUILD" quest hp --repo "$REPO_A" --plan >/dev/null 2>&1
+is "--plan starts on the plan tier" "$(cat "$GUILD_HOME/quests/hp/model")" "opus"
+has "the plan phase is in the prompt" "$(cat "$GUILD_HOME/quests/hp/prompt.md")" "plan phase"
+"$GUILD" status hp planned "plan approved" >/dev/null 2>&1
+is "planned hands off to the build tier" "$(cat "$GUILD_HOME/quests/hp/model")" "sonnet"
+is "and the quest keeps working" "$(cut -f1 "$GUILD_HOME/quests/hp/status")" "working"
+hasnt "the build session is no longer told to only plan" "$(cat "$GUILD_HOME/quests/hp/prompt.md")" "You start in the plan phase"
+has "it is told to build the approved plan" "$(cat "$GUILD_HOME/quests/hp/prompt.md")" "plan phase is over"
+has "the handoff is in the history" "$(tail -1 "$GUILD_HOME/events.log")" "building on sonnet"
+sleep 4
+args=$(cat "$GUILD_HOME/last-claude-args" 2>/dev/null)
+has "the tab restarts in the same conversation" "$args" "--continue"
+has "on the build model" "$args" "--model sonnet"
+out=$("$GUILD" status hp planned 2>&1)
+has "a second handoff is refused" "$out" "not in a plan phase"
+"$GUILD" close hp --force >/dev/null 2>&1
+
+# ── tabs, pins, to-dos, the campaign board ───────────────────────────────────
+section "campaign and pins"
+"$GUILD" new "$REPO_A" spec-talk >/dev/null 2>&1
+sleep 1
+has "a new tab records its session" "$(cat "$GUILD_HOME/tabs/spec-talk.json" 2>/dev/null)" '"session"'
+has "and starts the agent with that session id" "$(cat "$GUILD_HOME/last-claude-args" 2>/dev/null)" "--session-id"
+sid=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/tabs/spec-talk.json'))['session'])")
+has "a tab pins by its session, so the pin outlives the tab" "$("$GUILD" pin spec-talk)" "pinned spec-talk"
+has "pins list it" "$("$GUILD" pins)" "session:$sid"
+has "pin again unpins" "$("$GUILD" pin spec-talk)" "unpinned"
+"$GUILD" todo add "Sketch the campaign" >/dev/null
+has "a to-do is listed" "$("$GUILD" todo)" "Sketch the campaign"
+"$GUILD" todo done 1 >/dev/null
+has "and can be finished" "$("$GUILD" todo)" "[x]"
+# a session log the way Claude Code writes it: named, mid-turn, one subagent running
+pj="$HOME/.claude/projects/-tmp-spec"; mkdir -p "$pj/$sid/subagents"
+python3 - "$pj/$sid.jsonl" "$pj/$sid/subagents" <<'PY'
+import json, sys
+rows = [{"type": "custom-title", "customTitle": "spec-talk"}, {"type": "ai-title", "aiTitle": "Pay rate spec"},
+        {"type": "user", "entrypoint": "cli", "cwd": "/tmp/spec", "message": {"content": "write the spec"}},
+        {"type": "assistant", "cwd": "/tmp/spec", "message": {"model": "claude-opus-5-5", "stop_reason": "tool_use", "content": []}}]
+open(sys.argv[1], "w").write("\n".join(json.dumps(r) for r in rows) + "\n")
+open(sys.argv[2] + "/agent-a1.jsonl", "w").write("{}\n")
+json.dump({"agentType": "reviewer", "description": "Review the spec"}, open(sys.argv[2] + "/agent-a1.meta.json", "w"))
+PY
+board=$(python3 "$REPO/bin/fleet.py" json)
+has "the board shows every session by its name" "$board" '"title": "spec-talk"'
+has "with its running subagents" "$board" "Review the spec"
+has "and the model's rank" "$board" '"rank": "epic"'
+url=$("$GUILD" campaign --url)
+has "guild campaign serves the board" "$(curl -s "${url}.json")" '"columns"'
+has "and the page" "$(curl -s "$url")" "The Guild Campaign"
 
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"

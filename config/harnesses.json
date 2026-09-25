@@ -1,0 +1,36 @@
+{
+  "_note": "How guild starts each agent CLI. Add your own in ~/.guild/local/harnesses.json (same shape; a key there replaces or adds a harness). Templates are shell text. Placeholders: {slug} {qdir} {worktree} {guild_home} {settings} {name} {session}, plus {model_args} (model_flag when a model is set), {prompt} (the adventurer prompt, as one quoted argument), {kickoff} (the first message, as one quoted argument) and {prompt_file}.",
+  "claude": {
+    "bin": "claude",
+    "hooks": true,
+    "model_flag": "--model {model}",
+    "start": "claude --settings {settings} --permission-mode auto -n quest:{slug} --add-dir {qdir} {model_args} --append-system-prompt {prompt} {kickoff}",
+    "resume": "claude --settings {settings} --permission-mode auto -n quest:{slug} --continue --add-dir {qdir} {model_args} --append-system-prompt {prompt} {kickoff}",
+    "tab": "claude -n {name} --session-id {session} {model_args}",
+    "tab_resume": "claude -n {name} --resume {session}",
+    "tiers": { "plan": "opus", "build": "sonnet", "deep": "claude-fable-5-1", "light": "haiku" }
+  },
+  "openrouter": {
+    "_why": "Claude Code talking to OpenRouter's Anthropic-compatible endpoint, so any model it serves can run a quest. ANTHROPIC_API_KEY must be empty, or Claude Code goes to Anthropic instead.",
+    "bin": "claude",
+    "hooks": true,
+    "needs_env": ["OPENROUTER_API_KEY"],
+    "env": { "ANTHROPIC_BASE_URL": "https://openrouter.ai/api", "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY", "ANTHROPIC_API_KEY": "" },
+    "model_flag": "--model {model}",
+    "start": "claude --settings {settings} --permission-mode auto -n quest:{slug} --add-dir {qdir} {model_args} --append-system-prompt {prompt} {kickoff}",
+    "resume": "claude --settings {settings} --permission-mode auto -n quest:{slug} --continue --add-dir {qdir} {model_args} --append-system-prompt {prompt} {kickoff}",
+    "tab": "claude -n {name} --session-id {session} {model_args}",
+    "tab_resume": "claude -n {name} --resume {session}",
+    "tiers": { "plan": "moonshotai/kimi-k2-thinking", "build": "deepseek/deepseek-chat", "deep": "moonshotai/kimi-k2-thinking", "light": "deepseek/deepseek-chat" }
+  },
+  "codex": {
+    "_why": "OpenAI Codex CLI. workspace-write keeps it inside the worktree; --add-dir lets it report to guild. It has no hooks, so a silent stop is caught when the process exits.",
+    "bin": "codex",
+    "hooks": false,
+    "model_flag": "-m {model}",
+    "start": "codex -C {worktree} --add-dir {guild_home} -s workspace-write -a never {model_args} {prompt_and_kickoff}",
+    "resume": "codex resume --last {model_args}",
+    "tab": "codex {model_args}",
+    "tiers": { "plan": "gpt-5.6-codex", "build": "gpt-5.6-codex", "deep": "gpt-5.6-codex", "light": "gpt-5.6-codex" }
+  }
+}

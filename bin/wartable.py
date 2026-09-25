@@ -68,6 +68,44 @@ def list_boards():
     return out
 
 
+def fleet():
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import fleet as mod
+    return mod
+
+
+def campaign_action(action, body):
+    """Buttons on the campaign board: jump to a tab, pin a card, add or finish a to-do."""
+    f = fleet()
+    socket_name = os.environ.get("GUILD_TMUX_SOCKET", "guild")
+    if action == "jump":
+        tab, sid = body.get("tab", ""), body.get("session", "")
+        if tab:
+            if not SAFE.match(tab.replace(":", "-")):
+                raise ValueError("bad tab")
+            subprocess.run(["tmux", "-L", socket_name, "select-window", "-t", f"guild:{tab}"], check=True)
+            return {"ok": True, "did": f"switched the cockpit to {tab}"}
+        if sid and re.fullmatch(r"[0-9a-f-]{36}", sid):   # no tab: reopen the session in a new one
+            guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+            subprocess.run([guild, "new", "--resume", sid], check=True, capture_output=True)
+            return {"ok": True, "did": "reopened it in a new cockpit tab"}
+        raise ValueError("nothing to jump to")
+    if action == "pin":
+        f.set_pin_key(body["id"], body.get("name", body["id"]), body.get("tab", ""), bool(body.get("on")))
+        return {"ok": True}
+    if action == "todo":
+        items = f.todos()
+        if body.get("add"):
+            items.append({"text": str(body["add"])[:200], "done": False, "at": now()})
+        elif body.get("done"):
+            items[int(body["done"]) - 1]["done"] = True
+        elif body.get("drop"):
+            items.pop(int(body["drop"]) - 1)
+        f.save_json(f.TODO, items)
+        return {"ok": True}
+    raise ValueError(action)
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     server_version = "wartable"
 
@@ -88,6 +126,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 return self.send(200, self.render_index())
+            if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
+                return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
+            if path == "/campaign.json":
+                return self.send(200, json.dumps(fleet().board()), "application/json")
             v = re.match(r"^/vendor/([A-Za-z0-9._-]+)$", path)
             if v:   # mermaid and friends, fetched once by install.sh, never from a CDN at view time
                 target = os.path.join(GUILD_HOME, "vendor", v.group(1))
@@ -126,6 +168,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        c = re.match(r"^/campaign/(jump|pin|todo)$", path)
+        if c:
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                return self.send(200, json.dumps(campaign_action(c.group(1), json.loads(self.rfile.read(length) or b"{}"))),
+                                 "application/json")
+            except Exception as e:
+                return self.send(500, json.dumps({"error": str(e)}), "application/json")
         m = re.match(r"^/b/([^/]+)/([^/]+)/(reply|upload)$", path)
         if not m:
             return self.send(404, "not found")

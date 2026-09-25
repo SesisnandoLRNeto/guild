@@ -1,36 +1,38 @@
 {
   "_note": "The quartermaster picks the first rule whose 'when' fits the quest, else 'default'. Keep 'why' so future you knows the reason. Copy to ~/.guild/local/dispatch.json and edit there.",
-  "_harnesses": {
-    "claude": "Claude Code on your Anthropic plan. Model: opus, sonnet, haiku, or a full id like claude-fable-5-1.",
-    "openrouter": "Claude Code pointed at OpenRouter, so any model it serves can run a quest. Model: an OpenRouter id, like moonshotai/kimi-k2-thinking, deepseek/deepseek-chat, or ~anthropic/claude-sonnet-latest. Needs OPENROUTER_API_KEY in ~/.guild/local/env.",
-    "codex": "OpenAI Codex CLI, on your ChatGPT or API account. Model: gpt-5.6-codex and friends. Runs sandboxed to the worktree."
-  },
+  "_tiers": "A tier names the kind of work; each harness maps it to its own model in config/harnesses.json (claude: plan=opus, build=sonnet, deep=claude-fable-5-1, light=haiku). Rules say a tier, so switching harness keeps the same intent. 'plan': true thinks on the plan tier first, puts the plan on the war table, and after your approval the same conversation builds on the rule's tier. 'model' still works when you want one exact model.",
+  "_harnesses": "Run `guild harnesses` to see them. Add your own CLI in ~/.guild/local/harnesses.json.",
   "rules": [
     {
-      "when": "New feature or UI work where quality of design matters",
-      "use": [{ "harness": "claude", "model": "claude-fable-5-1" }],
-      "why": "Best at product and UI judgment; worth the quota for new features"
+      "when": "High complexity: new feature with product or UI judgment, a subtle concurrency or data bug, work across many modules",
+      "use": [{ "harness": "claude", "tier": "deep", "plan": true }],
+      "why": "The strongest model for the hard part; a reviewed plan first keeps it on track"
     },
     {
-      "when": "Hard planning, architecture, or an ambiguous investigation",
-      "use": [{ "harness": "claude", "model": "opus" }],
+      "when": "A normal feature or change that needs a plan before code",
+      "use": [{ "harness": "claude", "tier": "build", "plan": true }],
+      "why": "Opus plans, you approve, Sonnet builds: judgment where it counts, cheaper tokens for the typing"
+    },
+    {
+      "when": "Pure planning, architecture, or an ambiguous investigation with no code expected",
+      "use": [{ "harness": "claude", "tier": "plan" }],
       "why": "Deep reasoning for work where the path is not clear yet"
     },
     {
       "when": "The task needs generating or editing images",
-      "use": [{ "harness": "codex", "model": "gpt-5.6-codex" }],
+      "use": [{ "harness": "codex", "tier": "build" }],
       "why": "Codex has native image generation; Claude does not"
     },
     {
       "when": "Long, mechanical work: renames, migrations, test scaffolding, large sweeps",
-      "use": [{ "harness": "openrouter", "model": "moonshotai/kimi-k2-thinking" }],
+      "use": [{ "harness": "openrouter", "tier": "build" }],
       "why": "Keeps the Anthropic quota for work that needs judgment"
     },
     {
-      "when": "Simple bug fix whose root cause and expected behavior are already known",
-      "use": [{ "harness": "claude", "model": "sonnet" }],
-      "why": "Well defined work does not need the biggest model"
+      "when": "Easy and well defined: a typo, a config value, a small bug whose fix is already known",
+      "use": [{ "harness": "claude", "tier": "light" }],
+      "why": "Haiku is fast and cheap, and the work does not need more"
     }
   ],
-  "default": [{ "harness": "claude", "model": "opus" }]
+  "default": [{ "harness": "claude", "tier": "build", "plan": true }]
 }

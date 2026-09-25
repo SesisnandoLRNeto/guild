@@ -31,7 +31,7 @@ guild up ~/Workspace
 | Command | What it does |
 |---|---|
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
-| `guild quest <slug> --repo PATH [--ticket KEY] [--model M] [--harness claude\|openrouter\|codex] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>` |
+| `guild quest <slug> --repo PATH [--ticket KEY] [--harness NAME] [--tier T \| --model M] [--plan] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>`. See [Routing](#routing-which-model-does-which-work) |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
@@ -54,7 +54,11 @@ guild up ~/Workspace
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
 | `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
-| `guild new [dir] [name]` | A plain Claude session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |
+| `guild new [dir] [name] [--harness H] [--tier T]` | A plain agent session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |
+| `guild campaign` | The campaign board: every quest, session, subagent, ticket and to-do as a kanban (`Ctrl-g k`) |
+| `guild pin [tab]` / `guild unpin [tab]` / `guild pins [menu]` | Keep sessions at the top of the sidebar; the menu jumps to one (`Ctrl-g p`, `Ctrl-g P`) |
+| `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
+| `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
@@ -221,27 +225,59 @@ Close the terminal, reboot, or kill tmux: nothing is lost.
 
 ## Harnesses: who runs a quest
 
-A quest can run on three harnesses. The quartermaster picks one from `~/.guild/local/dispatch.json`, or you name it.
+A harness is an agent CLI. Guild is not tied to Claude Code: each harness is a few lines of config in `config/harnesses.json`, and you add your own in `~/.guild/local/harnesses.json` without touching code. `guild harnesses` lists them.
 
-| Harness | What it is | Model looks like | Needs |
-|---|---|---|---|
-| `claude` | Claude Code on your Anthropic plan (default) | `opus`, `sonnet`, `claude-fable-5-1` | nothing |
-| `openrouter` | Claude Code pointed at OpenRouter's Anthropic-compatible endpoint, so any model it serves can run a quest | `moonshotai/kimi-k2-thinking`, `deepseek/deepseek-chat`, `~anthropic/claude-sonnet-latest` | `OPENROUTER_API_KEY` in `~/.guild/local/env` |
-| `codex` | The OpenAI Codex CLI on your ChatGPT or API account | `gpt-5.6-codex` | `npm i -g @openai/codex`, then `codex login` once |
+| Harness | What it is | Needs |
+|---|---|---|
+| `claude` | Claude Code on your Anthropic plan (default) | nothing |
+| `openrouter` | Claude Code pointed at OpenRouter's Anthropic-compatible endpoint, so any model it serves can run a quest | `OPENROUTER_API_KEY` in `~/.guild/local/env` |
+| `codex` | The OpenAI Codex CLI on your ChatGPT or API account | `npm i -g @openai/codex`, then `codex login` once |
 
-```sh
-guild quest big-rename --repo ~/code/app --harness openrouter --model moonshotai/kimi-k2-thinking < brief.md
-guild quest app-icons  --repo ~/code/app --harness codex --model gpt-5.6-codex < brief.md
+**Adding a CLI.** A harness says how to start a quest, how to resume one, how to open a plain tab, how to pass a model, and which model each tier means:
+
+```json
+{
+  "gemini": {
+    "bin": "gemini",
+    "hooks": false,
+    "model_flag": "-m {model}",
+    "start": "gemini {model_args} --yolo -i {prompt_and_kickoff}",
+    "tab": "gemini {model_args}",
+    "tiers": { "plan": "gemini-pro-latest", "build": "gemini-flash-latest", "deep": "gemini-pro-latest", "light": "gemini-flash-latest" }
+  }
+}
 ```
 
-Why bother: the work that needs judgment gets your Anthropic quota, and the long mechanical sweeps go somewhere cheaper. Codex also generates images, which Claude does not.
+That is an example of the shape, not a tested config: check the CLI's own flags and model names. Placeholders: `{slug}`, `{qdir}`, `{worktree}`, `{guild_home}`, `{settings}`, `{name}`, `{session}`, `{model_args}`, `{prompt}`, `{kickoff}`, `{prompt_and_kickoff}`. `env` and `needs_env` set and check variables for that harness only.
 
-**How the harnesses differ**
+**What works on any harness, and what needs Claude Code**
 
-- Context is not shared between them. The quartermaster holds it and writes a brief per quest; the reports come back as files. That is the whole protocol, so any CLI agent can play.
-- `openrouter` is still Claude Code, so it keeps the hooks, the trial gate and calm mode. Guild sets `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and an empty `ANTHROPIC_API_KEY` for that quest only, never for your normal sessions.
-- `codex` runs with `-s workspace-write -a never`, so it works unattended, writes only inside its worktree, and can still report to `~/.guild`. It has no stop hook, so a Codex adventurer that goes quiet is not reported on its own: the quartermaster notices it in the roster and peeks.
-- The trial gate does not depend on hooks. Guild puts a `gh` shim first on every quest's PATH, so `gh pr create` is blocked on any harness until the trial passed for the current commit.
+- Any harness: worktrees, briefs, reports (`guild status`), the war table, acceptance checks, the trial gate on `gh pr create` (a `gh` shim, not a hook), history, the campaign board and pins. Dollar costs and the session cards on the campaign board come from Claude Code logs, so other harnesses show their quests there but no spend. When the process exits while the quest still says working, guild marks it stopped, so a quiet stop is caught even without hooks.
+- Claude Code only (`hooks: true`): the stop hook that notices a turn ending without a report while the process is still alive, the guard hooks, calm mode, and the `trial` skill. `openrouter` keeps all of these, because it is still Claude Code.
+- The quartermaster itself runs on Claude Code (it is a Claude Code agent). The adventurers can be anything.
+- Context is not shared between harnesses. The quartermaster holds it and writes a brief per quest; the reports come back as files. That is the whole protocol, so any CLI agent can play.
+
+## Routing: which model does which work
+
+Tiers name the kind of work. Each harness maps a tier to its own model, so a rule keeps its meaning when you switch harness.
+
+| Tier | Work | `claude` | `openrouter` (default map) |
+|---|---|---|---|
+| `plan` | Planning, architecture, open investigations | `opus` | `moonshotai/kimi-k2-thinking` |
+| `build` | Normal implementation | `sonnet` | `deepseek/deepseek-chat` |
+| `deep` | High complexity | `claude-fable-5-1` | `moonshotai/kimi-k2-thinking` |
+| `light` | Easy, well defined | `haiku` | `deepseek/deepseek-chat` |
+
+**Plan, then build.** `--plan` splits a quest in two. The adventurer starts on the `plan` tier, writes `plan.md`, and puts it on the war table for you. When you approve, it runs `guild status <slug> planned`, and guild restarts it in the same conversation on the build model (`--tier`, `--model`, or the `build` tier). So Opus thinks, you approve, and Sonnet types.
+
+```sh
+guild quest rate-api  --repo ~/code/api --plan < brief.md                 # opus plans, sonnet builds
+guild quest hard-bug  --repo ~/code/api --plan --tier deep < brief.md     # opus plans, fable builds
+guild quest typo      --repo ~/code/web --tier light < brief.md           # haiku, no plan
+guild quest big-sweep --repo ~/code/app --harness openrouter --tier build < brief.md
+```
+
+You rarely type these. The quartermaster matches each task to a rule in `~/.guild/local/dispatch.json` (copied from `config/dispatch.example.json`) and says which rule it used. The default rule is "build with a plan first". Change the map in `harnesses.json` and the rules in `dispatch.json`; name a model yourself and it wins.
 
 ## The cockpit
 
@@ -287,7 +323,26 @@ The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does 
 | `Ctrl-g` `E` | Asks what to open: a quest, a folder or one file |
 | `Ctrl-g` `t` | A plain terminal tab in the current folder |
 | `Ctrl-g` `g` | Open the war table in the browser |
+| `Ctrl-g` `k` | Open the campaign board in the browser |
+| `Ctrl-g` `p` | Pin or unpin the current tab (it goes to the top of the sidebar) |
+| `Ctrl-g` `P` | Menu of pinned sessions: pick one to jump to it, or to reopen it if its tab is gone |
 | `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |
+
+### The campaign board
+
+`guild campaign` (or `Ctrl-g k`) opens a kanban on the war table server, styled as a guild's quest board. It shows the whole moment, not only the quartermaster's quests:
+
+- **Quest board**: your open Jira tickets that have no quest yet (when `~/.guild/local/jira.json` is set up), and your own to-dos. Post one from the page or with `guild todo add`.
+- **On the road**: quests at work, and every Claude session on this machine that is mid-turn, inside the cockpit or not. Subagents a session is running show on its card as companions.
+- **Awaiting orders**: quests that need a decision, are blocked or stopped, and sessions whose turn ended and wait for you.
+- **Trial**: quests that passed the trial and wait for their PR.
+- **Returned**: done and closed in the last week.
+
+Each card shows the model as a wax seal (legendary for Fable, epic for Opus, rare for Sonnet, common for Haiku), what the agent is on, its repo and age, and buttons: go to its tab, reopen a session in the cockpit, pin it, open its wrap-up, decision board, PR or ticket. Sessions are read from Claude Code's own logs, so a spec session you named with `/rename` shows by that name. It refreshes every 3 seconds.
+
+### Pins
+
+`Ctrl-g p` pins the tab you are on, and it moves to the top of the sidebar with its state (working, your turn, how many subagents). A tab opened with `guild new` pins by its session id, so the pin survives `guild up`: `Ctrl-g P` lists the pins and reopens a closed one with its conversation. Pinned cards also come first on the campaign board.
 
 ### It does not touch your tmux
 
