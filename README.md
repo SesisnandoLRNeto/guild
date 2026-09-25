@@ -54,6 +54,7 @@ guild up ~/Workspace
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
 | `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
+| `guild new [dir] [name]` | A plain Claude session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor with the file tree: a quest's worktree, any folder, or your work root |
 
@@ -279,6 +280,8 @@ The prefix is **Ctrl-g** (not Ctrl-b), so muscle memory from your own tmux does 
 | `Alt-Left` / `Alt-Right` | Previous or next tab |
 | `Alt-h` / `Alt-l` | Move between the sidebar and the quartermaster |
 | `Ctrl-g` `w` | Pick a quest from a list |
+| `Ctrl-g` `n` | A new Claude tab in the current folder (`Ctrl-g N` asks for the folder) |
+| click `+ claude` | The green button on the status bar: a new Claude tab |
 | `Ctrl-g` `e` | Your editor with the file tree on the current quest's worktree |
 | `Ctrl-g` `g` | Open the war table in the browser |
 | `Ctrl-g` `\|` / `-` | Split a pane; the mouse works too |
@@ -289,7 +292,7 @@ The cockpit runs on its own tmux server, socket `guild`, with `config/guild.tmux
 
 ## Calm mode: the party on the road
 
-While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a party of three adventurers walking through a forest where the spinner was: a knight with a sword in front, a mage with a staff, an archer with a bow behind, trees drifting past the other way. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
+While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a night forest where the spinner was: stars and a moon, pines and bushes drifting past, and a party of three walking through it, a helmeted knight with a sword in front, a wizard whose staff twinkles, a hooded archer with a drawn bow behind. Seven rows, plain ASCII, colors follow your dark or light theme. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
 
 It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Verified on Claude Code 2.1.280; the API may change between releases.
 

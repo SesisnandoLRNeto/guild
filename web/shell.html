@@ -78,7 +78,8 @@ function draw() {
   for (const q of QUESTIONS) {
     const box = el("div", "q");
     const h = el("h3"); h.textContent = q.title; box.appendChild(h);
-    if (q.detail) { const p = el("p", "detail"); p.textContent = q.detail; box.appendChild(p); }
+    // The page on the left explains the question; the panel is only where you choose.
+    // Repeating the detail here is what made a board read twice on a narrow window.
     if (q.type === "text") {
       const t = el("textarea");
       t.placeholder = q.placeholder || "your answer";
@@ -110,7 +111,7 @@ function draw() {
         name.textContent = o.label;
         if (q.recommended === o.id) { const t = el("span", "tag"); t.textContent = "suggested"; name.appendChild(t); }
         txt.appendChild(name);
-        if (o.why) { const w = el("div", "why"); w.textContent = o.why; txt.appendChild(w); }
+        if (o.why) lab.title = o.why;   // the reason is on the page; here it is a hover hint
         lab.appendChild(txt);
         box.appendChild(lab);
       }

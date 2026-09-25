@@ -6,6 +6,7 @@ window option @guildstate that config/guild.tmux.conf prints after the window na
 Window names stay exactly the quest slug, so `guild peek` and `guild send` keep working.
 """
 import json
+import re
 import os
 import subprocess
 import sys
@@ -85,20 +86,42 @@ def draw(quests, width, spend=None):
             price = (spend or {}).get(q["slug"])
             tail = f" · {money(price)}" if price else ""
             lines.append(f"    {DIM}{model} · {q['state']}{tail}{RESET}")
-    lines += ["", f"{BOLD}recent{RESET}", ""]
-    try:
-        tail = open(EVENTS).read().splitlines()[-7:]
-    except OSError:
-        tail = []
-    for row in reversed(tail):
-        parts = row.split("\t")
-        if len(parts) < 4:
-            continue
-        when, slug, state, note = parts[0][11:16], parts[1], parts[2], parts[3]
-        color = COLORS.get(state, DIM)
-        lines.append(f" {DIM}{when}{RESET} {color}{state}{RESET}")
-        lines.append(f"   {DIM}{slug}: {note[:width * 2]}{RESET}")
+    lines += ["", f"{BOLD}activity{RESET}"]
+    lines += activity(width)
     return lines
+
+
+def short_note(note):
+    """Events carry full paths and launch details; the sidebar wants a few words."""
+    m = re.match(r"launched \((\S+)(?: ([^)]+))?\)", note)
+    if m:
+        return "launched · " + (m.group(2) or m.group(1))
+    note = re.sub(r"(/[^\s]+)+/([^/\s]+)", r"\2", note)       # a path becomes its last part
+    note = re.sub(r"http://127\.0\.0\.1:\d+/\S+", "board", note)
+    return note.replace("turn ended without a report; peek to see why", "stopped without a report")
+
+
+def activity(width, limit=8, hours=24):
+    """One line per event, newest first, last day only: time, quest, what happened."""
+    try:
+        rows = open(EVENTS).read().splitlines()
+    except OSError:
+        return [f" {DIM}nothing yet{RESET}"]
+    cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - hours * 3600))
+    out = []
+    for row in reversed(rows):
+        parts = row.split("\t")
+        if len(parts) < 4 or parts[0] < cutoff:
+            continue
+        when, slug, state, note = parts[0][11:16], parts[1], parts[2], short_note(parts[3])
+        color = COLORS.get(state, DIM)
+        head = f"{when} {slug}"
+        room = max(0, width - len(head) - len(state) - 3)
+        tail = f" {DIM}{note[:room]}{RESET}" if note and room > 4 and state not in ("closed",) else ""
+        out.append(f" {DIM}{when}{RESET} {slug[:max(6, width - 20)]} {color}{state}{RESET}{tail}"[: width * 3])
+        if len(out) >= limit:
+            break
+    return out or [f" {DIM}quiet for the last {hours}h{RESET}"]
 
 
 def count_line():

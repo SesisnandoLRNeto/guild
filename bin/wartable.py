@@ -287,7 +287,7 @@ ASK_PAGE = """<!doctype html>
 <h1>__QUESTION__</h1>
 __DETAIL__
 __OPTIONS__
-<p class="hint">Answer in the panel on the right. You can add notes or drop screenshots there.</p>
+<p class="hint">Choose in the panel (beside this page, or below it on a narrow window). Notes and screenshots go there too.</p>
 </body></html>
 """
 

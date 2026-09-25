@@ -52,6 +52,7 @@ guild board list | guild board url   boards and their state, or the war table ad
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
                                     put the question on the war table as a page and open it (inside a quest)
 guild pool list|drop [repo]          the warm worktree pool quests are started from
+guild new [dir] [name]              a plain Claude session in a new cockpit tab (Ctrl-g n, or click + claude)
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
@@ -146,6 +147,20 @@ cmd_jira() { python3 "$GUILD_REPO/bin/jira_watch.py" "${1:-status}"; }
 cmd_retro() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" retro "$@"; }
 
 cmd_doctor() { GUILD_TMUX_SOCKET="$SOCKET" GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/doctor.py" "$@"; }
+
+# A plain Claude session in its own cockpit tab, for work that is not a quest: reading,
+# planning, a quick question. Named after the folder unless you give it a name.
+cmd_new() {
+  local dir="${1:-}" name="${2:-}"
+  [ -n "$dir" ] || dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
+  dir="$(cd "$dir" 2>/dev/null && pwd)" || die "no such folder: ${1:-}"
+  [ -n "$name" ] || name="claude:$(basename "$dir")"
+  tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+  local n=1 win="$name"
+  while tm list-windows -t "$SESSION" -F '#W' | grep -qx "$win"; do n=$((n + 1)); win="$name-$n"; done
+  tm new-window -t "$SESSION" -n "$win" -c "$dir" "$(calm_env)claude -n '$win'; exec \$SHELL"
+  tm select-window -t "$SESSION:$win"
+}
 
 cmd_shot() { python3 "$GUILD_REPO/bin/shot.py" "$@"; }
 
@@ -773,6 +788,7 @@ case "${1:-}" in
   revive) shift; cmd_revive "$@" ;;
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;
+  new) shift; cmd_new "$@" ;;
   check) shift; cmd_check "$@" ;;
   vision) shift; cmd_vision "$@" ;;
   jira) shift; cmd_jira "$@" ;;
