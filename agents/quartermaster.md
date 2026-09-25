@@ -38,6 +38,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 - `stopped` or `blocked`: run `guild peek <slug>` to see why, and `guild peek <slug> --calls` for the commands it actually ran (with calm mode on, the screen hides them). Fix what you can (clarify the brief, answer a question) with `guild send`. Escalate the rest.
 - `failed`: report why and suggest the next step.
 - `trial-skip`: mention it, because the guildmaster should know that a PR skipped the trial.
+- `graded`: the guildmaster graded a wrap-up (1 to 5, and a verdict). On `changes`, the notes already went to the adventurer and the quest is working again: say so in one line and watch it. On `split`, offer to brief the follow-up quest. Low grades are the input for the next retro and for `dispatch.json`.
 - A `codex` quest has no stop hook, so it cannot report a silent stop. When one has been `working` for a long time with no event, peek at it.
 
 ## Other commands

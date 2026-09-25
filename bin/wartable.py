@@ -84,6 +84,46 @@ def themed(html):
     return html[:i] + THEME + html[i:] if i >= 0 else THEME + html
 
 
+# EDD on the result: every wrap-up asks the guildmaster for a grade and a verdict. The grades
+# feed `guild retro`, which compares them by model, tier and harness.
+GRADE_QUESTIONS = [
+    {"id": "grade", "title": "Grade this work",
+     "detail": "The result as delivered. Your grades teach the quartermaster which models to trust with what.",
+     "type": "single", "options": [
+         {"id": "5", "label": "5 · Excellent", "why": "merge as is, nothing to add"},
+         {"id": "4", "label": "4 · Good", "why": "small notes, no rework"},
+         {"id": "3", "label": "3 · Fair", "why": "it works, but needs another pass"},
+         {"id": "2", "label": "2 · Poor", "why": "misses part of the intent"},
+         {"id": "1", "label": "1 · Wrong", "why": "not what was asked"}]},
+    {"id": "verdict", "title": "What next?", "type": "single", "options": [
+        {"id": "merge", "label": "Ready to merge", "why": "you review and merge the PR"},
+        {"id": "changes", "label": "Needs changes", "why": "your notes go back to the adventurer, who carries on"},
+        {"id": "split", "label": "Split a follow-up", "why": "this ships; the rest becomes a new quest"}]},
+]
+
+
+def grade_wrapup(quest, board, meta, decision):
+    """Keep the grade beside the quest (it moves to the archive with it), log it, and when
+    you ask for changes, hand your notes back to the adventurer."""
+    ans = decision.get("answers", {})
+    grade, verdict, msg = str(ans.get("grade", "")), ans.get("verdict", ""), decision.get("message", "")
+    qdir = os.path.join(QUESTS, quest)
+    if os.path.isdir(qdir):
+        with open(os.path.join(qdir, "grade.json"), "w") as f:
+            json.dump({"grade": int(grade) if grade.isdigit() else None, "verdict": verdict, "message": msg,
+                       "board": board, "title": meta.get("title", ""), "at": now()}, f, indent=2)
+    note = f"{grade or '?'}/5" + (f", {verdict}" if verdict else "") + (f": {msg[:80]}" if msg else "")
+    with open(EVENTS, "a") as f:
+        f.write(f"{now()}\t{quest}\tgraded\t{note}\n")
+    if verdict == "changes":
+        guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+        text = (f"The guildmaster reviewed your wrap-up ({meta.get('title', board)}): grade {grade}/5, "
+                f"changes needed. {msg or 'See the board for notes.'} Make the changes, run the trial again, "
+                f"post a new wrap-up, then report done.")
+        record(quest, "working", f"changes asked on the wrap-up ({grade}/5)")
+        subprocess.run([guild, "send", quest, text], capture_output=True)
+
+
 def fleet():
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import fleet as mod
@@ -239,6 +279,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(os.path.join(d, "decision.json"), "w") as f:
                 json.dump(decision, f, indent=2)
             meta = json.load(open(os.path.join(d, "board.json")))
+            if meta.get("wrapup"):
+                grade_wrapup(quest, board, meta, decision)
+                return self.send(200, json.dumps({"ok": True}), "application/json")
             picked = ", ".join(f"{k}={v}" for k, v in decision["answers"].items()) or "message only"
             record(quest, "working", f"war table answered ({meta.get('title', board)}): {picked}")
             return self.send(200, json.dumps({"ok": True}), "application/json")
@@ -262,6 +305,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qpath = os.path.join(d, "decisions.json")
         if os.path.exists(qpath):
             questions = json.load(open(qpath)).get("questions", [])
+        if meta.get("wrapup"):                  # a finished piece of work: you grade it first
+            questions = GRADE_QUESTIONS + questions
         shell = open(os.path.join(WEB, "shell.html")).read()
         return (shell
                 .replace("{{TITLE}}", meta.get("title", board))

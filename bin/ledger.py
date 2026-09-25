@@ -302,6 +302,24 @@ def decisions_of(q):
     return out
 
 
+def grade_of(qdir):
+    """Your grade on the quest's wrap-up (war table), if you gave one."""
+    try:
+        g = json.load(open(os.path.join(qdir, "grade.json")))
+        return g if g.get("grade") else None
+    except (OSError, ValueError):
+        return None
+
+
+def grade_table(quests, key):
+    """Average grade and count per model / tier / harness."""
+    out = {}
+    for q in quests:
+        if q["grade"] and q[key]:
+            out.setdefault(q[key], []).append(q["grade"]["grade"])
+    return {k: {"avg": round(sum(v) / len(v), 1), "n": len(v)} for k, v in sorted(out.items())}
+
+
 def cmd_retro(args):
     """The facts a retro needs. An agent turns these into lessons; this only counts."""
     cutoff = since_cutoff(args.get("since") or "14d")
@@ -334,6 +352,8 @@ def cmd_retro(args):
             "escalations": sum(1 for e in mine if len(e) > 2 and e[2] == "needs-decision"),
             "revived": sum(1 for e in mine if len(e) > 3 and "revived" in e[3]),
             "edd": q.get("edd", {}),
+            "tier": q["meta"].get("tier", ""),
+            "grade": grade_of(q["dir"]),
         })
 
     quests = report["quests"]
@@ -367,6 +387,15 @@ def cmd_retro(args):
         "weak_checks": sum(len(q["edd"].get("weak", [])) for q in quests),
         "code_quests_without_checks": sum(1 for q in quests if q["trial"] and not q["edd"].get("checks")),
     }
+    graded = [q for q in quests if q["grade"]]
+    report["totals"]["grades"] = {
+        "graded": len(graded),
+        "ungraded_done": sum(1 for q in quests if q["state"] == "done" and not q["grade"]),
+        "avg": round(sum(q["grade"]["grade"] for q in graded) / len(graded), 1) if graded else None,
+        "changes_asked": sum(1 for q in graded if q["grade"].get("verdict") == "changes"),
+        "by_model": grade_table(quests, "model"), "by_tier": grade_table(quests, "tier"),
+        "by_harness": grade_table(quests, "harness"),
+    }
     if args.get("json"):
         print(json.dumps(report, indent=2))
         return
@@ -387,6 +416,14 @@ def cmd_retro(args):
               + (f" · {e['weak_checks']} weak check(s)" if e["weak_checks"] else ""))
     if e["code_quests_without_checks"]:
         print(f"  {e['code_quests_without_checks']} code quest(s) had no acceptance checks at all")
+    g = t["grades"]
+    if g["graded"]:
+        fmt = lambda table: ", ".join(f"{k} {v['avg']} ({v['n']})" for k, v in table.items())
+        print(f"  your grades: {g['avg']}/5 over {g['graded']} wrap-up(s), changes asked {g['changes_asked']} time(s)"
+              + (f" · by model {fmt(g['by_model'])}" if g["by_model"] else "")
+              + (f" · by tier {fmt(g['by_tier'])}" if g["by_tier"] else ""))
+    if g["ungraded_done"]:
+        print(f"  {g['ungraded_done']} finished quest(s) still wait for your grade on their wrap-up")
     print()
     for q in quests:
         flags = []
@@ -398,6 +435,8 @@ def cmd_retro(args):
             flags.append(f"{q['escalations']} escalations")
         if any(d["overruled"] for d in q["decisions"]):
             flags.append("recommendation overruled")
+        if q["grade"]:
+            flags.append(f"graded {q['grade']['grade']}/5" + (f" {q['grade']['verdict']}" if q["grade"].get("verdict") else ""))
         if q["brief_lines"] and q["brief_lines"] < 3:
             flags.append("very short brief")
         edd = q["edd"]

@@ -175,6 +175,21 @@ has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
 is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 "$GUILD" status alpha done "shipped it" >/dev/null 2>&1
 is "with a wrap-up, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+# EDD on the result: the wrap-up asks for a grade, and the grade feeds the retro
+wb=$(python3 -c "
+import json,os,sys
+root=sys.argv[1]
+for b in sorted(os.listdir(root)):
+    if json.load(open(os.path.join(root,b,'board.json'))).get('wrapup'): print(b)" "$GUILD_HOME/quests/alpha/boards" | tail -1)
+has "a wrap-up asks for a grade" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" '"id": "grade"'
+curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}' >/dev/null
+is "the grade is kept beside the quest" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/grade.json'))['grade'])")" "4"
+is "grading does not reopen a finished quest" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+has "the grade is in the history" "$(tail -1 "$GUILD_HOME/events.log")" "graded"
+has "the retro reports it by model" "$(GUILD_REPO="$REPO" python3 "$REPO/bin/ledger.py" retro --json)" '"avg": 4.0'
+rm -f "$GUILD_HOME/quests/alpha/boards/$wb/decision.json"
+curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"2","verdict":"changes"},"message":"the edge case is missing"}' >/dev/null
+is "asking for changes puts the quest back to work" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 "$GUILD" status alpha working "carrying on" >/dev/null   # later sections need it live
 
 section "quartermaster guard"

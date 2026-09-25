@@ -298,6 +298,7 @@ def archived(days=DONE_DAYS):
             meta["closed"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(d)))
             meta["summary"] = summary(d)
             meta["archive"] = os.path.basename(d)
+            meta["grade"] = load_json(os.path.join(d, "grade.json"), None)
             out.append(meta)
     return out
 
@@ -409,8 +410,11 @@ def board():
         if key in hid and key not in pinned:
             continue
         links = []
+        grade = load_json(os.path.join(q["dir"], "grade.json"), None)
         if q["wrapup"]:
-            links.append({"label": "wrap-up", "href": f"/b/{q['slug']}/{q['wrapup']}/"})
+            ungraded = not grade and q["state"] in ("done", "trial-pass", "trial-skip")
+            links.append({"label": "grade it" if ungraded else "wrap-up", "href": f"/b/{q['slug']}/{q['wrapup']}/",
+                          "hot": ungraded})
         for b in q["open_boards"]:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
         pr = re.search(r"https?://\S+/pull/(\d+)", q["note"] or "")
@@ -428,7 +432,8 @@ def board():
             harness=q.get("harness", ""), phase=q.get("phase", ""), since=q["since"],
             agents=(main or {}).get("agents", []), links=links,
             tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True,
-            branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", "")))
+            branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", ""),
+            grade=grade))
 
     party = [{"type": q["slug"], "what": q["state"]} for q in qs if QUEST_COLUMN.get(q["state"]) in ("road", "waiting")]
     qm_boards = pseudo_boards()
@@ -483,6 +488,7 @@ def board():
         cards.append(card(id=f"closed:{a['archive']}", kind="quest", column="done", title=a["slug"],
                           ticket=a.get("ticket", ""), what=a.get("summary") or "closed", state="closed", closable=True,
                           branch=a.get("branch", ""), base=a.get("base", ""), repo_path=a.get("repo", ""),
+                          grade=a.get("grade"),
                           repo=os.path.basename(a.get("repo", "")), model=a.get("model", ""), since=a["closed"]))
 
     threads, edges = relate(cards)

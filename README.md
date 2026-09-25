@@ -93,6 +93,8 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 `guild status done` refuses a backend quest whose wrap-up lacks the section, or leaves a rule candidate unexplained (`--no-impact "<why>"` is the recorded way out). No database and no build are needed: it reads the repo and git.
 
+**Grading the result.** Every wrap-up page asks you for a grade (1 to 5) and a verdict: ready to merge, needs changes, or split a follow-up. "Needs changes" sends your notes straight back to the adventurer, which carries on. The grade stays with the quest (`grade.json`), the campaign board shows it (or a red "grade it" until you do), and `guild retro` compares grades by model, tier and harness, so routing in `dispatch.json` follows your judgment, not only whether checks passed.
+
 ## Costs and history
 
 Claude Code writes a session log per working directory. A quest owns its worktree, so those are its logs: guild reads the token usage from them and prices it.

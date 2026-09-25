@@ -121,6 +121,9 @@
   }
   .actions a:hover, .actions button:hover { background: var(--gold); border-color: #a87a25; }
   .actions .go { background: var(--sign); color: var(--sign-text); border-color: var(--sign); }
+  .actions a.hot { background: var(--bad); border-color: var(--bad); color: #fff5dc; font-weight: 700; }
+  .grade { font-weight: 700; color: var(--ink); background: rgba(217, 164, 65, .35); border-radius: 3px; padding: 0 6px; }
+  .grade.g1, .grade.g2 { background: rgba(176, 65, 46, .25); }
   .post { display: flex; gap: 6px; margin-bottom: 12px; }
   .post input {
     flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 3px; border: 1px solid var(--rule);
@@ -242,13 +245,14 @@ function cardHtml(c) {
   if (c.repo) meta.push(`<span>${esc(c.repo)}</span>`);
   if (c.harness && c.harness !== "claude") meta.push(`<span>${esc(c.harness)}</span>`);
   if (c.since) meta.push(`<span>${esc(ago(c.since))}</span>`);
+  if (c.grade && c.grade.grade) meta.push(`<span class="grade g${c.grade.grade}" title="${esc(c.grade.message || "")}">graded ${c.grade.grade}/5${c.grade.verdict ? " · " + esc(c.grade.verdict) : ""}</span>`);
   // helpers running in parallel: subagents of a session, or the quests the quartermaster sent out
   const party = (c.agents || []).length
     ? `<ul class="party" aria-label="Running in parallel"><li class="party-head">${c.orchestrator ? "Party on quests" : "Companions at work"}</li>${c.agents.map((a) => `<li><b>${esc(a.type)}</b><span>${esc(STATE_WORD[a.what] || a.what)}</span></li>`).join("")}</ul>` : "";
   const acts = [];
   if (c.tab) acts.push(`<button class="go" data-act="jump" data-tab="${esc(c.tab)}">Go to tab</button>`);
   else if (c.kind === "session" && c.state !== "working") acts.push(`<button data-act="jump" data-session="${esc(c.id.slice(8))}">Reopen in cockpit</button>`);
-  for (const l of c.links || []) acts.push(`<a href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`);
+  for (const l of c.links || []) acts.push(`<a class="${l.hot ? "hot" : ""}" href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`);
   if (c.kind === "todo") acts.push(c.state === "done"
     ? `<button data-act="drop" data-n="${c.n}">Remove</button>`
     : `<button data-act="done" data-n="${c.n}">Mark done</button>`);

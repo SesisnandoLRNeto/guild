@@ -49,3 +49,11 @@ Rules for a lesson:
 ## 4. Close the loop
 
 Tell the guildmaster the lessons in a few lines and what you will do differently. The quartermaster reads `~/.guild/lessons.md` before writing a brief, so a lesson written here changes the next quest.
+
+## Your grades
+
+Every wrap-up asks the guildmaster for a grade (1 to 5) and a verdict (merge, changes, split). `guild retro` shows the average by model, tier and harness, and how often changes were asked. Use them:
+- A model or tier that keeps getting 3 or less for a kind of work is a routing lesson: propose the change to `~/.guild/local/dispatch.json` on the war table, with the grades as evidence. Never change the file without the guildmaster's pick.
+- "Changes" verdicts with notes are the most honest signal of what went wrong; quote them.
+- Finished quests without a grade are listed: remind the guildmaster, do not guess a grade.
+
