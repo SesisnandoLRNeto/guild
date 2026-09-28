@@ -381,9 +381,15 @@ Each card shows the model as a wax seal (legendary for Fable, epic for Opus, rar
 
 **Labels, like Trello.** Each card carries colored labels at the top: its ticket, in one color per piece of work (quests on the same ticket, or built on each other's branch, share it; a session that talks about the ticket carries it too), then its PR state, review and checks, and the Jira status once Jira is set up. The legend above the columns lists the shared colors; click one, or hover a card, to see only that piece of work. PR states come from `gh`, with the account that owns each repo, refreshed every two minutes by the war table server; `guild prs` shows them in the terminal. Nothing is written to GitHub or Jira.
 
+### A tree of tabs, and more than one quartermaster
+
+The side menu's Tabs panel is a tree: each quartermaster, the quests it started under it, helpers under their quest, then the other tabs (terminals, editors). Activity lists only quests still alive, for the last day (`GUILD_ACTIVITY_HOURS` changes it); `events.log` keeps everything for the retro.
+
+`guild qm new <name> [dir]` opens another quartermaster in its own tab (`qm-<name>`), with its own conversation. Each quest remembers who started it, and `guild wait` shows each quartermaster only the events of its own quests. `guild up` brings them all back; `guild qm close <name>` hands its quests to the first one.
+
 ### Pins
 
-`Ctrl-g p` pins the tab you are on, and it moves to the top of the sidebar with its state (working, your turn, how many subagents). A tab opened with `guild new` pins by its session id, so the pin survives `guild up`: `Ctrl-g P` lists the pins and reopens a closed one with its conversation. Pinned cards also come first on the campaign board.
+`Ctrl-g p` pins the tab you are on (or select a row in the side menu and press `s`), and it moves to the top of the sidebar with its state (working, your turn, how many subagents). A tab opened with `guild new` pins by its session id, so the pin survives `guild up`: `Ctrl-g P` lists the pins and reopens a closed one with its conversation. Pinned cards also come first on the campaign board.
 
 ### It does not touch your tmux
 

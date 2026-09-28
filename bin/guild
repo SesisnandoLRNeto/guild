@@ -39,6 +39,8 @@ guild wait [timeout-seconds] [--for slug,slug]
                                     block until a new event arrives, then print it (default 1800s);
                                     --for waits only for those quests, with its own cursor
 guild helper <name> [--tier T] < brief   inside a quest: a helper quest on a branch from yours
+guild qm new <name> [dir] | list | close <name>
+                                    another quartermaster in its own tab; it sees only its own quests' events
 guild quest ... --machine NAME      run the quest on another machine over ssh (see guild machines)
 guild machines [list|check|sync]    the machines in local/machines.json, whether guild answers there
 guild peek <slug> [lines]           show the last lines of an adventurer's screen
@@ -150,6 +152,41 @@ content_pane() { # window target
 # A tab by its name. Names like edit:x hold a colon, which tmux reads as a separator, so ids it is.
 window_by_name() { tm list-windows -t "$SESSION" -F '#{window_id}	#W' 2>/dev/null | awk -F'\t' -v w="$1" '$2 == w {print $1; exit}'; }
 
+# More than one quartermaster: each has a name, its own tab (qm-<name>), its own conversation,
+# and sees only the events of the quests it started. The first one is just "qm".
+qm_open() { # name [dir]
+  local name="$1" dir="${2:-}" f="$GUILD_HOME/qms/$1.json" sid resume win="qm-$1"
+  mkdir -p "$GUILD_HOME/qms"
+  [ -n "$(window_by_name "$win")" ] && { tm select-window -t "$(window_by_name "$win")"; return 0; }
+  if [ -f "$f" ]; then
+    sid=$(python3 -c "import json;print(json.load(open('$f'))['session'])")
+    [ -n "$dir" ] || dir=$(python3 -c "import json;print(json.load(open('$f'))['dir'])")
+    resume="--resume '$sid'"
+  else
+    sid=$(uuidgen | tr 'A-Z' 'a-z')
+    [ -n "$dir" ] || dir="${GUILD_EDIT_ROOT:-$HOME/Workspace}"
+    python3 -c "import json,sys;json.dump({'name':sys.argv[1],'dir':sys.argv[2],'session':sys.argv[3]},open(sys.argv[4],'w'),indent=2)" "$name" "$dir" "$sid" "$f"
+    resume="--session-id '$sid'"
+  fi
+  open_tab "$win" "$dir" "$(calm_env | sed 's/^\(.\)/export \1/;s/ $/;/')GUILD_ROLE=qm GUILD_QM='$name' claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n 'quartermaster-$name' $resume; exec \$SHELL" >/dev/null
+  echo "quartermaster $name is in tab $win"
+}
+
+cmd_qm() {
+  case "${1:-list}" in
+    new) [ -n "${2:-}" ] || die "usage: guild qm new <name> [dir]"
+         [[ "$2" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "a quartermaster name is lowercase letters, digits and dashes"
+         [ "$2" != qm ] || die "qm is the first quartermaster already"
+         tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+         qm_open "$2" "${3:-}" ;;
+    list) echo "qm (the first one)"; for f in "$GUILD_HOME"/qms/*.json; do [ -f "$f" ] && echo "$(basename "$f" .json)"; done ;;
+    close) [ -n "${2:-}" ] || die "usage: guild qm close <name>"
+           local w; w=$(window_by_name "qm-$2"); [ -n "$w" ] && tm kill-window -t "$w"
+           rm -f "$GUILD_HOME/qms/$2.json"; echo "quartermaster $2 closed (its quests keep running; they report to the first qm now)" ;;
+    *) die "usage: guild qm new <name> [dir] | list | close <name>" ;;
+  esac
+}
+
 cmd_term() { # a plain terminal tab, in a folder
   local dir="${1:-${GUILD_EDIT_ROOT:-$HOME/Workspace}}"
   [ -d "$dir" ] || dir="$HOME"
@@ -169,7 +206,7 @@ cmd_up() {
       echo "$sid" > "$GUILD_HOME/qm-session"
       resume="--session-id '$sid'"
     fi
-    local qm="$(calm_env)GUILD_ROLE=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
+    local qm="$(calm_env)GUILD_ROLE=qm GUILD_QM=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
     tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" "guild watch; exec \$SHELL"
     # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
@@ -184,6 +221,9 @@ cmd_up() {
     tm select-window -t "$SESSION:qm"
     tm select-pane -t "$SESSION:qm.1"
     cmd_revive >/dev/null 2>&1 || true   # quests that outlived the last session get their windows back
+    for f in "$GUILD_HOME"/qms/*.json; do   # the other quartermasters come back too, same conversations
+      [ -f "$f" ] && qm_open "$(basename "$f" .json)" >/dev/null 2>&1
+    done
   fi
   if [ -n "${TMUX:-}" ]; then tm switch-client -t "$SESSION"; else tm attach -t "$SESSION"; fi
 }
@@ -691,6 +731,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent",
+           "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
 PY
@@ -996,6 +1037,7 @@ cmd_wait() { # [timeout] [--for slug,slug]
   # A parent waiting for its helpers keeps its own cursor, so it never eats the
   # quartermaster's events (and the quartermaster still sees everything).
   [ -n "$only" ] && key="-$(echo "$only" | tr -c 'a-z0-9\n' '_')"
+  [ -z "$only" ] && [ -n "${GUILD_QM:-}" ] && [ "$GUILD_QM" != qm ] && key="-qm-$GUILD_QM"   # each quartermaster keeps its own cursor
   local cursor_file="$GUILD_HOME/.wait-cursor$key" cursor size waited=0 out
   cursor=$(cat "$cursor_file" 2>/dev/null || echo 0)
   while :; do
@@ -1009,6 +1051,8 @@ cmd_wait() { # [timeout] [--for slug,slug]
       echo "$size" > "$cursor_file"; cursor=$size
       if [ -n "$only" ]; then
         out=$(printf '%s\n' "$out" | awk -F'\t' -v only=",$only," 'index(only, "," $2 ",")')
+      elif [ -n "${GUILD_QM:-}" ] && ls "$GUILD_HOME"/qms/*.json >/dev/null 2>&1; then
+        out=$(printf '%s\n' "$out" | python3 "$GUILD_REPO/bin/fleet.py" owned-by "$GUILD_QM")
       fi
       [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
     fi
@@ -1206,6 +1250,7 @@ case "${1:-}" in
   click) shift; cmd_click "$@" ;;
   budget) shift; cmd_budget "$@" ;;
   helper) shift; cmd_helper "$@" ;;
+  qm) shift; cmd_qm "$@" ;;
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;

@@ -700,6 +700,19 @@ def main():
         on = cmd == "pin" or (cmd == "toggle" and resolve(rest[0])["key"] not in {p["key"] for p in pins()})
         item = set_pin(rest[0], on)
         print(f"{'pinned' if on else 'unpinned'} {item['name']}")
+    elif cmd == "owned-by":                  # filter event lines on stdin to one quartermaster's quests
+        me = rest[0] if rest else "qm"
+        live = {os.path.basename(f)[:-5] for f in glob.glob(os.path.join(GUILD_HOME, "qms", "*.json"))} | {"qm"}
+        for line in sys.stdin.read().splitlines():
+            parts = line.split("\t")
+            if len(parts) < 3:
+                continue
+            meta = load_json(os.path.join(QUESTS, parts[1], "meta.json"), {})
+            owner = meta.get("qm") or "qm"
+            if owner not in live:
+                owner = "qm"                      # its quartermaster was closed: the first one takes it
+            if owner == me:
+                print(line)
     elif cmd == "pins":
         for r in pin_rows():
             print("\t".join([r["key"], r["name"], r["state"], r["tab"]]))

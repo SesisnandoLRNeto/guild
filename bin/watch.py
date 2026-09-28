@@ -182,7 +182,7 @@ def panel(title, rows, width, focused=False):
 # One letter each, like the deck. They work while the sidebar has focus (click it, or Ctrl-g Ctrl-h).
 # The same letters work after Ctrl-g from anywhere, so one set of keys to learn.
 KEYS = [("n", "New", ("new",)), ("t", "Term", ("term",)), ("b", "Board", ("campaign",)),
-        ("g", "Docket", ("board",)), ("p", "Pins", ("pins",)), ("0-9", "Tab", None), ("x", "Close", None),
+        ("g", "Docket", ("board",)), ("p", "Pins", ("pins",)), ("s", "Pin it", None), ("0-9", "Tab", None), ("x", "Close", None),
         ("?", "Keys", ("keys",)), ("q", "Back", ("back",))]
 
 
@@ -247,24 +247,50 @@ def kind_chip(kind):
 
 
 def items(quests, pins):
-    """Every open tab, numbered like the tab strip, then quests that have no tab yet."""
+    """Every tab as a tree: each quartermaster, then the quests it started (helpers under their
+    quest), then the other tabs. Numbers stay the tab strip's numbers."""
     by_slug = {q["slug"]: q for q in quests}
-    out = []
+    wins = []
     for line in tmux_out("list-windows", "-t", SESSION, "-F", "#{window_index}\t#{window_id}\t#{window_name}\t#{window_active}").splitlines():
         parts = line.split("\t")
-        if len(parts) < 4:
-            continue
-        index, wid, name, active = parts
-        kind = tab_kind(name, by_slug)
-        q = by_slug.get(name)
-        out.append({"n": int(index), "name": name, "kind": kind, "state": q["state"] if q else ("working" if kind in ("qm", "ai") else ""),
-                    "repo": os.path.basename(q["repo"]) if q else "", "quest": q, "active": active == "1",
-                    "action": ("win", wid), "extra": "board" if q and q["boards"] else "", "tab": True})
-    open_names = {it["name"] for it in out}
-    for q in quests:
-        if q["slug"] not in open_names and not q.get("pseudo") and q["state"] not in ("done",):
-            out.append({"n": None, "name": q["slug"], "kind": "quest", "state": q["state"], "repo": os.path.basename(q["repo"]),
-                        "quest": q, "active": False, "action": ("quest", q["slug"]), "extra": "no tab", "tab": False})
+        if len(parts) == 4:
+            wins.append({"n": int(parts[0]), "wid": parts[1], "name": parts[2], "active": parts[3] == "1"})
+    by_name = {w["name"]: w for w in wins}
+
+    def node(name, q=None, w=None):
+        kind = "quest" if q else tab_kind(name, by_slug)
+        return {"n": w["n"] if w else None, "name": name, "kind": kind,
+                "state": q["state"] if q else ("working" if kind in ("qm", "ai") else ""),
+                "repo": os.path.basename(q["repo"]) if q else "", "quest": q, "active": bool(w and w["active"]),
+                "action": ("win", w["wid"]) if w else ("quest", name),
+                "extra": ("board" if q and q["boards"] else "") if w else ("no tab" if q else ""), "tab": bool(w), "glyph": ""}
+
+    live = [q for q in quests if not q.get("pseudo") and (q["slug"] in by_name or q["state"] != "done")]
+    roots = [w for w in wins if w["name"] == "qm" or w["name"].startswith("qm-")]
+    root_names = {w["name"] for w in roots}
+    owner_of = lambda q: ("qm" if (q.get("qm") or "qm") == "qm" else "qm-" + q["qm"])
+    out, placed = [], set()
+    for r in roots:
+        out.append(node(r["name"], None, r)); placed.add(r["name"])
+        mine = [q for q in live if not q.get("parent") and (owner_of(q) == r["name"] or (owner_of(q) not in root_names and r["name"] == "qm"))]
+        mine.sort(key=lambda q: (by_name[q["slug"]]["n"] if q["slug"] in by_name else 999, q["slug"]))
+        for i, q in enumerate(mine):
+            last = i == len(mine) - 1
+            it = node(q["slug"], q, by_name.get(q["slug"])); it["glyph"] = "└ " if last else "├ "
+            out.append(it); placed.add(q["slug"])
+            kids = [k for k in live if k.get("parent") == q["slug"]]
+            for j, k in enumerate(kids):
+                kit = node(k["slug"], k, by_name.get(k["slug"]))
+                kit["glyph"] = ("  " if last else "│ ") + ("└ " if j == len(kids) - 1 else "├ ")
+                out.append(kit); placed.add(k["slug"])
+    others = [w for w in wins if w["name"] not in placed]
+    for q in live:                                   # quests with no quartermaster tab at all
+        if q["slug"] not in placed:
+            out.append(node(q["slug"], q, by_name.get(q["slug"]))); placed.add(q["slug"])
+    for w in others:
+        if w["name"] not in placed:
+            it = node(w["name"], by_slug.get(w["name"]), w); it["other"] = True
+            out.append(it)
     return out
 
 
@@ -274,8 +300,9 @@ def row_for(it, width, highlight, spend):
     dot = "●" if state in ("working", "needs-decision", "blocked", "failed") else "○"
     tag = chip(it["repo"]) if it["repo"] else kind_chip(it["kind"])
     parent = (it.get("quest") or {}).get("parent")
-    label = f"└ {it['name'][len(parent) + 1:] if it['name'].startswith(parent + '-') else it['name']}" if parent else it["name"]
-    name = f"{TEXT if highlight else SUBTEXT}{BOLD if highlight else ''}{label}{RESET}"
+    label = it["name"][len(parent) + 1:] if parent and it["name"].startswith(parent + "-") else it["name"]
+    tone = TEXT if highlight else (DIM if not it["tab"] else SUBTEXT)
+    name = f"{BORDER}{it.get('glyph', '')}{RESET}{tone}{BOLD if highlight else ''}{label}{RESET}"
     mark = f" {YELLOW}*{RESET}" if it["extra"] == "board" else ""
     if (it.get("quest") or {}).get("machine"):
         mark += f" {DIM}@{it['quest']['machine']}{RESET}"
@@ -310,8 +337,8 @@ def draw(quests, width, height, spend=None, pins=None, selected=None, focused=Fa
         out += panel("Pinned", pin_rows(pins, width), width)
     rows = []
     for i, it in enumerate(listing):
-        if not it["tab"] and i and listing[i - 1]["tab"]:
-            rows.append((f"{DIM}  not open{RESET}", None, False))
+        if it.get("other") and not (i and listing[i - 1].get("other")):
+            rows.append((f"{DIM}  other tabs{RESET}", None, False))
         highlight = (i == selected) if (focused and selected is not None) else it["active"]
         rows += row_for(it, width, highlight, spend)
     out += panel("Tabs", rows or [(f"{DIM}no tabs{RESET}", None, False)], width, focused)
@@ -323,17 +350,27 @@ def draw(quests, width, height, spend=None, pins=None, selected=None, focused=Fa
     return out, listing
 
 
-def activity(width, limit=8, hours=24):
-    """(line, quest, state) per event, newest first, last day only."""
+ACTIVITY_HOURS = float(os.environ.get("GUILD_ACTIVITY_HOURS", "24"))
+
+
+def activity(width, limit=8, hours=ACTIVITY_HOURS):
+    """(line, quest, state) per event, newest first: only quests still alive (closed or finished
+    ones drop off) and only the last day. events.log itself keeps everything for the retro."""
     try:
         rows = open(EVENTS).read().splitlines()
     except OSError:
         return [(f"{DIM}nothing yet{RESET}", None, "")]
     cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - hours * 3600))
+    alive = set()
+    for q in read_quests():
+        if q["state"] not in ("done", "failed", "closed"):
+            alive.add(q["slug"])
     out = []
     for row in reversed(rows):
         parts = row.split("\t")
         if len(parts) < 4 or parts[0] < cutoff:
+            continue
+        if parts[1] not in alive:
             continue
         when, slug, state, note = parts[0][11:16], short_slug(parts[1]), parts[2], short_note(parts[3])
         word = SHORT_STATE.get(state, state)
@@ -503,6 +540,10 @@ def main():
                             if hit:
                                 selected = hit[0]
                                 act(listing[selected]["action"])
+                        elif ch == "s" and listing:       # pin or unpin the selected row
+                            it = listing[min(selected, len(listing) - 1)]
+                            subprocess.run([os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild"), "pin", it["name"]],
+                                           capture_output=True)
                         elif ch == "x" and listing:       # close a terminal or editor tab, never an agent
                             it = listing[min(selected, len(listing) - 1)]
                             if it["tab"] and it["kind"] in ("term", "edit"):

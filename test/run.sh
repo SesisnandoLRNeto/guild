@@ -928,6 +928,20 @@ hasnt "and off removes it" "$(cat "$HOME/.claude/settings.json")" "jev.py hook"
 kill $JEV_PID 2>/dev/null; unset GUILD_JEV_URL; rm -f "$GUILD_HOME/local/jev.json" "$GUILD_HOME/.jev-cache.json"
 sed -i '' '/TYPESAFE_API_KEY/d' "$GUILD_HOME/local/env"
 
+# more than one quartermaster: each has its tab, its conversation, and only its quests' events
+section "quartermasters"
+"$GUILD" qm new work "$REPO_A" >/dev/null 2>&1
+tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W' | grep -qx qm-work && ok "guild qm new opens another quartermaster tab" || bad "guild qm new opens another quartermaster tab"
+has "it keeps its own conversation id" "$(cat "$GUILD_HOME/qms/work.json")" '"session"'
+echo "work quest" | GUILD_QM=work "$GUILD" quest wq --repo "$REPO_A" >/dev/null 2>&1
+is "a quest remembers the quartermaster that started it" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/wq/meta.json'))['qm'])")" "work"
+ev=$(printf '2026-09-28T10:00:00\twq\tworking\tx\n2026-09-28T10:00:01\talpha\tworking\ty\n')
+is "the work quartermaster sees only its quest's events" "$(printf '%s\n' "$ev" | python3 "$REPO/bin/fleet.py" owned-by work | cut -f2)" "wq"
+is "and the first one sees the rest" "$(printf '%s\n' "$ev" | python3 "$REPO/bin/fleet.py" owned-by qm | cut -f2)" "alpha"
+"$GUILD" qm close work >/dev/null 2>&1
+is "a closed quartermaster's quests go back to the first one" "$(printf '%s\n' "$ev" | python3 "$REPO/bin/fleet.py" owned-by qm | cut -f2 | tr '\n' ' ')" "wq alpha "
+"$GUILD" close wq --force >/dev/null 2>&1
+
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
 CK="$TMP/cockpit-home"; mkdir -p "$CK/local"
