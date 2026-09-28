@@ -39,7 +39,7 @@ guild wait [timeout-seconds] [--for slug,slug]
                                     block until a new event arrives, then print it (default 1800s);
                                     --for waits only for those quests, with its own cursor
 guild helper <name> [--tier T] < brief   inside a quest: a helper quest on a branch from yours
-guild qm new <name> [dir] | list | close <name>
+guild qm new <name> [dir] | list | reset [name] | close <name>
                                     another quartermaster in its own tab; it sees only its own quests' events
 guild quest ... --machine NAME      run the quest on another machine over ssh (see guild machines)
 guild machines [list|check|sync]    the machines in local/machines.json, whether guild answers there
@@ -172,6 +172,27 @@ qm_open() { # name [dir]
   echo "quartermaster $name is in tab $win"
 }
 
+# A fresh conversation for a quartermaster. Everything on disk stays (quests, boards,
+# history); only its chat context starts over, and the new id is kept for guild up.
+qm_reset() { # name
+  local name="$1" win sid pane first
+  tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
+  sid=$(uuidgen | tr 'A-Z' 'a-z')
+  if [ "$name" = qm ]; then
+    win="qm"; echo "$sid" > "$GUILD_HOME/qm-session"
+  else
+    win="qm-$name"
+    [ -f "$GUILD_HOME/qms/$name.json" ] || die "no quartermaster $name (guild qm list)"
+    python3 -c "import json,sys;p=sys.argv[1];d=json.load(open(p));d['session']=sys.argv[2];json.dump(d,open(p,'w'),indent=2)" "$GUILD_HOME/qms/$name.json" "$sid"
+  fi
+  pane=$(content_pane "$(window_by_name "$win")")
+  [ -n "$pane" ] || die "no tab $win"
+  first="You were just reset to a fresh context. Run guild roster and guild board list to see where things stand, read ~/.guild/lessons.md, then keep one guild wait running in the background while any quest is active."
+  tm respawn-pane -k -t "$pane" "$(calm_env | sed 's/^\(.\)/export \1/;s/ $/;/')GUILD_ROLE=qm GUILD_QM='$name' claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n '$( [ "$name" = qm ] && echo quartermaster || echo "quartermaster-$name")' --session-id '$sid' '$first'; exec \$SHELL"
+  event "${name/#qm/quartermaster}" working "context reset: a fresh conversation ($sid)"
+  echo "quartermaster $name reset: fresh conversation, quests untouched"
+}
+
 cmd_qm() {
   case "${1:-list}" in
     new) [ -n "${2:-}" ] || die "usage: guild qm new <name> [dir]"
@@ -180,10 +201,11 @@ cmd_qm() {
          tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
          qm_open "$2" "${3:-}" ;;
     list) echo "qm (the first one)"; for f in "$GUILD_HOME"/qms/*.json; do [ -f "$f" ] && echo "$(basename "$f" .json)"; done ;;
+    reset) qm_reset "${2:-qm}" ;;
     close) [ -n "${2:-}" ] || die "usage: guild qm close <name>"
            local w; w=$(window_by_name "qm-$2"); [ -n "$w" ] && tm kill-window -t "$w"
            rm -f "$GUILD_HOME/qms/$2.json"; echo "quartermaster $2 closed (its quests keep running; they report to the first qm now)" ;;
-    *) die "usage: guild qm new <name> [dir] | list | close <name>" ;;
+    *) die "usage: guild qm new <name> [dir] | list | reset [name] | close <name>" ;;
   esac
 }
 

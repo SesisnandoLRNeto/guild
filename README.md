@@ -385,7 +385,7 @@ Each card shows the model as a wax seal (legendary for Fable, epic for Opus, rar
 
 The side menu's Tabs panel is a tree: each quartermaster, the quests it started under it, helpers under their quest, then the other tabs (terminals, editors). Activity lists only quests still alive, for the last day (`GUILD_ACTIVITY_HOURS` changes it); `events.log` keeps everything for the retro.
 
-`guild qm new <name> [dir]` opens another quartermaster in its own tab (`qm-<name>`), with its own conversation. Each quest remembers who started it, and `guild wait` shows each quartermaster only the events of its own quests. `guild up` brings them all back; `guild qm close <name>` hands its quests to the first one.
+`guild qm new <name> [dir]` opens another quartermaster in its own tab (`qm-<name>`), with its own conversation. Each quest remembers who started it, and `guild wait` shows each quartermaster only the events of its own quests. `guild up` brings them all back; `guild qm close <name>` hands its quests to the first one. `guild qm reset [name]` gives a quartermaster a fresh conversation (quests, boards and history stay; the new id is kept for `guild up`); `/compact` in its pane is the lighter option.
 
 ### Pins
 

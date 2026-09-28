@@ -941,6 +941,13 @@ is "and the first one sees the rest" "$(printf '%s\n' "$ev" | python3 "$REPO/bin
 "$GUILD" qm close work >/dev/null 2>&1
 is "a closed quartermaster's quests go back to the first one" "$(printf '%s\n' "$ev" | python3 "$REPO/bin/fleet.py" owned-by qm | cut -f2 | tr '\n' ' ')" "wq alpha "
 "$GUILD" close wq --force >/dev/null 2>&1
+old_sid=$(cat "$GUILD_HOME/qm-session" 2>/dev/null)
+"$GUILD" qm reset >/dev/null 2>&1; sleep 1
+new_sid=$(cat "$GUILD_HOME/qm-session")
+[ -n "$new_sid" ] && [ "$new_sid" != "$old_sid" ] && ok "qm reset keeps a new conversation id for guild up" || bad "qm reset keeps a new conversation id for guild up"
+has "and starts the quartermaster fresh on it" "$(cat "$GUILD_HOME/last-claude-args")" "--session-id $new_sid"
+has "told to look at the roster and watch again" "$(cat "$GUILD_HOME/last-claude-args")" "fresh context"
+
 
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
