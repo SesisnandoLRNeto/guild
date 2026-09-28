@@ -868,6 +868,53 @@ is "and the quest moves on there" "$(cut -f1 "$RH/.guild/quests/rq/status")" "wo
 [ -f "$RH/.guild/.wartable-pid" ] && kill "$(cat "$RH/.guild/.wartable-pid")" 2>/dev/null
 rm -f "$GUILD_HOME/local/machines.json"; unset GUILD_SSH
 
+# Jev: off by default, a data rule, and three scopes; a fake Jev answers, nothing leaves the machine
+section "jev"
+python3 - <<'PY' &
+import http.server, json
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert self.headers["Authorization"] == "Bearer test-jev-key"
+        a = {}
+        for q in body["questions"]:
+            a[q] = {"waiting": {"type": "noul", "noul": 0.93, "confidence": 0.9},
+                    "kind": {"type": "choice", "choice": "asking", "confidence": 0.88},
+                    "risk": {"type": "score", "score": 4, "confidence": 0.8}}[q]
+        out = json.dumps({"model": "jev-test", "answers": a}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
+    def log_message(self, *a): pass
+http.server.ThreadingHTTPServer(("127.0.0.1", 4895), H).serve_forever()
+PY
+JEV_PID=$!; sleep 0.5
+export GUILD_JEV_URL="http://127.0.0.1:4895/v1/systemone"
+has "Jev is off until you turn it on" "$("$GUILD" jev status)" "board   off"
+out=$(python3 "$REPO/bin/jev.py" waiting "$REPO_A" "Two ways to do it. Tell me which one.")
+is "without a key it stays silent and guild falls back" "$out" "unknown"
+echo 'TYPESAFE_API_KEY=test-jev-key' >> "$GUILD_HOME/local/env"
+has "the test call reaches Jev" "$("$GUILD" jev test)" "waiting for a decision = 0.93"
+"$GUILD" jev on board >/dev/null
+is "board scope: Jev decides whether a session waits for you" "$(python3 "$REPO/bin/jev.py" waiting "$REPO_A" "Two ways to do it. Tell me which one.")" "waiting"
+"$GUILD" jev block TestOrg >/dev/null
+is "the data rule keeps a blocked owner's text home" "$(python3 "$REPO/bin/jev.py" waiting "$REPO_A" "Two ways. Tell me.")" "unknown"
+"$GUILD" jev allow "$REPO_A" >/dev/null
+is "unless that folder is allowed" "$(python3 "$REPO/bin/jev.py" waiting "$REPO_A" "Two ways. Tell me.")" "waiting"
+"$GUILD" jev allow TestOrg >/dev/null            # quests run in worktrees elsewhere: allow by owner
+echo "jev quest" | "$GUILD" quest jq --repo "$REPO_A" >/dev/null 2>&1
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"Should I drop the old table, or keep it for a release?"}]}}' > "$TMP/jq.jsonl"
+is "quests off: no stop verdict" "$(python3 "$REPO/bin/jev.py" stop jq "$TMP/jq.jsonl")" "none"
+"$GUILD" jev on quests >/dev/null
+has "quests on: a silent stop that asks becomes a question" "$(python3 "$REPO/bin/jev.py" stop jq "$TMP/jq.jsonl")" "asking Should I drop the old table"
+has "and the trial gets a risk score" "$(GUILD_QUEST=jq "$GUILD" jev risk 2>&1)" "risk 4"
+"$GUILD" jev on global >/dev/null
+has "global scope adds a Stop hook to Claude's settings" "$(cat "$HOME/.claude/settings.json")" "jev.py hook"
+ls "$HOME"/.claude/settings.json.before-guild-jev-* >/dev/null 2>&1 && ok "after a backup" || ok "after a backup (there was no settings file)"
+"$GUILD" jev off global >/dev/null
+hasnt "and off removes it" "$(cat "$HOME/.claude/settings.json")" "jev.py hook"
+"$GUILD" close jq --force >/dev/null 2>&1
+kill $JEV_PID 2>/dev/null; unset GUILD_JEV_URL; rm -f "$GUILD_HOME/local/jev.json" "$GUILD_HOME/.jev-cache.json"
+sed -i '' '/TYPESAFE_API_KEY/d' "$GUILD_HOME/local/env"
+
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
 CK="$TMP/cockpit-home"; mkdir -p "$CK/local"

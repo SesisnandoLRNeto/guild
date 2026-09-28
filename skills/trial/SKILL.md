@@ -17,6 +17,7 @@ Run this inside a quest worktree (`GUILD_QUEST` is set). The goal is simple: no 
    - Not real after checking: drop it, and note why in the report.
 4. **Acceptance.** `guild check` must be green on the current commit, or `guild trial pass` refuses. If the brief has no `check:` lines, say so in the report: a code quest without runnable acceptance is a gap the guildmaster should see.
 5. **Project checks.** Run the project's own checks, found from the repo (package.json scripts, Makefile, mvnw or gradlew, pytest, and so on): build, tests related to the change, lint and types. Paste the result lines, not the full logs.
+5b. **Second opinion on risk** when `guild jev status` shows the quests scope on: `guild jev risk` scores the diff 1 to 5. Put its score next to yours in the report; if they differ by 2 or more, say why.
 6. **Live check** when it makes sense: run the thing (CLI, endpoint, UI through the browser tools) and prove that the acceptance criteria hold.
 7. **Report.** Write `~/.guild/quests/$GUILD_QUEST/trial.md`:
    - **Risk**: low, medium or high, with the reason (blast radius, migrations, public API, auth, data).

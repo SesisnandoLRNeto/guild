@@ -73,6 +73,8 @@ guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest
                                     a lesson with verbatim quotes from two quests; you accept it on the docket
 guild lessons                       proposed, accepted and rejected lessons
 guild prs                           each quest's PR as GitHub sees it (state, review, checks)
+guild jev status|test|on|off|allow|block|risk
+                                    Jev (TypeSafe) for small judgment calls; scopes: board, quests, global
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
                                     data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
@@ -1207,6 +1209,9 @@ case "${1:-}" in
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
+  jev) shift
+       if [ "${1:-}" = risk ] && [ -z "${2:-}" ]; then set -- risk "$(current_quest)"; fi
+       python3 "$GUILD_REPO/bin/jev.py" "${@:-status}" ;;
   lesson) shift; [ "${1:-}" = propose ] || die "usage: guild lesson propose \"<lesson>\" --evidence \"<quest>: <quote>\" (twice or more) [--why \"...\"]"
           python3 "$GUILD_REPO/bin/lessons.py" "$@" ;;
   lessons) shift; python3 "$GUILD_REPO/bin/lessons.py" list ;;

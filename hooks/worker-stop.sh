@@ -35,6 +35,15 @@ guild_bin="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/bin/guild"
 print(1 if time.time() - os.path.getmtime(sys.argv[1]) < float(sys.argv[2]) - 2 else 0)' "$transcript" "$grace")
     [ "$moved" = 1 ] && exit 0
   fi
+  # With Jev (guild jev on quests), ask what the silent stop means instead of guessing:
+  # a question becomes a board on the docket, a claimed finish or a blocker says so.
+  verdict=$(python3 "$(dirname "$guild_bin")/jev.py" stop "$slug" "$transcript" 2>/dev/null)
+  case "$verdict" in
+    asking\ *)     "$guild_bin" status "$slug" needs-decision "${verdict#asking }"; exit 0 ;;
+    stuck\ *)      "$guild_bin" status "$slug" blocked "${verdict#stuck }"; exit 0 ;;
+    finished)      "$guild_bin" status "$slug" stopped "says it finished, but did not report done"; exit 0 ;;
+    waiting_on_job) exit 0 ;;
+  esac
   # its own copy of guild, not whatever is on PATH (in CI, or before install.sh, nothing is)
   "$guild_bin" status "$slug" stopped "turn ended without a report; peek to see why"
 ) >/dev/null 2>&1 &

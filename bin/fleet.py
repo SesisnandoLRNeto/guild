@@ -161,7 +161,16 @@ def read_session(path):
     # a question tool waiting for an answer is a decision, not work
     pending = [c.get("name") for c in ((last or {}).get("message") or {}).get("content", []) or []
                if isinstance(c, dict) and c.get("type") == "tool_use"] if (last or {}).get("type") == "assistant" else []
-    s["asking"] = "AskUserQuestion" in pending or (ended and bool(last_text) and bool(ASKS.search(last_text[-400:])))
+    guess = None
+    if ended and last_text and "AskUserQuestion" not in pending:
+        try:                                     # Jev, when the board scope is on and the folder may be sent
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import jev
+            guess = jev.waiting(s["cwd"], last_text)
+        except Exception:
+            guess = None
+    s["asking"] = "AskUserQuestion" in pending or (
+        ended and bool(last_text) and (guess if guess is not None else bool(ASKS.search(last_text[-400:]))))
     s["question"] = question_of(last_text) if s["asking"] else ""
     sub = os.path.join(os.path.dirname(path), s["id"], "subagents")
     for log in glob.glob(os.path.join(sub, "*.jsonl")):
