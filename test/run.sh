@@ -660,8 +660,8 @@ echo '{"tool_name":"Bash","tool_input":{"command":"guild board wait 1 --timeout 
 is "guild commands still run, so it can wait for the answer" "$?" "0"
 bb=$(cat "$GUILD_HOME"/quests/ef/.budget-asked-2)
 has "the cap question is on the docket" "$(curl -s "${url%/campaign}/docket.json")" "reached its \$2 budget"
-curl -s -X POST "${url%/campaign}/docket/rule" -d "{\"quest\":\"ef\",\"board\":\"$bb\",\"answers\":{\"choice\":\"raise10\"}}" >/dev/null
-is "raising the cap applies at once" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/ef/meta.json'))['budget'])")" "12.0"
+curl -s -X POST "${url%/campaign}/docket/rule" -d "{\"quest\":\"ef\",\"board\":\"$bb\",\"answers\":{\"choice\":\"raise50\"}}" >/dev/null
+is "raising the cap applies at once" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/ef/meta.json'))['budget'])")" "52.0"
 echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | GUILD_QUEST=ef "$REPO/hooks/worker-guard.sh" >/dev/null 2>&1
 is "and tools run again" "$?" "0"
 rm -f "$GUILD_HOME/.cost-cache.json"; "$GUILD" close ef --force >/dev/null 2>&1

@@ -16,7 +16,7 @@ import sys
 
 GUILD_HOME = os.environ.get("GUILD_HOME", os.path.expanduser("~/.guild"))
 BIN = os.path.dirname(os.path.realpath(__file__))
-RAISES = {"raise10": 10, "raise25": 25, "raise50": 50}
+RAISES = {"raise50": 50, "raise100": 100}   # big steps: a busy quest passes a small raise in minutes
 
 
 def spend(slug):
@@ -66,9 +66,9 @@ def ask(slug, spent, cap):
     with contextlib.redirect_stdout(io.StringIO()):
         wartable.cmd_ask({"quest": slug, "question": f"{slug} reached its ${cap:g} budget (spent ${spent:.2f}). Raise it or stop?",
                           "detail": "The adventurer's tools are paused until you answer. Raising adds to the cap and it carries on.",
-                          "option": ["raise10=Raise by $10: finish the current step", "raise25=Raise by $25: room for the rest",
-                                     "raise50=Raise by $50: a big piece is still left", "stop=Stop here: keep what is done"],
-                          "recommend": "raise10", "title": f"Budget reached: {slug}"})
+                          "option": ["raise50=Raise by $50: room to finish", "raise100=Raise by $100: a big piece is still left",
+                                     "stop=Stop here: keep what is done"],
+                          "recommend": "raise50", "title": f"Budget reached: {slug}"})
     bdir = os.path.join(GUILD_HOME, "quests", slug, "boards")
     new = sorted(set(os.listdir(bdir)) - before) if os.path.isdir(bdir) else []
     board = new[-1] if new else ""

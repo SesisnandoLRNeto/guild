@@ -2,8 +2,8 @@
   "_note": "The quartermaster picks the first rule whose 'when' fits the quest, else 'default'. Keep 'why' so future you knows the reason. Copy to ~/.guild/local/dispatch.json and edit there.",
   "_tiers": "A tier names the kind of work; each harness maps it to its own model in config/harnesses.json (claude: plan=opus, build=sonnet, deep=claude-fable-5-1, light=haiku). Rules say a tier, so switching harness keeps the same intent. 'plan': true thinks on the plan tier first, puts the plan on the war table, and after your approval the same conversation builds on the rule's tier. 'model' still works when you want one exact model.",
   "_harnesses": "Run `guild harnesses` to see them. Add your own CLI in ~/.guild/local/harnesses.json.",
-  "_budget": "budget_default is each quest's dollar cap unless the quest sets --budget. Past it, the adventurer's tools pause and the docket asks you: raise by 10, 25 or 50, or stop. Remove the key for no cap. A rule may set its own \"budget\" and \"effort\" (low, medium, high, xhigh, max) next to harness and tier.",
-  "budget_default": 30,
+  "_budget": "budget_default is each quest's dollar cap unless the quest sets --budget. Past it, the adventurer's tools pause and the docket asks you: raise by 50 or 100, or stop. Remove the key for no cap. A rule may set its own \"budget\" and \"effort\" (low, medium, high, xhigh, max) next to harness and tier.",
+  "budget_default": 50,
   "rules": [
     {
       "when": "High complexity: new feature with product or UI judgment, a subtle concurrency or data bug, work across many modules",
