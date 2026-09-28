@@ -1,10 +1,20 @@
 # guild
 
-A small, personal agent orchestration setup for Claude Code.
+Personal agent orchestration for Claude Code and other agent CLIs.
 
-You are the **guildmaster**. You talk to one agent, the **quartermaster**. It turns your requests into **quests** and sends **adventurers** (other agent sessions) to do them, each in its own git worktree and tmux window. Adventurers must pass a **trial** (review + checks) before they can open a PR. You review every PR. Nothing merges without you.
+You are the **guildmaster**. You talk to one agent, the **quartermaster**. It turns your requests into **quests** and sends **adventurers** (other agent sessions) to do them, each in its own git worktree and its own tab of a tmux cockpit. An adventurer must pass a **trial** (an adversarial review and the project's checks) before it can open a PR. You review every PR, and nothing merges without you.
 
-Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate](https://github.com/kunchenguid/firstmate). This is a separate, much smaller take written from scratch for one person's workflow.
+Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate](https://github.com/kunchenguid/firstmate). This is a separate take, written from scratch for one person's workflow.
+
+## What it does
+
+- **One screen.** A tmux [cockpit](#the-cockpit) with the same side menu in every tab, click and key driven, in claude-deck's colors. New terminals, editors and Claude tabs open inside it.
+- **Decisions on pages, not in chat.** Agents put every real choice on the [war table](#the-war-table), a local parchment page. The [docket](#the-war-table) lists every open decision on one page: rule, hold until a date, send all. It works from your phone over Tailscale, and you get a notification when something waits for you.
+- **Plans before code.** A quest can plan first on Opus, show the plan on a page, and build on another model once you approve ([routing](#routing-which-model-does-which-work)).
+- **Proof before review.** Acceptance written as commands and sealed at the start ([EDD](#acceptance-as-checks-edd)), the trial gate on `gh pr create`, and a wrap-up page for every code quest. Backend wrap-ups draw the data model changes, their impact and the business rule changes. You grade each wrap-up, and the grades feed the retro.
+- **The whole picture.** A [campaign board](#the-campaign-board): a kanban of every quest, every Claude session on the machine, its subagents and your tickets, with Trello-like labels and the real PR state from GitHub. Finished work closes itself once graded or merged.
+- **Any model, any CLI.** Harnesses are config: Claude Code, OpenRouter, Codex or your own. Tiers route planning to Opus, building to Sonnet, hard work to Fable and small fixes to Haiku, each with an effort level and a dollar cap ([harnesses](#harnesses-who-runs-a-quest)).
+- **Room to grow.** Helper quests under a quest, quests on another machine over SSH, lessons that need evidence from two quests, a Jira watcher, and optional [Jev](#the-war-table) for small judgment calls.
 
 ## Design
 
@@ -14,6 +24,7 @@ Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate
 - **No polling tokens.** The quartermaster runs `guild wait` in the background. It returns only when an adventurer reports, and Claude Code wakes the quartermaster when a background command finishes.
 - **No false alarms.** A turn that ends while an adventurer waits on a background command is not a silent stop. The stop hook looks again after two minutes (`GUILD_STOP_GRACE`) and only flags the quest if nothing moved.
 - **Right identity per repo.** A quest's git author and `gh` account come from the repo's remote owner (`~/.guild/local/identities.json`), so work repos get work identity and personal repos get personal identity.
+- **Nothing leaves the Mac by default.** The phone access, push notifications and Jev are off until you turn them on, and Jev follows a data rule (blocked owners stay home). Guild reads GitHub and Jira; it never writes to them.
 
 ## Install
 
@@ -182,16 +193,10 @@ Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` a
 ## Tests
 
 ```sh
-./test/run.sh      # 145 checks, under a minute, no model calls
+./test/run.sh      # 296 checks, about 3 minutes, no model calls
 ```
 
-The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table (including a path traversal attempt), the trial gate in both forms, cost arithmetic against a synthetic session log, the retro counters, revive, close, and doctor. It also runs in CI on every push.
-
-Close the terminal, reboot, or kill tmux: nothing is lost.
-
-- The quartermaster keeps its Claude session id in `~/.guild/qm-session`, so the next `guild up` **resumes the same conversation** instead of waking up with an empty head. If that session log is gone, it starts a fresh one under a new id.
-- Active quests get their windows back automatically (`guild revive` does it on its own during `guild up`). Each adventurer is relaunched in its worktree with `--continue`, and is told it was interrupted, so it checks `git log` and its own status before carrying on. A Codex quest resumes with `codex resume --last`.
-- `guild doctor` reports anything left behind: quests with no window, finished quests still holding a worktree, boards waiting on you, broken identities, missing tools.
+The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table and the docket, the trial gate in both forms, checks and grades, costs and the retro, budget caps, helpers, lessons, revive and close. Fakes stand in for everything outside: a fake Jira, a fake Jev, a fake ntfy, a fake GitHub PR cache, and a fake `ssh` that runs the "remote" guild in its own home. `test/cockpit.py` drives a real tmux client in a pty to test keys and clicks. It also runs in CI on every push.
 
 ## Running a phase of tickets
 
@@ -400,4 +405,8 @@ Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspa
 
 ## Roadmap
 
-- A second layer of orchestrators, so one quartermaster is not the only liaison when the fleet grows
+- Prove the newer pieces in daily use: OpenRouter and Codex quests, the second machine over real SSH, and the phone access.
+- Click on a thing in a board page to comment on it.
+- Faster `guild shot` (Chrome starts cold, about 20 seconds a shot).
+- Rotate the event log; clean up old boards and branches after close.
+- Voice input for the quartermaster, if macOS dictation is not enough.
