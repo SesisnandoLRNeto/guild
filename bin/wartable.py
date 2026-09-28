@@ -76,7 +76,8 @@ def list_boards():
 
 # Added to every board page: the parchment theme, after the page's own styles so it wins,
 # and a light color scheme for Mermaid, so diagrams read on parchment.
-THEME = (b'<link rel="stylesheet" href="/theme.css">'
+THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
+         b'<link rel="stylesheet" href="/theme.css">'
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
          b'return /prefers-color-scheme:\\s*dark/.test(q)?{matches:false,media:q,addEventListener:function(){},'
          b'removeEventListener:function(){},addListener:function(){},removeListener:function(){}}:m.call(window,q);};})();</script>')
@@ -674,6 +675,197 @@ def finish_open(quest, board, args):
 
 
 
+# ── Markdown for pages: plans and long details, readable instead of one grey paragraph ──
+# names that read as code in prose: paths, CamelCase (with .members and ()), snake_case, #123
+CODE_WORD = (r"(?:[\w.-]*/[\w./-]*[\w/-])|(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+(?:\.[A-Za-z_]+)*(?:\(\))?)"
+             r"|(?:[a-z]+_[a-z0-9_]+)|(?:#\d+)")
+
+
+def md_inline(text, auto_code=False):
+    """Code spans first (kept aside), then bold and links over the whole line, so **bold with
+    `code` inside** works."""
+    spans = []
+
+    def keep(m):
+        spans.append(f"<code>{_esc(m.group(1))}</code>")
+        return f"\x00{len(spans) - 1}\x00"
+    t = _esc(re.sub(r"`([^`]+)`", keep, text))
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    t = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2" target="_blank" rel="noopener">\1</a>', t)
+    if auto_code:                                       # names in prose read as code
+        t = re.sub(r"(?:^|(?<=[\s(]))(?:" + CODE_WORD + r")(?![\w/])", lambda m: f"<code>{m.group(0)}</code>", t)
+    return re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], t)
+
+
+def md_to_html(md):
+    """Enough Markdown for a plan: headings, lists (nested by indent), tables, code blocks, quotes."""
+    lines, out, i = md.splitlines(), [], 0
+    stack = []                                          # open lists: (indent, tag)
+
+    def close_lists(to=-1):
+        while stack and stack[-1][0] > to:
+            out.append(f"</li></{stack.pop()[1]}>")
+
+    while i < len(lines):
+        line = lines[i]
+        if line.strip().startswith("```"):
+            close_lists()
+            code, i = [], i + 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code.append(lines[i]); i += 1
+            out.append(f"<pre><code>{_esc(chr(10).join(code))}</code></pre>")
+            i += 1
+            continue
+        if line.strip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|[\s:|-]+\|\s*$", lines[i + 1]):
+            head = [c.strip() for c in line.strip().strip("|").split("|")]
+            rows, i = [], i + 2
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                rows.append([c.strip() for c in lines[i].strip().strip("|").split("|")]); i += 1
+            table = "<table><tr>" + "".join(f"<th>{md_inline(h)}</th>" for h in head) + "</tr>"
+            table += "".join("<tr>" + "".join(f"<td>{md_inline(c)}</td>" for c in r) + "</tr>" for r in rows) + "</table>"
+            out.append(f'<div class="tablewrap">{table}</div>')
+            continue
+        m = re.match(r"^(#{1,4})\s+(.*)", line)
+        if m:
+            close_lists()
+            level = min(4, len(m.group(1)) + 1)          # the page title is the h1
+            out.append(f"<h{level}>{md_inline(m.group(2))}</h{level}>")
+            i += 1
+            continue
+        m = re.match(r"^(\s*)([-*]|\d+[.)])\s+(.*)", line)
+        if m:
+            indent, tag = len(m.group(1)), "ol" if m.group(2)[0].isdigit() else "ul"
+            if not stack or indent > stack[-1][0]:
+                out.append(f"<{tag}><li>"); stack.append((indent, tag))
+            else:
+                close_lists(indent)
+                if stack and stack[-1][0] == indent:
+                    out.append("</li><li>")
+                else:
+                    out.append(f"<{tag}><li>"); stack.append((indent, tag))
+            out.append(md_inline(m.group(3)))
+            i += 1
+            continue
+        if line.strip().startswith(">"):
+            close_lists()
+            out.append(f"<blockquote>{md_inline(line.strip()[1:].strip())}</blockquote>")
+            i += 1
+            continue
+        if not line.strip():
+            nxt = next((l for l in lines[i + 1:] if l.strip()), "")
+            if not (stack and (nxt.startswith(" ") or re.match(r"^\s*([-*]|\d+[.)])\s", nxt))):
+                close_lists()
+            i += 1
+            continue
+        if stack and line.startswith(" "):              # a list item's wrapped line
+            out.append(" " + md_inline(line.strip()))
+            i += 1
+            continue
+        close_lists()
+        para = [line.strip()]                           # one paragraph: every line up to a blank or a block
+        i += 1
+        while i < len(lines) and lines[i].strip() and not re.match(r"^(\s*([-*]|\d+[.)])\s|#{1,4}\s|\s*\||\s*```|\s*>)", lines[i]):
+            para.append(lines[i].strip()); i += 1
+        out.append(f"<p>{md_inline(' '.join(para))}</p>")
+    close_lists()
+    return "\n".join(out)
+
+
+def detail_html(detail):
+    """A long one-line detail becomes short bullets, with names shown as code."""
+    detail = detail.strip()
+    if not detail:
+        return ""
+    parts = [p.strip() for p in re.split(r";\s+|(?<=[.!?])\s+(?=[A-Z0-9#`])", detail) if p.strip()]
+    if len(detail) > 220 and len(parts) > 2:
+        return '<ul class="detail">' + "".join(f"<li>{md_inline(p, auto_code=True)}</li>" for p in parts) + "</ul>"
+    return f'<p class="detail">{md_inline(detail, auto_code=True)}</p>'
+
+
+PLAN_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Approve the plan?</title>
+<style>
+ body { max-width: 980px; }
+ .kicker { font-variant: small-caps; letter-spacing: .08em; color: var(--dim); font-size: 13px; }
+ .summary { font-size: 17px; margin: 6px 0 22px; }
+ .plan h2 { font-size: 18px; margin: 26px 0 8px; }
+ .plan h3 { font-size: 16px; margin: 18px 0 6px; }
+ .plan ol > li { margin: 0 0 12px; }
+ .plan li li { margin: 3px 0; }
+ .plan p { margin: 6px 0; }
+ .plan code { overflow-wrap: anywhere; }
+ .plan pre code { white-space: pre; }
+ .tablewrap { overflow-x: auto; margin: 8px 0 12px; }
+ .tablewrap td code { white-space: normal; overflow-wrap: anywhere; }
+ .next { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 30px; }
+ .next div { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 12px 16px; }
+ .next div.go { border-left: 4px solid var(--ok); }
+ .next div.change { border-left: 4px solid var(--accent); }
+ .next h3 { margin: 0 0 6px; font-size: 15px; }
+ .next ol { margin: 0; padding-left: 20px; }
+ .hint { color: var(--dim); font-size: 13px; margin-top: 22px; }
+ @media (max-width: 700px) { .next { grid-template-columns: 1fr; } }
+</style></head><body>
+<div class="kicker">__QUEST__ · plan for your approval</div>
+<h1>Approve the plan?</h1>
+<p class="summary">__SUMMARY__</p>
+<div class="plan">__PLAN__</div>
+<h2>What happens next</h2>
+<div class="next">
+ <div class="go"><h3>If you approve</h3><ol>__IF_GO__</ol></div>
+ <div class="change"><h3>If you ask for changes</h3><ol>
+  <li>Write what to change in the notes on the right.</li>
+  <li>The adventurer updates the plan and puts it here again.</li>
+  <li>Nothing is built until you approve.</li></ol></div>
+</div>
+<p class="hint">The full plan file: <code>__PATH__</code></p>
+</body></html>
+"""
+
+
+def cmd_plan(args):
+    """The plan phase's approval board: plan.md rendered, and what each answer leads to."""
+    quest = args["quest"]
+    qdir = os.path.join(QUESTS, quest)
+    path = os.path.join(qdir, "plan.md")
+    if not os.path.exists(path):
+        raise SystemExit(f"guild plan: write the plan to {path} first")
+    meta = json.load(open(os.path.join(qdir, "meta.json")))
+    md = open(path).read()
+    md = re.sub(r"^#\s+.*\n+", "", md, count=1)          # its title is the page's
+    build = meta.get("build_model") or meta.get("model") or "the build model"
+    effort = meta.get("build_effort") or ""
+    budget = meta.get("budget")
+    go = [f"The adventurer restarts on <b>{_esc(build)}</b>{' (' + _esc(effort) + ' effort)' if effort else ''}, in the same conversation.",
+          "It builds these steps and runs the acceptance checks.",
+          "It runs the trial (an adversarial review and the project's checks), then opens the PR.",
+          "You get a wrap-up page to grade."]
+    if budget:
+        go.append(f"It stops and asks you if it passes its ${float(budget):g} budget.")
+    page = (PLAN_PAGE.replace("__QUEST__", _esc(quest))
+            .replace("__SUMMARY__", md_inline(args.get("summary") or "", auto_code=True))
+            .replace("__PLAN__", md_to_html(md))
+            .replace("__IF_GO__", "".join(f"<li>{x}</li>" for x in go))
+            .replace("__PATH__", _esc(path)))
+    decisions = {"questions": [{"id": "choice", "title": "Approve the plan?", "type": "single", "recommended": "go",
+                                "options": [{"id": "go", "label": "Approve", "why": "build it as planned"},
+                                            {"id": "change", "label": "Change it", "why": "your notes go back; it replans"}]}]}
+    if args.get("board"):                               # redo an open board in place (same id, same question)
+        d = board_dir(quest, args["board"])
+        open(os.path.join(d, "content.html"), "w").write(page)
+        json.dump(decisions, open(os.path.join(d, "decisions.json"), "w"), indent=2)
+        print(f"board {args['board']} redrawn")
+        return
+    tmp = os.path.join(GUILD_HOME, ".plan-tmp")
+    os.makedirs(tmp, exist_ok=True)
+    open(os.path.join(tmp, "page.html"), "w").write(page)
+    json.dump(decisions, open(os.path.join(tmp, "decisions.json"), "w"), indent=2)
+    args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(tmp, "decisions.json"),
+                title=f"Approve the plan: {quest}")
+    cmd_open(args)
+
+
 ASK_PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>__TITLE__</title>
@@ -686,7 +878,10 @@ ASK_PAGE = """<!doctype html>
  body { margin:0; padding:32px 36px 56px; background:var(--bg); color:var(--text);
    font:15px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
  h1 { font-size:22px; margin:0 0 10px; max-width:70ch; }
- p.detail { color:var(--dim); margin:0 0 26px; max-width:70ch; white-space:pre-wrap; }
+ p.detail { margin:0 0 26px; max-width:74ch; }
+ ul.detail { margin:0 0 26px; padding-left:20px; max-width:74ch; }
+ ul.detail li { margin:0 0 6px; }
+ code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em; }
  .opt { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
    border-radius:10px; padding:14px 16px; margin-bottom:10px; max-width:70ch; }
  .opt .id { font-family:ui-monospace,monospace; font-size:11px; color:var(--accent);
@@ -725,11 +920,11 @@ def cmd_ask(args):
     blocks = []
     for o in options:
         suggested = " suggested" if o["id"] == args.get("recommend") else ""
-        why = f'<div class="why">{_esc(o["why"])}</div>' if o["why"] else ""
+        why = f'<div class="why">{md_inline(o["why"], auto_code=True)}</div>' if o["why"] else ""
         blocks.append(f'<div class="opt{suggested}"><div class="id">{_esc(o["id"])}'
                       f'{" · suggested" if suggested else ""}</div>'
                       f'<div class="label">{_esc(o["label"])}</div>{why}</div>')
-    detail = f'<p class="detail">{_esc(args["detail"])}</p>' if args.get("detail") else ""
+    detail = detail_html(args.get("detail") or "")
     page = (ASK_PAGE.replace("__TITLE__", _esc(args.get("title") or question[:60]))
             .replace("__QUESTION__", _esc(question))
             .replace("__DETAIL__", detail)
@@ -807,6 +1002,10 @@ def main():
     if cmd == "open":
         args["quest"] = positional[0]
         return cmd_open(args)
+    if cmd == "plan":
+        args["quest"] = positional[0]
+        args["summary"] = positional[1] if len(positional) > 1 else ""
+        return cmd_plan(args)
     if cmd == "ask":
         args["quest"] = positional[0]
         args["question"] = positional[1]

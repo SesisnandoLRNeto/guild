@@ -738,8 +738,8 @@ HELPERS
 ## You start in the plan phase
 
 You run on a planning model now. Do not change code yet.
-1. Read the brief and the code, then write the plan to \`$q/plan.md\`: the steps, the files, the risks, how you will prove it works.
-2. Put the plan on the war table for the guildmaster: \`guild ask "Approve the plan?" --detail "<a short summary, and the path to plan.md>" --option "go=Approve: build it" --option "change=Change it: I will say what"\`, then wait with \`guild board wait\`.
+1. Read the brief and the code, then write the plan to \`$q/plan.md\` in Markdown: \`## Goal\` (two lines at most), \`## Steps\` (numbered, one idea each, names in backticks), \`## Files\`, \`## Risks\`, \`## How it will be proven\`. The guildmaster reads it on a page: short steps beat long paragraphs.
+2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. Guild renders plan.md as the approval page and says what each answer leads to. Then wait with \`guild board wait <id>\`.
 3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If a change is asked, update the plan and ask again.
 PLAN
 
@@ -1209,6 +1209,9 @@ case "${1:-}" in
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
+  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\"  (inside a quest, after writing plan.md)"
+        me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
+        python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" ;;
   jev) shift
        if [ "${1:-}" = risk ] && [ -z "${2:-}" ]; then set -- risk "$(current_quest)"; fi
        python3 "$GUILD_REPO/bin/jev.py" "${@:-status}" ;;

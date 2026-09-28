@@ -606,6 +606,19 @@ python3 "$REPO/bin/wartable.py" sweep
 has "and the history says why" "$(tail -2 "$GUILD_HOME/events.log")" "closed on its own"
 rm -f "$GUILD_HOME/.pr-cache.json"
 
+# the plan approval page renders plan.md and says what each answer leads to
+echo x | "$GUILD" quest pl --repo "$REPO_A" --plan >/dev/null 2>&1
+printf '# Plan\n\n## Goal\nParse `equationText` on save.\nStore the tree.\n\n## Steps\n\n1. **Merge `#161`.** first\n\n2. Add `GRAMMAR_VERSION`.\n   - a sub point\n\n3. Tests.\n\n| Node | JSON |\n|---|---|\n| Constant | `{"type":"constant"}` |\n' > "$GUILD_HOME/quests/pl/plan.md"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save")
+pb=$(echo "$out" | awk '/board id:/ {print $3}')
+page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
+has "the plan's steps are one numbered list" "$page" "</li><li>"
+is "not one list per step (1 for the steps, 2 in what happens next)" "$(printf '%s' "$page" | grep -o '<ol>' | wc -l | tr -d ' ')" "3"
+has "bold that holds code stays bold" "$page" "<b>Merge <code>#161</code>.</b>"
+has "tables render" "$page" "<th>Node</th>"
+has "and it says what approving leads to" "$page" "restarts on <b>sonnet</b>"
+"$GUILD" close pl --force >/dev/null 2>&1
+
 # ── the docket: every open decision on one page ──────────────────────────────
 section "docket"
 dq="$GUILD_HOME/quests/dk"; mkdir -p "$dq/boards/200001" "$dq/boards/200002"
