@@ -593,6 +593,19 @@ is "merged, it is returned" "$(col)" "done"
 has "the card carries the PR state" "$(python3 "$REPO/bin/fleet.py" json)" '"state": "merged"'
 rm -rf "$GUILD_HOME/quests/pr1" "$GUILD_HOME/.pr-cache.json"
 
+# finished work leaves the cockpit: graded merge closes the tab, a merged PR closes the quest
+echo "small job" | "$GUILD" quest sw --repo "$REPO_A" >/dev/null 2>&1
+printf 'done\thttps://github.com/Org/r/pull/9\t2026-09-25T10:00:00\n' > "$GUILD_HOME/quests/sw/status"
+echo '{"grade": 5, "verdict": "merge"}' > "$GUILD_HOME/quests/sw/grade.json"
+python3 "$REPO/bin/wartable.py" sweep
+tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W' | grep -qx sw && bad "graded merge closes the agent's tab" || ok "graded merge closes the agent's tab"
+[ -d "$GUILD_HOME/quests/sw" ] && ok "but keeps the quest until its PR merges" || bad "but keeps the quest until its PR merges"
+python3 -c "import json,time;json.dump({'https://github.com/Org/r/pull/9':{'slug':'sw','state':'merged','number':9,'at':time.time()}},open('$GUILD_HOME/.pr-cache.json','w'))"
+python3 "$REPO/bin/wartable.py" sweep
+[ ! -d "$GUILD_HOME/quests/sw" ] && ok "a merged PR closes the quest for good" || bad "a merged PR closes the quest for good"
+has "and the history says why" "$(tail -2 "$GUILD_HOME/events.log")" "closed on its own"
+rm -f "$GUILD_HOME/.pr-cache.json"
+
 # ── the docket: every open decision on one page ──────────────────────────────
 section "docket"
 dq="$GUILD_HOME/quests/dk"; mkdir -p "$dq/boards/200001" "$dq/boards/200002"

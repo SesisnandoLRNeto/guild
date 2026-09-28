@@ -121,12 +121,18 @@ def grade_wrapup(quest, board, meta, decision):
     note = f"{grade or '?'}/5" + (f", {verdict}" if verdict else "") + (f": {msg[:80]}" if msg else "")
     with open(EVENTS, "a") as f:
         f.write(f"{now()}\t{quest}\tgraded\t{note}\n")
+    if verdict in ("merge", "split"):
+        threading.Thread(target=lambda: (time.sleep(3), sweep()), daemon=True).start()
     if verdict == "changes":
         guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
         text = (f"The guildmaster reviewed your wrap-up ({meta.get('title', board)}): grade {grade}/5, "
                 f"changes needed. {msg or 'See the board for notes.'} Make the changes, run the trial again, "
                 f"post a new wrap-up, then report done.")
         record(quest, "working", f"changes asked on the wrap-up ({grade}/5)")
+        # its tab may be closed already (graded merge before): bring the agent back first
+        revived = subprocess.run([guild, "revive", quest], capture_output=True, text=True).stdout
+        if "revived" in revived:
+            time.sleep(10)                  # let the session come up before typing into it
         subprocess.run([guild, "send", quest, text], capture_output=True)
 
 
@@ -514,7 +520,8 @@ def serve_remote():
 
 
 def refresh_prs_forever():
-    """Keep the campaign board's PR states fresh without making a page wait on GitHub."""
+    """Keep the campaign board's PR states fresh without making a page wait on GitHub, and
+    put finished work away as it finishes."""
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import prs
     while True:
@@ -522,7 +529,59 @@ def refresh_prs_forever():
             prs.refresh()
         except Exception:
             pass
+        try:
+            sweep()
+        except Exception:
+            pass
         time.sleep(120)
+
+
+def auto_close_on():
+    try:
+        return json.load(open(os.path.join(GUILD_HOME, "local", "dispatch.json"))).get("auto_close", True) is not False
+    except (OSError, ValueError):
+        return True
+
+
+def sweep():
+    """Finished work leaves the cockpit. A quest you graded merge or split loses its tab (the
+    agent stops; the worktree stays, so a review fix can still revive it). A quest whose PR
+    is merged or closed is closed for good: archived, worktree back to the pool. Never with
+    uncommitted changes: `guild close` without --force refuses those."""
+    if not auto_close_on():
+        return
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import prs
+    guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+    sock = os.environ.get("GUILD_TMUX_SOCKET", "guild")
+    windows = subprocess.run(["tmux", "-L", sock, "list-windows", "-t", "guild", "-F", "#{window_id}\t#W"],
+                             capture_output=True, text=True).stdout.splitlines()
+    tab = {w.split("\t")[1]: w.split("\t")[0] for w in windows if "\t" in w}
+    pr_of = prs.by_slug()
+    for slug in sorted(os.listdir(QUESTS)) if os.path.isdir(QUESTS) else []:
+        qdir = os.path.join(QUESTS, slug)
+        try:
+            meta = json.load(open(os.path.join(qdir, "meta.json")))
+            state = open(os.path.join(qdir, "status")).read().split("\t")[0]
+        except (OSError, ValueError):
+            continue
+        if meta.get("pseudo") or state != "done":
+            continue
+        pr = pr_of.get(slug) or {}
+        if pr.get("state") in ("merged", "closed"):
+            r = subprocess.run([guild, "close", slug], capture_output=True, text=True)
+            if r.returncode == 0:
+                with open(EVENTS, "a") as f:
+                    f.write(f"{now()}\t{slug}\tclosed\tPR {pr['state']}: closed on its own\n")
+            continue
+        try:
+            verdict = json.load(open(os.path.join(qdir, "grade.json"))).get("verdict")
+        except (OSError, ValueError):
+            verdict = None
+        if verdict in ("merge", "split") and slug in tab:
+            subprocess.run(["tmux", "-L", sock, "kill-window", "-t", tab[slug]], capture_output=True)
+            with open(EVENTS, "a") as f:
+                f.write(f"{now()}\t{slug}\tdone\tgraded {verdict}: its tab closed (guild revive {slug} reopens it)\n")
 
 
 def serve():
@@ -718,6 +777,9 @@ def main():
     cmd, rest = argv[0], argv[1:]
     if cmd == "due":
         due_boards()
+        return
+    if cmd == "sweep":
+        sweep()
         return
     if cmd == "daemon":
         serve()
