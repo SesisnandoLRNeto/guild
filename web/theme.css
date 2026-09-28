@@ -48,3 +48,39 @@ html:root { --panel: var(--card); }
 html:root .opt { background: rgba(255, 250, 235, .6); border-color: var(--line); }
 html:root .opt.suggested { border-left-color: #a8322a; }
 html:root .opt.suggested .id { color: #a8322a; font-weight: 700; }
+
+/* ── RPG dressing: emblems, heading icons, sword bullets, shields on results ─────────── */
+html:root body { position: relative; }
+html:root body::before {                 /* a crossed-swords crest on the sheet */
+  content: ""; position: absolute; top: 18px; right: 22px; width: 54px; height: 54px; opacity: .22;
+  background: #5b3e28; -webkit-mask: var(--i-swords) center / contain no-repeat; mask: var(--i-swords) center / contain no-repeat;
+}
+html:root h1 { padding-right: 70px; }
+html:root h1::after {                     /* an ornament under the title: sword, gem, sword */
+  content: ""; display: block; height: 14px; margin-top: 8px; width: 180px; opacity: .55;
+  background: linear-gradient(90deg, transparent, #8a4b12 20%, #8a4b12 80%, transparent) center / 100% 1.5px no-repeat;
+}
+html:root h2 { display: flex; align-items: center; gap: 9px; }
+html:root h2::before {
+  content: ""; flex: none; width: 20px; height: 20px; background: #8a4b12;
+  -webkit-mask: var(--h2-icon, var(--i-sword)) center / contain no-repeat; mask: var(--h2-icon, var(--i-sword)) center / contain no-repeat;
+}
+html:root h2:nth-of-type(4n + 2) { --h2-icon: var(--i-shield); }
+html:root h2:nth-of-type(4n + 3) { --h2-icon: var(--i-staff); }
+html:root h2:nth-of-type(4n + 4) { --h2-icon: var(--i-bow); }
+html:root h3::before { content: "◆ "; color: #b5651d; font-size: .8em; }
+html:root ul { list-style: none; padding-left: 1.4em; }
+html:root ul > li { position: relative; }
+html:root ul > li::before {               /* a small sword for each bullet */
+  content: ""; position: absolute; left: -1.25em; top: .38em; width: .8em; height: .8em; background: #9a6a3a;
+  -webkit-mask: var(--i-sword) center / contain no-repeat; mask: var(--i-sword) center / contain no-repeat;
+}
+html:root .pass::before, html:root .fail::before {
+  content: ""; display: inline-block; width: 1em; height: 1em; margin-right: 5px; vertical-align: -.15em; background: currentColor;
+  -webkit-mask: var(--i-shield) center / contain no-repeat; mask: var(--i-shield) center / contain no-repeat;
+}
+html:root .fail::before { -webkit-mask-image: var(--i-broken); mask-image: var(--i-broken); }
+html:root hr { border: 0; height: 22px; margin: 26px 0; opacity: .5;
+  background: var(--i-swords) center / 22px 22px no-repeat, linear-gradient(#8a4b12, #8a4b12) center / 100% 1px no-repeat; }
+html:root th { background: rgba(91, 62, 40, .10); }
+html:root blockquote { border-left: 3px solid #8a4b12; margin: 8px 0; padding: 4px 12px; background: rgba(255, 250, 235, .5); font-style: italic; }

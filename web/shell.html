@@ -28,7 +28,7 @@
   aside { width: 400px; display: flex; flex-direction: column; min-height: 0; background: rgba(0, 0, 0, .28);
           border-left: 2px solid #4a3322; box-shadow: inset 0 0 24px rgba(0, 0, 0, .35); }
   .orders { margin: 0; padding: 14px 16px 6px; color: var(--sign-text); font-variant: small-caps; letter-spacing: .06em; font-size: 15px; }
-  .orders span { display: block; font-variant: normal; letter-spacing: 0; font-style: italic; color: var(--hint); font-size: 12px; }
+  .orders span:not(.gi-icon) { display: block; font-variant: normal; letter-spacing: 0; font-style: italic; color: var(--hint); font-size: 12px; }
   .scroll { overflow-y: auto; padding: 6px 16px 14px; flex: 1; }
   .q { background: linear-gradient(170deg, var(--paper), var(--paper-2)); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px;
        box-shadow: 0 2px 0 rgba(0, 0, 0, .15), 0 6px 14px rgba(0, 0, 0, .35); }
@@ -61,17 +61,39 @@
   .hint { color: var(--hint); font-size: 11px; font-style: italic; }
   .sent { color: #a6e3a1; font-size: 12px; }
   @media (max-width: 900px) { main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 2px solid #4a3322; max-height: 55vh; } }
+  /* RPG dressing: a crest, class icons on the options, a sword to send */
+  header .crest { width: 22px; height: 22px; color: var(--gold); align-self: center; }
+  .orders .gi-icon { color: var(--gold); margin-right: 6px; width: 18px; height: 18px; }
+  .q { position: relative; }
+  .q::before { content: ""; position: absolute; top: 10px; right: 12px; width: 22px; height: 22px; opacity: .25; background: #5b3e28;
+    -webkit-mask: var(--i-scroll) center / contain no-repeat; mask: var(--i-scroll) center / contain no-repeat; }
+  label.opt .lab::before { content: ""; display: inline-block; width: 15px; height: 15px; margin-right: 6px; vertical-align: -2px;
+    background: #8a4b12; -webkit-mask: var(--opt-icon, var(--i-sword)) center / contain no-repeat; mask: var(--opt-icon, var(--i-sword)) center / contain no-repeat; }
+  label.opt:nth-of-type(4n + 2) { --opt-icon: var(--i-shield); }
+  label.opt:nth-of-type(4n + 3) { --opt-icon: var(--i-staff); }
+  label.opt:nth-of-type(4n + 4) { --opt-icon: var(--i-bow); }
+  label.opt:has(.tag) { --opt-icon: var(--i-crown); }
+  label.opt[data-q="grade"][data-o="5"] { --opt-icon: var(--i-crown); }
+  label.opt[data-q="grade"][data-o="4"] { --opt-icon: var(--i-sword); }
+  label.opt[data-q="grade"][data-o="3"] { --opt-icon: var(--i-shield); }
+  label.opt[data-q="grade"][data-o="2"] { --opt-icon: var(--i-staff); }
+  label.opt[data-q="grade"][data-o="1"] { --opt-icon: var(--i-broken); }
+  label.opt[data-q="verdict"][data-o="merge"] { --opt-icon: var(--i-crown); }
+  label.opt[data-q="verdict"][data-o="changes"] { --opt-icon: var(--i-sword); }
+  label.opt[data-q="verdict"][data-o="split"] { --opt-icon: var(--i-scroll); }
+  button .gi-icon { margin-right: 6px; }
 </style>
+<link rel="stylesheet" href="/icons.css">
 </head>
 <body>
 <header>
-  <span class="mark">War table</span><h1>{{TITLE}}</h1><span class="sub">{{SUBTITLE}}</span>
+  <span class="gi-icon gi-swords crest" aria-hidden="true"></span><span class="mark">War table</span><h1>{{TITLE}}</h1><span class="sub">{{SUBTITLE}}</span>
   <span class="quest">quest {{QUEST}}</span>
 </header>
 <main>
   <iframe src="content.html" title="analysis"></iframe>
   <aside>
-    <h2 class="orders">Your orders<span>The adventurer waits for these before moving on.</span></h2>
+    <h2 class="orders"><span class="gi-icon gi-shield" aria-hidden="true"></span>Your orders<span>The adventurer waits for these before moving on.</span></h2>
     <div class="scroll">
       <div id="questions"></div>
       <textarea id="message" placeholder="Anything else for the adventurer? Paste or drop images here."></textarea>
@@ -79,8 +101,8 @@
       <p class="hint">Images are saved next to the board, on this machine only.</p>
     </div>
     <footer>
-      <button class="primary" id="send">Send orders</button>
-      <button id="sendEnd">Send &amp; end</button>
+      <button class="primary" id="send"><span class="gi-icon gi-sword" aria-hidden="true"></span>Send orders</button>
+      <button id="sendEnd"><span class="gi-icon gi-flag" aria-hidden="true"></span>Send &amp; end</button>
       <span id="state" class="hint"></span>
     </footer>
   </aside>
@@ -122,6 +144,7 @@ function draw() {
             for (const s of box.querySelectorAll("label.opt")) if (s.querySelector("input").checked) s.classList.add("chosen");
           } else lab.classList.add("chosen");
         };
+        lab.dataset.q = q.id; lab.dataset.o = o.id;     // lets the grade and verdict wear their own icons
         lab.appendChild(input);
         if (o.image) { const img = el("img"); img.src = o.image; lab.appendChild(img); }
         const txt = el("div");

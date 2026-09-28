@@ -77,7 +77,7 @@ def list_boards():
 # Added to every board page: the parchment theme, after the page's own styles so it wins,
 # and a light color scheme for Mermaid, so diagrams read on parchment.
 THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
-         b'<link rel="stylesheet" href="/theme.css">'
+         b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
          b'return /prefers-color-scheme:\\s*dark/.test(q)?{matches:false,media:q,addEventListener:function(){},'
          b'removeEventListener:function(){},addListener:function(){},removeListener:function(){}}:m.call(window,q);};})();</script>')
@@ -97,15 +97,15 @@ GRADE_QUESTIONS = [
     {"id": "grade", "title": "Grade this work",
      "detail": "The result as delivered. Your grades teach the quartermaster which models to trust with what.",
      "type": "single", "options": [
-         {"id": "5", "label": "5 · Excellent", "why": "merge as is, nothing to add"},
-         {"id": "4", "label": "4 · Good", "why": "small notes, no rework"},
-         {"id": "3", "label": "3 · Fair", "why": "it works, but needs another pass"},
-         {"id": "2", "label": "2 · Poor", "why": "misses part of the intent"},
-         {"id": "1", "label": "1 · Wrong", "why": "not what was asked"}]},
+         {"id": "5", "label": "5 · Legendary", "why": "excellent: merge as is, nothing to add"},
+         {"id": "4", "label": "4 · Heroic", "why": "good: small notes, no rework"},
+         {"id": "3", "label": "3 · Squire's work", "why": "fair: it works, but needs another pass"},
+         {"id": "2", "label": "2 · Needs training", "why": "poor: misses part of the intent"},
+         {"id": "1", "label": "1 · Cursed", "why": "wrong: not what was asked"}]},
     {"id": "verdict", "title": "What next?", "type": "single", "options": [
-        {"id": "merge", "label": "Ready to merge", "why": "you review and merge the PR"},
-        {"id": "changes", "label": "Needs changes", "why": "your notes go back to the adventurer, who carries on"},
-        {"id": "split", "label": "Split a follow-up", "why": "this ships; the rest becomes a new quest"}]},
+        {"id": "merge", "label": "To the treasury (ready to merge)", "why": "you review and merge the PR"},
+        {"id": "changes", "label": "Back to the forge (needs changes)", "why": "your notes go back to the adventurer, who carries on"},
+        {"id": "split", "label": "A new quest (split a follow-up)", "why": "this ships; the rest becomes a new quest"}]},
 ]
 
 
@@ -349,8 +349,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps(docket_items()), "application/json")
             if path == "/boards":
                 return self.send(200, self.render_index())
-            if path == "/theme.css":         # the guild look for every board page
-                with open(os.path.join(WEB, "theme.css"), "rb") as f:
+            if path in ("/theme.css", "/icons.css"):    # the guild look (and its icons) for every page
+                with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/css; charset=utf-8")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())

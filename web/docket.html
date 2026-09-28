@@ -45,9 +45,7 @@
     color: var(--ink); cursor: pointer; }
   .opts button:hover { border-color: #8a4b12; }
   .opts button.rec { border-color: var(--seal); }
-  .opts button.rec::after { content: " \2605"; color: var(--seal); font-size: 11px; }
   .opts button[aria-pressed="true"] { background: #5b3e28; border-color: #5b3e28; color: var(--sign-text); }
-  .opts button[aria-pressed="true"].rec::after { color: var(--gold); }
   .why { font-size: 12px; color: var(--ink-dim); margin-top: 4px; min-height: 1em; }
   textarea, input[type=date] { font: inherit; font-size: 13px; color: var(--ink); background: rgba(255, 250, 235, .7); border: 1px solid var(--rule); border-radius: 3px; }
   textarea { width: 100%; min-height: 54px; resize: vertical; padding: 6px 8px; }
@@ -73,20 +71,34 @@
     tr { border-bottom: 1px solid var(--rule); padding: 10px 0; }
     .n { display: none; }
   }
+  /* RPG dressing */
+  h1 .gi-icon, h2 .gi-icon { margin-right: 8px; color: var(--gold); }
+  h2 .gi-icon { color: #8a4b12; width: 20px; height: 20px; vertical-align: -3px; }
+  td.n { width: 40px; }
+  td.n .num { position: relative; display: inline-grid; place-items: center; width: 28px; height: 30px; color: #fff5dc; font-weight: 700; }
+  td.n .num::before { content: ""; position: absolute; inset: 0; z-index: 0; background: linear-gradient(160deg, #7a5436, #4a3322);
+    clip-path: polygon(50% 0, 100% 14%, 100% 55%, 50% 100%, 0 55%, 0 14%); }     /* a filled shield */
+  td.n .num b { position: relative; z-index: 1; font-size: 13px; margin-top: -3px; }
+  .opts button.rec::after { content: ""; display: inline-block; width: 12px; height: 12px; margin-left: 5px; vertical-align: -1px;
+    background: var(--seal); -webkit-mask: var(--i-crown) center / contain no-repeat; mask: var(--i-crown) center / contain no-repeat; }
+  .opts button[aria-pressed="true"].rec::after { background: var(--gold); }
+  .bar button .gi-icon { margin-right: 7px; }
+  .empty .gi-icon { margin-right: 6px; color: #8a4b12; }
 </style>
+<link rel="stylesheet" href="/icons.css">
 </head>
 <body>
 <header>
   <div>
-    <h1>The Docket</h1>
-    <p class="sub">Every decision waiting for you, one ruling per row. Pick, note, or hold until a date; then send them all.</p>
+    <h1><span class="gi-icon gi-scroll" aria-hidden="true"></span>The Docket</h1>
+    <p class="sub">The adventurers await your word, guildmaster. One ruling per row: pick, add a note, or hold it until a date. Then send them all.</p>
   </div>
   <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a></nav>
 </header>
 
 <section class="sheet" aria-labelledby="h-open">
-  <h2 id="h-open">Awaiting your ruling</h2>
-  <p class="lead">Decisions first, then finished work waiting for your grade. &#9733; marks the adventurer's suggestion.</p>
+  <h2 id="h-open"><span class="gi-icon gi-swords" aria-hidden="true"></span>Awaiting your ruling</h2>
+  <p class="lead">Decisions first, then finished work waiting for your grade. A little crown marks the adventurer's suggestion.</p>
   <table>
     <thead><tr><th></th><th>Item</th><th>Ruling</th><th>Note</th><th>Hold</th></tr></thead>
     <tbody id="open"></tbody>
@@ -94,18 +106,18 @@
 </section>
 
 <section class="sheet" aria-labelledby="h-held">
-  <h2 id="h-held">Held</h2>
+  <h2 id="h-held"><span class="gi-icon gi-hourglass" aria-hidden="true"></span>Held in the vault</h2>
   <p class="lead">Parked until their date. The quartermaster brings each one back to you when its day comes.</p>
   <table><tbody id="held"></tbody></table>
 </section>
 
 <section class="sheet" aria-labelledby="h-recent">
-  <h2 id="h-recent">Recent rulings</h2>
+  <h2 id="h-recent"><span class="gi-icon gi-crown" aria-hidden="true"></span>Recent rulings</h2>
   <table class="recent"><tbody id="recent"></tbody></table>
 </section>
 
 <div class="bar"><div class="in">
-  <button id="send" disabled>Send rulings</button>
+  <button id="send" disabled><span class="gi-icon gi-horn" aria-hidden="true"></span><span class="lbl">Send rulings</span></button>
   <span class="hint" id="status">Pick a ruling in any row. Nothing is sent until you press the button.</span>
 </div></div>
 
@@ -133,7 +145,7 @@ function rowHtml(i, n) {
   }).join("") || `<p class="qt">No options on this board: write your answer in the note, or open the page.</p>`;
   const ready = isReady(i);
   return `<tr class="${ready ? "ready" : ""}">
-    <td class="n">${n}</td>
+    <td class="n"><span class="num" title="ruling ${n}"><b>${n}</b></span></td>
     <td class="item"><b>${esc(i.title)}</b>${i.subtitle ? `<span>${esc(i.subtitle)}</span>` : ""}<div class="meta">${chips}<a href="${esc(i.url)}" target="_blank" rel="noopener">open page</a></div></td>
     <td class="ruling">${qs}</td>
     <td><textarea data-note="${esc(k)}" aria-label="Note for ${esc(i.title)}" placeholder="Anything to add">${esc(notes[k] || "")}</textarea></td>
@@ -149,18 +161,18 @@ function isReady(i) {
 
 function render() {
   const open = data.open || [];
-  $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5">Nothing waits for you. The guild is on the road.</td></tr>`;
+  $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5"><span class="gi-icon gi-potion" aria-hidden="true"></span>Nothing waits for your seal. The guild is on the road, or resting at the tavern.</td></tr>`;
   $("#held").innerHTML = (data.held || []).map((i) =>
     `<tr class="held"><td class="item"><b>${esc(i.title)}</b><div class="meta"><span class="chip">${esc(i.quest)}</span>${i.held_note ? esc(i.held_note) : ""}</div></td>
      <td>until <b>${esc(i.held_until)}</b></td><td><button class="back" data-unhold="${esc(key(i))}">Bring back now</button></td></tr>`).join("")
-    || `<tr><td class="empty">Nothing held.</td></tr>`;
+    || `<tr><td class="empty">The vault is empty.</td></tr>`;
   $("#recent").innerHTML = (data.recent || []).map((r) =>
     `<tr><td>${esc(r.at.replace("T", " ").slice(0, 16))}</td><td>${esc(r.title)}</td>
      <td class="picked">${esc(Object.entries(r.answers || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
-     <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("") || `<tr><td class="empty">No rulings yet.</td></tr>`;
+     <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("") || `<tr><td class="empty">No rulings yet. The ink is still wet.</td></tr>`;
   const ready = open.filter(isReady).length;
   $("#send").disabled = !ready;
-  $("#send").textContent = ready ? `Send ${ready} ruling${ready > 1 ? "s" : ""}` : "Send rulings";
+  $("#send .lbl").textContent = ready ? `Send ${ready} ruling${ready > 1 ? "s" : ""}` : "Send rulings";
 }
 
 async function load() {
@@ -203,14 +215,14 @@ document.addEventListener("click", async (ev) => {
       try { await post("/docket/rule", { quest: i.quest, board: i.board, answers, message: notes[k] || "" }); sent++; delete picks[k]; delete notes[k]; }
       catch (e) { $("#status").textContent = `Could not send "${i.title}": ${e.message}`; }
     }
-    $("#status").textContent = `${sent} ruling${sent === 1 ? "" : "s"} sent. The adventurers carry on.`;
+    $("#status").textContent = `${sent} ruling${sent === 1 ? "" : "s"} sent. The adventurers ride on.`;
     load();
   }
 });
 document.addEventListener("input", (ev) => {
   if (ev.target.dataset.note) { notes[ev.target.dataset.note] = ev.target.value; const i = (data.open || []).find((x) => key(x) === ev.target.dataset.note);
     ev.target.closest("tr").classList.toggle("ready", !!i && isReady(i)); const r = (data.open || []).filter(isReady).length;
-    $("#send").disabled = !r; $("#send").textContent = r ? `Send ${r} ruling${r > 1 ? "s" : ""}` : "Send rulings"; }
+    $("#send").disabled = !r; $("#send .lbl").textContent = r ? `Send ${r} ruling${r > 1 ? "s" : ""}` : "Send rulings"; }
 });
 load();
 setInterval(load, 5000);
