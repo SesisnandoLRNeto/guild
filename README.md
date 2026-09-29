@@ -6,6 +6,8 @@ You are the **guildmaster**. You talk to one agent, the **quartermaster**. It tu
 
 Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate](https://github.com/kunchenguid/firstmate). This is a separate take, written from scratch for one person's workflow.
 
+> **Status: a personal tool, shared in the open.** It is built for one person's daily work on macOS (the core also runs on Linux, where CI runs the tests). It is not a product, and nothing here is supported or stable. There is no license yet, so reuse is not granted by default: open an issue if you want to use part of it. The RPG names (guildmaster, quest, war table) are a skin; [How it works](#how-it-works) maps each one to a plain engineering term.
+
 ## What it does
 
 - **One screen.** A tmux [cockpit](#the-cockpit) with the same side menu in every tab, click and key driven, in claude-deck's colors. New terminals, editors and Claude tabs open inside it.
@@ -15,6 +17,42 @@ Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate
 - **The whole picture.** A [campaign board](#the-campaign-board): a kanban of every quest, every Claude session on the machine, its subagents and your tickets, with Trello-like labels and the real PR state from GitHub. Finished work closes itself once graded or merged.
 - **Any model, any CLI.** Harnesses are config: Claude Code, OpenRouter, Codex or your own. Tiers route planning to Opus, building to Sonnet, hard work to Fable and small fixes to Haiku, each with an effort level and a dollar cap ([harnesses](#harnesses-who-runs-a-quest)).
 - **Room to grow.** Helper quests under a quest, quests on another machine over SSH, lessons that need evidence from two quests, a Jira watcher, and optional [Jev](#the-war-table) for small judgment calls.
+
+## How it works
+
+guild is a small control plane around agent CLIs. It adds no server of its own except a local web page, and it keeps all state in plain files.
+
+```
+ you ──asks──> quartermaster ──guild quest + brief──> adventurer (one per quest)
+  │            (Claude Code)                          own worktree, own tmux tab
+  │                 ▲                                        │
+  │           guild wait                          guild status / guild ask
+  │                 │                                        ▼
+  └──answers──> war table <──reads/writes──> ~/.guild/quests/<slug>/  +  events.log
+               (127.0.0.1)                                   │
+                                                  trial passes ──> gh pr create ──> you merge
+```
+
+1. You ask the quartermaster for something. It picks a rule from `dispatch.json` (which harness, tier, budget, plan first or not) and writes a brief.
+2. `guild quest` takes a warm worktree from the pool, makes the branch, seals the acceptance checks, and starts the adventurer in its own tmux tab.
+3. The adventurer works and reports with `guild status`. A real question goes to the war table (`guild ask`), and it blocks on `guild board wait` until you answer on the page.
+4. The quartermaster sleeps on `guild wait` (a blocking background command, so no tokens are spent polling) and wakes when a line lands in `events.log`.
+5. Before `gh pr create`, the trial must pass for the current commit: sealed checks green, adversarial review done. A `gh` shim and a hook enforce it.
+6. The adventurer writes a wrap-up page. You grade it and review the PR. Only you merge. A merged or closed PR closes the quest and returns the worktree to the pool.
+
+| guild name | Plain term | Where |
+|---|---|---|
+| guildmaster | the human | - |
+| quartermaster | orchestrator agent (a Claude Code session) | tmux window `qm`, `agents/quartermaster.md` |
+| quest | one unit of work: brief, branch, worktree, status | `~/.guild/quests/<slug>/` |
+| adventurer | worker agent session for one quest | `prompts/adventurer.md` |
+| harness / tier | how to launch an agent CLI / which model and effort for a kind of work | `config/harnesses.json`, `dispatch.json` |
+| trial | pre-PR gate for one commit | `hooks/pr-gate.sh`, `bin/shims/gh`, `skills/trial` |
+| war table / board / docket | local web server / one decision or report page / the list of open decisions | `bin/wartable.py`, `web/` |
+| campaign board | kanban of quests, sessions and tickets | `bin/fleet.py`, `web/campaign.html` |
+| cockpit | tmux on its own server, with a side menu | `config/guild.tmux.conf`, `bin/watch.py` |
+
+Code map: `bin/guild` is the CLI (Bash); every `bin/*.py` is one area (war table, fleet, ledger, checks, lessons, budget, impact, harness, Jira, Jev, machines). Python uses only the standard library.
 
 ## Design
 
@@ -88,7 +126,7 @@ guild ask "Ship the chooser now or after the icons?" \
 
 The agent then blocks on `guild board wait <id>` until you answer, and picks up your choice, your notes and your screenshots.
 
-Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`.
+Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`. Click any picture on a board page to open it large: zoom with the wheel or `+`/`-`, drag to move, arrows for the next picture, `F` for full screen.
 
 **Diagrams and screenshots.** Write Mermaid inside `<pre class="mermaid">` in a board page and it renders, offline: the war table serves a pinned Mermaid that `install.sh` fetched once, so a state machine, a flow or a sequence can be the options themselves, approved before any code exists. `guild shot <url> --name before|after` takes screenshots one way every time (headless Chrome, fixed viewport, throwaway profile) so before and after pairs can be compared. Chrome starts cold on each shot, so one takes about 20 seconds.
 
@@ -193,7 +231,7 @@ Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` a
 ## Tests
 
 ```sh
-./test/run.sh      # 296 checks, about 3 minutes, no model calls
+./test/run.sh      # 307 checks, about 3 minutes, no model calls
 ```
 
 The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table and the docket, the trial gate in both forms, checks and grades, costs and the retro, budget caps, helpers, lessons, revive and close. Fakes stand in for everything outside: a fake Jira, a fake Jev, a fake ntfy, a fake GitHub PR cache, and a fake `ssh` that runs the "remote" guild in its own home. `test/cockpit.py` drives a real tmux client in a pty to test keys and clicks. It also runs in CI on every push.
@@ -408,6 +446,10 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 ## Folder trust
 
 Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspace/.guild-worktrees/` (change with `GUILD_WORKTREES`), and `guild quest` marks a new worktree as trusted in `~/.claude.json` only when its main repo, or a parent folder, is already trusted.
+
+## Contributing
+
+Ideas, questions and bug reports are welcome as GitHub issues. For code, open an issue first: the design follows one person's workflow, and a change that fits it is easier to agree on before it is written. Every change runs `./test/run.sh` (no model calls, no real accounts). Keep the lines in [Design](#design): nothing merges without the human, nothing writes to Jira or GitHub on its own, and normal Claude Code sessions stay untouched.
 
 ## Roadmap
 
