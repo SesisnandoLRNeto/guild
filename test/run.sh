@@ -569,6 +569,8 @@ bpage=$(ls -d "$GUILD_HOME"/quests/*/boards/*/ 2>/dev/null | head -1)
 bq=$(basename "$(dirname "$(dirname "$bpage")")"); bid=$(basename "$bpage")
 has "board pages get the guild theme" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'href="/theme.css"'
 has "and the theme is served" "$(curl -s "${url%/campaign}/theme.css")" "parchment"
+has "board pages get the picture lightbox" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'src="/lightbox.js"'
+has "and the lightbox is served" "$(curl -s "${url%/campaign}/lightbox.js")" "requestFullscreen"
 
 
 

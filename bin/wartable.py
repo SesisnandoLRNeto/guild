@@ -78,6 +78,7 @@ def list_boards():
 # and a light color scheme for Mermaid, so diagrams read on parchment.
 THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
          b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
+         b'<script src="/lightbox.js" defer></script>'   # click a picture to zoom it or go full screen
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
          b'return /prefers-color-scheme:\\s*dark/.test(q)?{matches:false,media:q,addEventListener:function(){},'
          b'removeEventListener:function(){},addListener:function(){},removeListener:function(){}}:m.call(window,q);};})();</script>')
@@ -352,6 +353,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path in ("/theme.css", "/icons.css"):    # the guild look (and its icons) for every page
                 with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/css; charset=utf-8")
+            if path == "/lightbox.js":
+                with open(os.path.join(WEB, "lightbox.js"), "rb") as f:
+                    return self.send(200, f.read(), "text/javascript; charset=utf-8")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
             if path == "/campaign.json":
