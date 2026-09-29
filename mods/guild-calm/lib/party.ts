@@ -14,8 +14,8 @@ export const PARTY_KEY = "guild-calm-party";
 /** How often the scene moves. The party steps every other tick, the forest slower still. */
 export const PARTY_TICK_MS = 140;
 
-/** Fourteen rows: sky, twelve of forest and figures, and the ground. */
-export const PARTY_ROWS = 14;
+/** Eight rows: sky, six of forest and figures, and the ground. */
+export const PARTY_ROWS = 8;
 
 const MAX_COLUMNS = 512;
 const MARGIN = 2;
@@ -43,59 +43,38 @@ export function partyFamily(theme: unknown): PartyFamily {
 
 /** Scene width for a viewport: the working row minus its margin, inside the Raster limit. */
 export function partyColumns(viewportColumns: number | undefined): number {
-  return Math.max(72, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
+  return Math.max(48, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
 }
 
-// ── The adventurers: original designs, twelve rows each, standing on the ground ──
-// Ten body rows and two frames of feet; `flip` starts a figure on the other frame so the
-// three do not march in lockstep. Outlines only, curves from / \ ( ) . ' so they read smooth.
+// ── The adventurers: small and clear, five rows each, standing on the ground ──
+// Four body rows and two frames of feet; `flip` starts a figure on the other frame so the
+// three do not march in lockstep.
 type Figure = { rows: string[]; legs: [string[], string[]]; color: keyof PartyPalette; flip: boolean };
 
-const ARCHER: Figure = {            // a round hood, a quiver on the back, a curved bow, arrow nocked
-  rows: ["        __          ",
-         "      .'  '.   .    ",
-         "     /  .-. \\   \\   ",
-         "     \\  (o) /    \\  ",
-         "      '._.-'      ) ",
-         "   .--/|\\--.      | ",
-         "  [==] | \\  \\-----+>",
-         "  [==] |  '-'     | ",
-         "   '' / \\         ) ",
-         "     /   \\       /  "],
-  legs: [["    /  /\\ \\     '   ", "   '--'  '--        "],
-         ["    |  |  |     '   ", "   '-'  '-'         "]],
+const ARCHER: Figure = {            // hooded, a bow with its string, the arrow crossing it
+  rows: ["  ,^.  |\\  ",
+         "  (o)  | \\ ",
+         " /|\\---+-->",
+         "  |    | / "],
+  legs: [[" / \\   |/  "], ["  | |  |/  "]],
   color: "archer", flip: false,
 };
 
-const WIZARD: Figure = {            // a hat that leans back, a beard, a flaring robe, a staff with a star
-  rows: ["          .         ",
-         "        .' |   *    ",
-         "      .'   |  .:.   ",
-         "    .'_____|_  |    ",
-         "     \\(o  o)/  |    ",
-         "      ( \\/ )  _|    ",
-         "      /`\\/'\\ / |    ",
-         "     / \\  / \\  |    ",
-         "    /   ||   \\ |    ",
-         "   /    ||    \\|    "],
-  legs: [["  /     ||     |    ", " /_____/  \\____|    "],
-         ["  /     ||     |    ", " /_____|__|____|    "]],
+const WIZARD: Figure = {            // pointed hat, robe, a staff whose star twinkles
+  rows: ["   /\\   *  ",
+         "  /__\\  |  ",
+         "  (oo)  |  ",
+         " /|\\/|\\-|  "],
+  legs: [[" /_||_\\ |  "], [" /_/\\_\\ |  "]],
   color: "wizard", flip: true,
 };
 
-const KNIGHT: Figure = {            // a round helmet with a visor, a flowing cape, a sword raised forward
-  rows: ["       .--.        /",
-         "      /    \\      / ",
-         "     |  [=] |    /  ",
-         "      \\____/    /   ",
-         "    .-'_##_'-.-/    ",
-         "   /  / ## \\  /     ",
-         "  /  /| ## |        ",
-         " /  / |____|        ",
-         "/__/  |    |        ",
-         "      |    |        "],
-  legs: [["     /  /\\  \\       ", "    '--'  '--'      "],
-         ["      |  |  |       ", "     '-'  '-'       "]],
+const KNIGHT: Figure = {            // helmet with a visor, a shield in front, sword raised
+  rows: ["   _    /  ",
+         "  [=]  /   ",
+         " (|#|)/    ",
+         "  |#|      "],
+  legs: [["  / \\      "], ["  | |      "]],
   color: "knight", flip: false,
 };
 
@@ -105,14 +84,13 @@ const GAP = 3;
 const PARTY_WIDTH = PARTY.reduce((w, f) => w + f.rows[0]!.length, 0) + GAP * (PARTY.length - 1);
 
 // ── The forest: tall pines, small pines, bushes with grass, along a long repeating strip ──
-const TALL_PINE = ["     ^     ", "    /|\\    ", "   //|\\\\   ", "  ///|\\\\\\  ", "    /|\\    ", "   //|\\\\   ",
-                   "  ///|\\\\\\  ", " ////|\\\\\\\\ ", "   //|\\\\   ", "  ///|\\\\\\  ", "     |     ", "     |     "];
-const SMALL_PINE = ["   ^   ", "  /|\\  ", " //|\\\\ ", "  /|\\  ", " //|\\\\ ", "   |   "];
-const BUSH = [" .--. ", "(____)"];
+const TALL_PINE = ["   ^   ", "  /|\\  ", " //|\\\\ ", "///|\\\\\\", "   |   ", "   |   "];
+const SMALL_PINE = ["  ^  ", " /|\\ ", "//|\\\\", "  |  "];
+const BUSH = ["(__)"];
 const STRIP: Array<[number, "tall" | "small" | "bush"]> = [
-  [0, "tall"], [14, "small"], [22, "bush"], [34, "tall"], [47, "small"], [56, "bush"],
+  [0, "tall"], [10, "small"], [18, "bush"], [27, "tall"], [38, "small"], [47, "bush"],
 ];
-const STRIP_LEN = 64;
+const STRIP_LEN = 60;
 const GROUND = ".,  '. ^^  . ,'.  ^. ,  .' ,. ^^ '.  ,. '";
 
 /** One frame of the night forest with the party walking through it. */
@@ -133,12 +111,12 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette)
   // Sky: stars over the top rows that twinkle, and a crescent moon near the right edge.
   for (let c = 3; c < columns; c += 9) {
     const twinkle = (c * 7 + Math.floor(tick / 5)) % 5 === 0;
-    put((c * 13) % 3, c, twinkle ? "*" : ".", palette.sky);
+    put((c * 13) % 2, c, twinkle ? "*" : ".", palette.sky);
   }
-  const moon = columns - 10;
-  draw(0, moon, " .-.", palette.sky);
-  draw(1, moon, "(  ", palette.sky);
-  draw(2, moon, " '-'", palette.sky);
+  const moon = columns - 9;
+  draw(0, moon, " .-", palette.sky);
+  draw(1, moon, "(", palette.sky);
+  draw(2, moon, " '-", palette.sky);
 
   // Forest and ground drift left slowly: the world passing a party that walks right.
   const drift = Math.floor(tick / 5);
@@ -152,7 +130,7 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette)
   for (let base = -STRIP_LEN; base < columns + STRIP_LEN; base += STRIP_LEN) {
     for (const [offset, kind] of STRIP) {
       const x = base + shift(offset, STRIP_LEN);
-      if (x < -12 || x > columns) continue;
+      if (x < -8 || x > columns) continue;
       if (kind === "tall") standOn(TALL_PINE, x, palette.tree);
       else if (kind === "small") standOn(SMALL_PINE, x, palette.tree);
       else standOn(BUSH, x, palette.bush);
