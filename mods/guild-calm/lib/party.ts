@@ -14,8 +14,8 @@ export const PARTY_KEY = "guild-calm-party";
 /** How often the scene moves. The party steps every other tick, the forest slower still. */
 export const PARTY_TICK_MS = 140;
 
-/** Thirteen rows: sky, eleven of forest and figures, and the ground. */
-export const PARTY_ROWS = 13;
+/** Fourteen rows: sky, twelve of forest and figures, and the ground. */
+export const PARTY_ROWS = 14;
 
 const MAX_COLUMNS = 512;
 const MARGIN = 2;
@@ -43,53 +43,59 @@ export function partyFamily(theme: unknown): PartyFamily {
 
 /** Scene width for a viewport: the working row minus its margin, inside the Raster limit. */
 export function partyColumns(viewportColumns: number | undefined): number {
-  return Math.max(60, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
+  return Math.max(72, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
 }
 
-// ── The adventurers: original designs, ten rows each, standing on the ground ──
-// Eight body rows and two leg frames; `flip` starts a figure on the other frame so the three
-// do not march in lockstep.
+// ── The adventurers: original designs, twelve rows each, standing on the ground ──
+// Ten body rows and two frames of feet; `flip` starts a figure on the other frame so the
+// three do not march in lockstep. Outlines only, curves from / \ ( ) . ' so they read smooth.
 type Figure = { rows: string[]; legs: [string[], string[]]; color: keyof PartyPalette; flip: boolean };
 
-const ARCHER: Figure = {            // hooded, a quiver on the back, bow drawn, arrow nocked
-  rows: ["     .-.         ",
-         "    /  _\\   |\\   ",
-         "    \\(o )   | \\  ",
-         "   __) (    |  \\ ",
-         "  [##]\\|\\---+--->",
-         "  [##] |    |  / ",
-         "   ''  |    | /  ",
-         "      / \\   |/   "],
-  legs: [["     /   \\       ", "    /_/ \\_\\      "],
-         ["      | |        ", "     _| |_       "]],
+const ARCHER: Figure = {            // a round hood, a quiver on the back, a curved bow, arrow nocked
+  rows: ["        __          ",
+         "      .'  '.   .    ",
+         "     /  .-. \\   \\   ",
+         "     \\  (o) /    \\  ",
+         "      '._.-'      ) ",
+         "   .--/|\\--.      | ",
+         "  [==] | \\  \\-----+>",
+         "  [==] |  '-'     | ",
+         "   '' / \\         ) ",
+         "     /   \\       /  "],
+  legs: [["    /  /\\ \\     '   ", "   '--'  '--        "],
+         ["    |  |  |     '   ", "   '-'  '-'         "]],
   color: "archer", flip: false,
 };
 
-const WIZARD: Figure = {            // pointed hat, beard, long robe, staff (its star twinkles)
-  rows: ["       /\\    *   ",
-         "      /  \\  -+-  ",
-         "     / /\\ \\  |   ",
-         "    /______\\ |   ",
-         "     (o  o) \\|   ",
-         "     ( \\/ )  |   ",
-         "    /\\\\\\/// \\|   ",
-         "   /  |||   \\|   "],
-  legs: [["  /   |||    |   ", " /____/ \\____|   "],
-         ["  /   |||    |   ", " /____|_|____|   "]],
+const WIZARD: Figure = {            // a hat that leans back, a beard, a flaring robe, a staff with a star
+  rows: ["          .         ",
+         "        .' |   *    ",
+         "      .'   |  .:.   ",
+         "    .'_____|_  |    ",
+         "     \\(o  o)/  |    ",
+         "      ( \\/ )  _|    ",
+         "      /`\\/'\\ / |    ",
+         "     / \\  / \\  |    ",
+         "    /   ||   \\ |    ",
+         "   /    ||    \\|    "],
+  legs: [["  /     ||     |    ", " /_____/  \\____|    "],
+         ["  /     ||     |    ", " /_____|__|____|    "]],
   color: "wizard", flip: true,
 };
 
-const KNIGHT: Figure = {            // helmet with a visor, a cape behind, sword raised forward
-  rows: ["      .-.        ",
-         "     /___\\    /  ",
-         "     |[=]|   /   ",
-         "   __|___|__/    ",
-         "  / /| ## |/     ",
-         " / / | ## |      ",
-         "/_/  |____|      ",
-         "      |  |       "],
-  legs: [["     /    \\      ", "    /_/  \\_\\     "],
-         ["      |  |       ", "     _|  |_      "]],
+const KNIGHT: Figure = {            // a round helmet with a visor, a flowing cape, a sword raised forward
+  rows: ["       .--.        /",
+         "      /    \\      / ",
+         "     |  [=] |    /  ",
+         "      \\____/    /   ",
+         "    .-'_##_'-.-/    ",
+         "   /  / ## \\  /     ",
+         "  /  /| ## |        ",
+         " /  / |____|        ",
+         "/__/  |    |        ",
+         "      |    |        "],
+  legs: [["     /  /\\  \\       ", "    '--'  '--'      "],
+         ["      |  |  |       ", "     '-'  '-'       "]],
   color: "knight", flip: false,
 };
 
