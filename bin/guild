@@ -1269,6 +1269,7 @@ case "${1:-}" in
   unpin) shift; cmd_pin unpin "${1:-}" "${2:-}" ;;
   pins) shift; cmd_pins "$@" ;;
   todo) shift; cmd_todo "$@" ;;
+  story) shift; python3 "$GUILD_REPO/bin/fleet.py" story "$@" ;;
   click) shift; cmd_click "$@" ;;
   budget) shift; cmd_budget "$@" ;;
   helper) shift; cmd_helper "$@" ;;

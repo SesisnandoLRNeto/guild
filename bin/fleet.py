@@ -336,9 +336,12 @@ def jira(ttl=300):
         cfg = jira_watch.load_config()
         found = jira_watch.api(cfg, "POST", "/rest/api/3/search/jql", {
             "jql": "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-            "maxResults": 30, "fields": ["summary", "status", "priority"]})
+            "maxResults": 30, "fields": ["summary", "status", "priority", "parent"]})
         issues = [{"key": i["key"], "summary": i["fields"].get("summary", ""),
                    "status": (i["fields"].get("status") or {}).get("name", ""),
+                   "parent": {"key": i["fields"]["parent"]["key"],
+                              "summary": i["fields"]["parent"].get("fields", {}).get("summary", "")}
+                   if i["fields"].get("parent") else None,
                    "url": cfg["site"].rstrip("/") + "/browse/" + i["key"]} for i in found.get("issues", [])]
         note = ""
     except SystemExit as e:
@@ -349,27 +352,133 @@ def jira(ttl=300):
     return issues, note
 
 
-def jira_statuses(keys, ttl=300):
-    """{ticket: status name} for the quests' tickets, cached. Empty when Jira is not set up."""
+def jira_info(keys, ttl=300):
+    """{ticket: {"status": name, "parent": {"key", "summary"}}} for the quests' tickets, cached.
+    The parent is the story or epic a ticket belongs to. Empty when Jira is not set up."""
     keys = sorted(k for k in keys if k)
     path = os.path.join(GUILD_HOME, ".campaign-tickets.json")
     cache = load_json(path, {})
-    if cache and time.time() - cache.get("at", 0) < ttl and set(keys) <= set(cache.get("status", {})):
-        return cache["status"]
+    if cache and time.time() - cache.get("at", 0) < ttl and set(keys) <= set(cache.get("info", {})):
+        return cache["info"]
     sys.path.insert(0, REPO + "/bin")
     try:
         import jira_watch
         cfg = jira_watch.load_config()
     except (SystemExit, Exception):
-        return cache.get("status", {})
-    status = {}
+        return cache.get("info", {})
+    info = {}
     for k in keys:
         try:
-            status[k] = jira_watch.api(cfg, "GET", f"/rest/api/3/issue/{k}?fields=status")["fields"]["status"]["name"]
+            f = jira_watch.api(cfg, "GET", f"/rest/api/3/issue/{k}?fields=status,parent")["fields"]
+            parent = f.get("parent") or {}
+            info[k] = {"status": f["status"]["name"],
+                       "parent": {"key": parent["key"], "summary": parent.get("fields", {}).get("summary", "")} if parent else None}
         except Exception:
             pass
-    save_json(path, {"at": time.time(), "status": status})
-    return status
+    save_json(path, {"at": time.time(), "info": info})
+    return info
+
+
+def jira_statuses(keys, ttl=300):
+    return {k: v["status"] for k, v in jira_info(keys, ttl).items()}
+
+
+# ── stories: the rows of the campaign board ───────────────────────────────────
+# A story is a big piece of work with its tickets under it. Its name comes from you
+# (`guild story`), else from the Jira parent (epic or story), else from the tickets.
+
+STORIES = os.path.join(GUILD_HOME, "stories.json")
+
+
+def story_names():
+    return load_json(STORIES, {})
+
+
+def name_story(name, tickets):
+    names = story_names()
+    for t in tickets:
+        if name:
+            names[t] = name
+        else:
+            names.pop(t, None)
+    save_json(STORIES, names)
+    return names
+
+
+LANE_ORDER = ["todo", "road", "waiting", "trial", "done"]
+
+
+def lanes(cards, threads, parents):
+    """Group the cards into rows: one per story, then single tickets, then sessions and to-dos."""
+    names = story_names()
+    thread_of = {cid: t for t in threads for cid in t["cards"]}
+    rows = {}
+
+    def lane(key, **kw):
+        if key not in rows:
+            rows[key] = dict(key=key, cards=[], tickets=set(), **kw)
+        return rows[key]
+
+    for c in cards:
+        t = c.get("ticket") or ""
+        if c["kind"] in ("session", "todo") or c.get("orchestrator"):
+            touched = c.get("touches") or []
+            th = next((x for x in threads if touched and x["n"] == touched[0]["n"]), None)
+            if th:                                  # a session about a story's ticket sits in that story
+                t = th["tickets"][0] if th["tickets"] else ""
+            else:
+                lane("~sessions", title="Sessions and your to-dos", code="", kind="sessions")["cards"].append(c)
+                continue
+        th = thread_of.get(c["id"])
+        tickets = set(th["tickets"]) if th else ({t} if t else set())
+        named = next((names[x] for x in sorted(tickets) if x in names), "")
+        parent = next((parents[x] for x in sorted(tickets) if parents.get(x)), None)
+        if named:
+            row = lane("name:" + named.lower(), title=named, code=(parent or {}).get("key", ""), kind="story")
+        elif parent:
+            row = lane("epic:" + parent["key"], title=parent["summary"] or parent["key"], code=parent["key"], kind="story")
+        elif th:
+            row = lane(f"thread:{th['tickets'][0] if th['tickets'] else th['n']}",
+                       title="", code=" + ".join(th["tickets"]), kind="story")
+        elif t:
+            row = lane("~single", title="Single tickets", code="", kind="singles")
+        else:
+            row = lane("~other", title="Other quests", code="", kind="other")
+        row["cards"].append(c)
+        row["tickets"] |= tickets
+
+    out = []
+    for r in rows.values():
+        live = [c for c in r["cards"] if c["column"] != "done"]
+        if not live and r["kind"] != "story":
+            continue                                    # a lane of only old history adds nothing
+        n = {k: sum(1 for c in r["cards"] if c["column"] == k) for k in LANE_ORDER}
+        bad = [c for c in live if c["state"] in ("blocked", "failed", "stopped", "checks-red")]
+        asks = [c for c in r["cards"] if c["column"] == "waiting" and c not in bad]
+        if bad:
+            c = bad[0]
+            name = c["title"]
+            if c.get("ticket") and name.lower().startswith(c["ticket"].lower() + "-"):
+                name = c["ticket"] + " " + name[len(c["ticket"]) + 1:].replace("-", " ")
+            status = f"{'Blocked' if c['state'] == 'blocked' else c['state'].capitalize()}: {name}"
+        elif asks:
+            status = f"{len(asks)} need{'s' if len(asks) == 1 else ''} your decision"
+        elif n["road"]:
+            status = f"{n['road']} in progress"
+        elif n["trial"]:
+            status = f"{n['trial']} waiting for PR review"
+        elif n["todo"]:
+            status = "Nothing running"
+        else:
+            status = "All done"
+        r["tickets"] = sorted(r["tickets"])
+        r.update(counts=n, total=len(r["cards"]), status=status, tone="bad" if bad else "turn" if asks else "",
+                 active=max((c.get("since", "") for c in live), default=""))
+        r["cards"] = [c["id"] for c in r["cards"]]
+        out.append(r)
+    rank = {"story": 0, "singles": 1, "other": 2, "sessions": 3}
+    out.sort(key=lambda r: (rank[r["kind"]], 0 if r["tone"] else 1, _neg(r["active"])))
+    return out
 
 
 def todos():
@@ -438,7 +547,8 @@ def board():
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import prs as prmod
     pr_of = prmod.by_slug()                 # GitHub's view, cached by the war table server
-    ticket_status = jira_statuses({q.get("ticket") for q in qs if q.get("ticket")})
+    ticket_info = jira_info({q.get("ticket") for q in qs if q.get("ticket")})
+    ticket_status = {k: v["status"] for k, v in ticket_info.items()}
     for q in qs:
         # the quest's own session: the newest one that ran in its worktree
         mine = [s for s in ss if (q.get("worktree") and s["cwd"].startswith(q["worktree"]))
@@ -469,6 +579,8 @@ def board():
         # finished work follows its PR: still open means it waits for review; merged means returned
         if q["state"] in ("done", "trial-pass", "trial-skip") and pr_info and not pr_info.get("error"):
             column = "trial" if pr_info["state"] in ("open", "draft") else "done"
+        elif pr_info and not pr_info.get("error") and pr_info["state"] == "merged" and q["state"] in ("stopped", "held"):
+            column = "done"                              # it stopped, but its PR is merged: the work landed
         done = q["state"] in ("done", "trial-pass", "trial-skip")
         what = summary(q["dir"]) if done else (question_of(q["note"]) if column == "waiting" else q["note"])
         cards.append(card(
@@ -543,6 +655,8 @@ def board():
         kids = [q for q in qs if q.get("parent") and f"quest:{q['parent']}" == c["id"]]
         c["agents"] = c.get("agents", []) + [{"type": "helper " + k["slug"][len(k["parent"]) + 1:], "what": k["state"]} for k in kids]
     threads, edges = relate(cards)
+    parents = {k: v.get("parent") for k, v in ticket_info.items()}
+    parents.update({i["key"]: i.get("parent") for i in issues if i.get("parent")})
     by_col = {k: [] for k, _, _ in COLUMNS}
     for c in cards:
         by_col[c["column"]].append(c)
@@ -552,7 +666,8 @@ def board():
         len([a for a in c["agents"] if a["type"] not in {q["slug"] for q in qs}]) for c in cards)
     return {"columns": [{"key": k, "title": t, "hint": h, "cards": by_col[k]} for k, t, h in COLUMNS],
             "counts": {"agents": agents_live, "waiting": len(by_col["waiting"]), "todo": len(by_col["todo"])},
-            "threads": threads, "edges": edges, "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}
+            "threads": threads, "edges": edges, "lanes": lanes(cards, threads, parents),
+            "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}
 
 
 TICKET = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-\d+\b")
@@ -713,6 +828,16 @@ def main():
                 owner = "qm"                      # its quartermaster was closed: the first one takes it
             if owner == me:
                 print(line)
+    elif cmd == "story":                     # name the row a set of tickets sits in on the campaign board
+        if not rest:
+            for t, n in sorted(story_names().items()):
+                print(f"{t}\t{n}")
+            return
+        name, tickets = rest[0], [t.upper() for t in rest[1:]]
+        if not tickets or not all(TICKET.fullmatch(t) for t in tickets):
+            raise SystemExit('usage: guild story "<name>" TICKET [TICKET...]   (an empty name removes it)')
+        name_story(name.strip(), tickets)
+        print(f"{', '.join(tickets)}: {name.strip() or 'name removed'}")
     elif cmd == "pins":
         for r in pin_rows():
             print("\t".join([r["key"], r["name"], r["state"], r["tab"]]))

@@ -15,7 +15,7 @@ Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate
 - **Plans before code.** A quest can plan first on Opus, show the plan on a page, and build on another model once you approve ([routing](#routing-which-model-does-which-work)).
 - **Proof before review.** Acceptance written as commands and sealed at the start ([EDD](#acceptance-as-checks-edd)), the trial gate on `gh pr create`, and a wrap-up page for every code quest. Backend wrap-ups draw the data model changes, their impact and the business rule changes. You grade each wrap-up, and the grades feed the retro.
 - **The whole picture.** A [campaign board](#the-campaign-board): a kanban of every quest, every Claude session on the machine, its subagents and your tickets, with Trello-like labels and the real PR state from GitHub. Finished work closes itself once graded or merged.
-- **Any model, any CLI.** Harnesses are config: Claude Code, OpenRouter, Codex or your own. Tiers route planning to Opus, building to Sonnet, hard work to Fable and small fixes to Haiku, each with an effort level and a dollar cap ([harnesses](#harnesses-who-runs-a-quest)).
+- **Any model, any CLI.** Harnesses are config: Claude Code, OpenRouter, Codex or your own. Tiers route planning to Opus, building to Sonnet, hard work to Fable and small fixes to Haiku, each with an effort level and an optional dollar cap ([harnesses](#harnesses-who-runs-a-quest)).
 - **Room to grow.** Helper quests under a quest, quests on another machine over SSH, lessons that need evidence from two quests, a Jira watcher, and optional [Jev](#the-war-table) for small judgment calls.
 
 ## How it works
@@ -107,6 +107,7 @@ guild up ~/Workspace
 | `guild campaign` | The campaign board: every quest, session, subagent, ticket and to-do as a kanban (`Ctrl-g k`) |
 | `guild pin [tab]` / `guild unpin [tab]` / `guild pins [menu]` | Keep sessions at the top of the sidebar; the menu jumps to one (`Ctrl-g p`, `Ctrl-g P`) |
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
+| `guild story "<name>" TICKET...` | Name the campaign board row those tickets sit in (an empty name removes it) |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
@@ -345,7 +346,7 @@ guild quest typo      --repo ~/code/web --tier light < brief.md           # haik
 guild quest big-sweep --repo ~/code/app --harness openrouter --tier build < brief.md
 ```
 
-**Effort and budget.** Each tier also carries an effort level (Claude's `--effort`, Codex's reasoning effort): plan and deep run high, build medium, light low. Override with `--effort`. Every quest can have a dollar cap: `--budget 40`, a rule's `budget`, or `budget_default` in `dispatch.json` (50 in the example). Past the cap, the adventurer's tools pause (the hook still lets it run `guild` commands), and the docket asks you: raise by $50 or $100, or stop. `guild budget <slug> [N | +N]` shows or changes a cap by hand. Claude Code's own `--max-budget-usd` works only in print mode, so guild enforces the cap itself, from the same cost numbers as `guild cost`.
+**Effort and budget.** Each tier also carries an effort level (Claude's `--effort`, Codex's reasoning effort): plan and deep run high, build medium, light low. Override with `--effort`. There is no dollar cap by default. When you want one, pass `--budget 40` on the quest, or set a rule's `budget` or `budget_default` in `dispatch.json`. Past the cap, the adventurer's tools pause (the hook still lets it run `guild` commands), and the docket asks you: raise by $50 or $100, or stop. `guild budget <slug> [N | +N]` shows or changes a cap by hand. Claude Code's own `--max-budget-usd` works only in print mode, so guild enforces the cap itself, from the same cost numbers as `guild cost`.
 
 **Helpers, for big work.** Inside a quest, `guild helper <name> [--tier light|build] < brief` starts a helper quest: same repo, a worktree on `<parent branch>--<name>`, the parent's ticket. The parent waits with `guild wait --for <slug>` (its own cursor, so the quartermaster still sees every event), then merges the helper's branch and reviews it. Helpers do not push or open PRs, and cannot start helpers of their own; `helpers_max` in `dispatch.json` caps them (2 by default). In the side menu a helper sits right after its parent (`└ name`); on the campaign board it joins the parent's thread and shows on the parent's card.
 
@@ -407,17 +408,19 @@ Why not a bare `Ctrl-k`: every Ctrl letter already means something in Claude Cod
 
 ### The campaign board
 
-`guild campaign` (or `Ctrl-g k`) opens a kanban on the war table server, styled as a guild's quest board. It shows the whole moment, not only the quartermaster's quests:
+`guild campaign` (or `Ctrl-g k`) opens a kanban on the war table server, laid out in swimlanes: **one row per story, its tickets moving left to right** through five columns. A summary line on top counts everything ("12 done · 2 in progress · 3 need you (2 blocked) · 4 in review · 3 to do").
 
-- **Quest board**: your open Jira tickets that have no quest yet (when `~/.guild/local/jira.json` is set up), and your own to-dos. Post one from the page or with `guild todo add`.
-- **On the road**: quests at work, and every Claude session on this machine that is mid-turn, inside the cockpit or not. Subagents a session is running show on its card as companions.
-- **Awaiting orders**: quests that need a decision, are blocked or stopped, and sessions whose turn ended and wait for you.
-- **In review**: finished quests whose PR is still open, as GitHub says (draft, open, review required, approved, changes requested, and whether checks pass). Merged or closed, they move to Returned.
-- **Returned**: done and closed in the last week.
+| Column | What sits there |
+|---|---|
+| To do | Tickets with no quest yet (when Jira is set up), stopped quests, idle sessions, your own to-dos |
+| In progress | Quests and Claude sessions at work |
+| Needs you | A decision only you can make: an open board, a blocked or failed quest, a session that asked you something |
+| In review | Finished quests whose PR is still open, as GitHub says |
+| Done | Merged or closed in the last week (three per row, then "+N more") |
 
-Each card shows the model as a wax seal (legendary for Fable, epic for Opus, rare for Sonnet, common for Haiku), what the agent is on, its repo and age, and buttons: go to its tab, reopen a session in the cockpit, pin it, open its wrap-up, decision board, PR or ticket. Sessions are read from Claude Code's own logs, so a spec session you named with `/rename` shows by that name. It refreshes every 3 seconds.
+**What makes a row.** Quests on the same ticket, or built on each other's branch, are one story. Its name comes from you (`guild story "Rate engine" SARA-832 SARA-838`, or "Name this story" on the row), else from the Jira parent (the epic or story above the tickets), else from its tickets. Giving two stories the same name merges them. Each row shows a progress bar, "2/5 done", and one line on its state ("Blocked: SARA-839 builder", "1 needs your decision", "All done"). Tickets with no story share a "Single tickets" row; sessions and to-dos have the last row, unless a session talks about a story's ticket, which puts it in that story.
 
-**Labels, like Trello.** Each card carries colored labels at the top: its ticket, in one color per piece of work (quests on the same ticket, or built on each other's branch, share it; a session that talks about the ticket carries it too), then its PR state, review and checks, and the Jira status once Jira is set up. The legend above the columns lists the shared colors; click one, or hover a card, to see only that piece of work. PR states come from `gh`, with the account that owns each repo, refreshed every two minutes by the war table server; `guild prs` shows them in the terminal. Nothing is written to GitHub or Jira.
+**Cards** show the ticket, a plain title, the model as a wax seal, and what the agent is on. A red edge means blocked, failed or stopped, orange means it waits for you, green means it is working, and the reason is written in words on the card. Labels show the PR as GitHub sees it (draft, open, merged, review, checks) and the Jira status. Buttons appear on hover: go to its tab, reopen a session, pin, wrap-up, decide, PR. Sessions are read from Claude Code's own logs, so a session you named with `/rename` shows by that name. The page refreshes every 3 seconds; PR states refresh every two minutes (`guild prs` shows them in the terminal). Nothing is written to GitHub or Jira.
 
 ### A tree of tabs, and more than one quartermaster
 

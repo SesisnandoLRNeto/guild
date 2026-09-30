@@ -220,6 +220,8 @@ def docket_items():
                     "created": meta.get("created", ""), "url": f"/b/{quest}/{board}/", "wrapup": bool(meta.get("wrapup")),
                     "ticket": qmeta.get("ticket", ""), "model": qmeta.get("model", ""), "pseudo": bool(qmeta.get("pseudo"))}
             dec = os.path.join(d, "decision.json")
+            if meta.get("kind") == "budget" and not qmeta.get("budget") and not os.path.exists(dec):
+                continue                                 # its cap was removed: nothing to raise any more
             if os.path.exists(dec):
                 answer = json.load(open(dec))
                 recent.append(dict(base, answers=answer.get("answers", {}), message=answer.get("message", ""), at=answer.get("at", "")))
@@ -286,6 +288,12 @@ def campaign_action(action, body):
     """Buttons on the campaign board: jump to a tab, pin a card, add or finish a to-do."""
     f = fleet()
     socket_name = os.environ.get("GUILD_TMUX_SOCKET", "guild")
+    if action == "story":                 # name the row these tickets sit in
+        tickets = [t for t in body.get("tickets", []) if re.fullmatch(r"[A-Z][A-Z0-9]{1,9}-\d+", str(t))]
+        if not tickets:
+            raise ValueError("no tickets")
+        f.name_story(str(body.get("name", ""))[:80].strip(), tickets)
+        return {"ok": True, "did": "story named" if body.get("name") else "story name removed"}
     if action == "jump":
         tab, sid = body.get("tab", ""), body.get("session", "")
         if tab:
@@ -415,7 +423,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"ok": True}), "application/json")
             except Exception as e:
                 return self.send(500, json.dumps({"error": str(e)}), "application/json")
-        c = re.match(r"^/campaign/(jump|pin|todo|close)$", path)
+        c = re.match(r"^/campaign/(jump|pin|todo|close|story)$", path)
         if c:
             length = int(self.headers.get("Content-Length", 0))
             try:

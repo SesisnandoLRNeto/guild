@@ -563,6 +563,13 @@ board=$(python3 "$REPO/bin/fleet.py" json)
 has "quests on one ticket form a thread" "$board" "same ticket ABC-7"
 has "a quest built on another's branch joins its thread" "$board" "built on ABC-7/schema"
 has "the thread is named by its tickets" "$board" '"label": "ABC-7 + ABC-9"'
+lane_of() { python3 -c "import json,sys;b=json.loads(sys.argv[1]);print(next((l['title'] or l['code']) for l in b['lanes'] if sys.argv[2] in l['cards']))" "$1" "$2"; }
+is "a thread is one story row on the board" "$(lane_of "$board" quest:tC)" "ABC-7 + ABC-9"
+"$GUILD" story "Rate engine" ABC-7 >/dev/null
+is "guild story names the row" "$(lane_of "$(python3 "$REPO/bin/fleet.py" json)" quest:tA)" "Rate engine"
+curl -s -X POST "${url}/story" -d '{"tickets":["ABC-7"],"name":""}' >/dev/null
+is "the board can remove the name again" "$(lane_of "$(python3 "$REPO/bin/fleet.py" json)" quest:tA)" "ABC-7 + ABC-9"
+has "a story row says how far along it is" "$board" '"status": "3 in progress"'
 rm -rf "$GUILD_HOME/quests/tA" "$GUILD_HOME/quests/tB" "$GUILD_HOME/quests/tC"
 # the war table dresses every board page in the guild theme
 bpage=$(ls -d "$GUILD_HOME"/quests/*/boards/*/ 2>/dev/null | head -1)
@@ -650,7 +657,10 @@ curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"
 python3 "$REPO/bin/wartable.py" due; python3 "$REPO/bin/wartable.py" due
 is "a held decision comes back once when its date passes" "$(grep -c 'due again: Pick a color' "$GUILD_HOME/events.log")" "1"
 rm -rf "$dq"
-# effort per tier, and a dollar cap per quest
+# effort per tier, and a dollar cap per quest (only when asked for: there is no default cap)
+echo x | "$GUILD" quest nocap --repo "$REPO_A" >/dev/null 2>&1
+is "without --budget a quest has no cap" "$(python3 -c "import json;print(repr(json.load(open('$GUILD_HOME/quests/nocap/meta.json')).get('budget')))")" "''"
+"$GUILD" close nocap --force >/dev/null 2>&1
 echo x | "$GUILD" quest ef --repo "$REPO_A" --tier plan --budget 2 >/dev/null 2>&1
 is "a tier brings its effort" "$(cat "$GUILD_HOME/quests/ef/effort")" "high"
 has "and the launch passes it to the harness" "$(cat "$GUILD_HOME/quests/ef/launch.sh")" '--effort "$effort"'
