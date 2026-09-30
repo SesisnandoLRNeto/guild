@@ -84,6 +84,8 @@
   .opts button[aria-pressed="true"].rec::after { background: var(--gold); }
   .bar button .gi-icon { margin-right: 7px; }
   .empty .gi-icon { margin-right: 6px; color: #8a4b12; }
+  .qtext { width: 100%; min-height: 44px; font: inherit; font-size: 13px; padding: 5px 7px; border: 1px solid var(--rule, #cdb88e); border-radius: 3px; background: rgba(255,250,235,.7); }
+  .drillnote { background: rgba(217,164,65,.22); border-left: 3px solid #b5651d; padding: 8px 12px; font-size: 14px; margin: 0 0 14px; }
 </style>
 <link rel="stylesheet" href="/icons.css">
 </head>
@@ -97,6 +99,7 @@
 </header>
 
 <section class="sheet" aria-labelledby="h-open">
+  <p class="drillnote" id="drillnote" hidden></p>
   <h2 id="h-open"><span class="gi-icon gi-swords" aria-hidden="true"></span>Awaiting your ruling</h2>
   <p class="lead">Decisions first, then finished work waiting for your grade. A little crown marks the adventurer's suggestion.</p>
   <table>
@@ -138,6 +141,7 @@ function rowHtml(i, n) {
   ].join("");
   const qs = (i.questions || []).map((q) => {
     const chosen = (picks[k] || {})[q.id];
+    if (q.type === "text") return `<div class="q"><p class="qt">${esc(q.title)}</p><textarea class="qtext" data-k="${esc(k)}" data-q="${esc(q.id)}" placeholder="${esc(q.detail || "")}" rows="2">${esc(chosen || "")}</textarea></div>`;
     const opts = (q.options || []).map((o) =>
       `<button data-k="${esc(k)}" data-q="${esc(q.id)}" data-o="${esc(o.id)}" class="${q.recommended === o.id ? "rec" : ""}" aria-pressed="${chosen === o.id}" title="${esc(o.why || "")}">${esc(o.label)}</button>`).join("");
     const why = (q.options || []).find((o) => o.id === chosen);
@@ -156,11 +160,14 @@ function rowHtml(i, n) {
 function isReady(i) {
   const p = picks[key(i)] || {}, qs = i.questions || [];
   if (!qs.length) return !!(notes[key(i)] || "").trim();
-  return qs.every((q) => p[q.id]);
+  return qs.every((q) => (p[q.id] || "").toString().trim());
 }
 
 function render() {
   const open = data.open || [];
+  const dn = $("#drillnote");
+  dn.hidden = !(data.drill && data.drill.due);
+  if (data.drill && data.drill.due) dn.innerHTML = `<b>This week's rule drill</b>: ${data.drill.count} question${data.drill.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a> &middot; <a href="/rules">the rule book</a>`;
   $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5"><span class="gi-icon gi-potion" aria-hidden="true"></span>Nothing waits for your seal. The guild is on the road, or resting at the tavern.</td></tr>`;
   $("#held").innerHTML = (data.held || []).map((i) =>
     `<tr class="held"><td class="item"><b>${esc(i.title)}</b><div class="meta"><span class="chip">${esc(i.quest)}</span>${i.held_note ? esc(i.held_note) : ""}</div></td>
@@ -221,6 +228,9 @@ document.addEventListener("click", async (ev) => {
   }
 });
 document.addEventListener("input", (ev) => {
+  if (ev.target.classList.contains("qtext")) { const k = ev.target.dataset.k; (picks[k] = picks[k] || {})[ev.target.dataset.q] = ev.target.value;
+    const i = (data.open || []).find((x) => key(x) === k); ev.target.closest("tr").classList.toggle("ready", !!i && isReady(i));
+    const r = (data.open || []).filter(isReady).length; $("#send").disabled = !r; return; }
   if (ev.target.dataset.note) { notes[ev.target.dataset.note] = ev.target.value; const i = (data.open || []).find((x) => key(x) === ev.target.dataset.note);
     ev.target.closest("tr").classList.toggle("ready", !!i && isReady(i)); const r = (data.open || []).filter(isReady).length;
     $("#send").disabled = !r; $("#send .lbl").textContent = r ? `Send ${r} ruling${r > 1 ? "s" : ""}` : "Send rulings"; }

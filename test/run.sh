@@ -15,6 +15,7 @@ export GUILD_WORKTREES="$TMP/worktrees"
 export GUILD_TMUX_SOCKET="guild-test"
 export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
+export GUILD_NO_WHY="1"          # the Why card has its own test below
 export GUILD_NO_NOTIFY="1"       # nor a notification
 export GUILD_NO_PR_SYNC="1"      # nor a call to GitHub
 export PATH="$TMP/stub:$PATH"
@@ -712,6 +713,34 @@ echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | GUILD_QUEST=ef "$R
 is "and tools run again" "$?" "0"
 rm -f "$GUILD_HOME/.cost-cache.json"; "$GUILD" close ef --force >/dev/null 2>&1
 
+
+# ── business rules: the Why card, the rule book, the weekly drill ─────────────
+section "why card, rule book, drill"
+echo x | GUILD_NO_WHY= "$GUILD" quest whyq --repo "$REPO_A" >/dev/null 2>&1
+wb=$(ls "$GUILD_HOME/quests/whyq/boards" | grep '^why-' | head -1)
+[ -n "$wb" ] && ok "a new quest puts a Why card on the docket" || bad "a new quest puts a Why card on the docket" "no why board"
+has "the card asks the five questions" "$(cat "$GUILD_HOME/quests/whyq/boards/$wb/decisions.json")" '"id": "future"'
+has "the docket lists it" "$(curl -s http://127.0.0.1:4899/docket.json)" "Why card: whyq"
+is "a card does not park the quest" "$(cut -f1 "$GUILD_HOME/quests/whyq/status")" "working"
+curl -s -X POST "http://127.0.0.1:4899/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null
+has "the answer is kept with the quest" "$(cat "$GUILD_HOME/quests/whyq/why.json")" "a past start date is warned"
+has "guild why shows it" "$("$GUILD" why whyq)" "Decision: Kim, no blocking"
+has "and it tops the quest's pages" "$(curl -s "http://127.0.0.1:4899/b/whyq/$wb/content.html" -o /dev/null; GUILD_QUEST=whyq "$GUILD" board open --html "$TMP/wrap.html" --title "whyq page" --no-open >/dev/null 2>&1; b=$(ls "$GUILD_HOME/quests/whyq/boards" | grep -v '^why-' | head -1); curl -s "http://127.0.0.1:4899/b/whyq/$b/content.html")" "written by the guildmaster"
+cat > "$GUILD_HOME/quests/whyq/rules.json" <<'JSON'
+{"rules": [{"rule": "A past start date is warned", "before": "no warning", "after": "BACKDATED warning", "where": "RateConfigService.java:40",
+  "why": "priced lines do not change", "example": {"given": "a rate starting 2020-03-01", "then": "201 with a BACKDATED warning"}, "tests": "BackdatedIT"}]}
+JSON
+has "the rule book gathers rules from every quest" "$(python3 "$REPO/bin/rulebook.py" list)" "A past start date is warned: BACKDATED warning"
+has "and serves them per area" "$(curl -s http://127.0.0.1:4899/rules.json)" '"tests": "BackdatedIT"'
+dj=$(curl -s http://127.0.0.1:4899/drill.json)
+has "the drill asks from the example" "$dj" "Given a rate starting 2020-03-01: what happens?"
+has "with the truth to compare" "$dj" "201 with a BACKDATED warning"
+has "the docket says the drill is due" "$(curl -s http://127.0.0.1:4899/docket.json)" '"due": true'
+k=$(echo "$dj" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["key"])')
+curl -s -X POST http://127.0.0.1:4899/drill/grade -d "{\"key\":\"$k\",\"right\":false,\"answer\":\"it blocks\"}" >/dev/null
+has "a miss is recorded" "$(cat "$GUILD_HOME/drill.json")" '"answer": "it blocks"'
+has "and the drill is done for the week" "$(curl -s http://127.0.0.1:4899/docket.json)" '"due": false'
+"$GUILD" close whyq --force >/dev/null 2>&1
 
 # ── housekeeping ──────────────────────────────────────────────────────────────
 section "tidy"

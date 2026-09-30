@@ -84,9 +84,12 @@ Write it so someone who does not read code knows what happened in one minute. Th
      ```json
      {"rules": [{"rule": "A workstream paid by units needs its units per hour",
                  "before": "not stored", "after": "required when paid by UNITS, above 0",
-                 "where": "WorkstreamClosureService.java:148", "why": "hourly equivalent for the minimum wage check"}],
+                 "where": "WorkstreamClosureService.java:148", "why": "hourly equivalent for the minimum wage check",
+                 "example": {"given": "a UNITS workstream saved with no units per hour", "then": "400 on unitsPerHour, nothing saved"},
+                 "source": "SARA-832 and the pay rate spec v3.3, section 4", "tests": "WorkstreamClosureServiceTest.requiresUnitsPerHour"}],
       "note": "The other candidates only carry the new field; same behaviour."}
      ```
+     Every rule also goes into the guildmaster's **rule book** (`guild rules`) and can come up in their weekly drill, so write it for someone who does not read code: `example` with real values (`given`, `then`) is what the drill asks, `source` says where the rule comes from (ticket, spec, person), `tests` names what proves it.
      Use `note` to say why the remaining candidates are not rule changes. Never leave a candidate unexplained.
   3. `guild impact --into <page.html> --rules rules.json` puts the section where the page has `<!--GUILD-IMPACT-->` (or at the end): an ER diagram of the changed tables with NEW, CHANGED and REMOVED columns, before and after column lists, the constraints the database now enforces, a module impact map, the endpoints, and your rules table. Rerunning it replaces the section.
   4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.

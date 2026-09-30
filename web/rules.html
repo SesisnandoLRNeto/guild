@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guild Rule Book</title>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  /* The rule book: every business rule the work changed, per area, in plain words. */
+  html:root body { max-width: 1060px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 6px 0 18px; }
+  .tabs { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .tabs button { font: inherit; font-size: 13px; background: rgba(255,255,255,.35); border: 0; padding: 5px 11px; cursor: pointer; color: var(--text); }
+  .tabs button + button { border-left: 1px solid var(--line); }
+  .tabs button[aria-pressed="true"] { background: #8a4b12; color: #fff5dc; }
+  #q { flex: 1 1 240px; font: inherit; font-size: 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: rgba(255,250,235,.7); }
+  .drill { margin-left: auto; font-size: 13.5px; }
+  .rule { background: rgba(255,250,235,.62); border: 1px solid var(--line); border-left: 4px solid #8a4b12; border-radius: 5px; padding: 12px 16px; margin: 0 0 12px; }
+  .rule h3 { margin: 0 0 6px; font-size: 16px; }
+  .rule h3::before { content: none; }
+  .now { font-size: 15px; margin: 0 0 6px; }
+  .now b, .row b { font-variant: small-caps; color: #8a4b12; margin-right: 6px; }
+  .row { font-size: 13.5px; margin: 3px 0; color: var(--text); }
+  .ex { background: rgba(63,125,58,.12); border-left: 3px solid var(--ok); padding: 5px 10px; margin: 6px 0; font-size: 14px; }
+  .meta { font-size: 12.5px; color: var(--dim); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  details { font-size: 13px; margin-top: 6px; }
+  details summary { cursor: pointer; color: var(--dim); }
+  .empty { color: var(--dim); font-style: italic; }
+</style>
+</head>
+<body>
+<h1>The Rule Book</h1>
+<p class="lead">Every business rule the guild's work changed, per area, in plain words: what the system does now, what it did before, why, and where it lives. Written by the adventurers in each backend wrap-up, gathered here.</p>
+<div class="bar">
+  <span class="tabs" id="tabs"></span>
+  <input id="q" type="search" placeholder="Search rules, tickets, files" aria-label="Search the rules">
+  <a class="drill" href="/drill" id="drill">This week's drill</a>
+</div>
+<div id="list"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const code = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
+let D = null, area = "";
+try { area = localStorage.getItem("rulebook-area") || ""; } catch (e) {}
+
+function example(e) {
+  const x = e.example;
+  if (!x) return "";
+  if (typeof x === "string") return `<div class="ex"><b>Example</b> ${code(x)}</div>`;
+  return `<div class="ex"><b>Example</b> given ${code(x.given || "")}, then ${code(x.then || "")}</div>`;
+}
+
+function render() {
+  const areas = Object.keys(D.areas);
+  if (!areas.includes(area)) area = areas[0] || "";
+  $("#tabs").innerHTML = areas.map((a) => `<button data-a="${esc(a)}" aria-pressed="${a === area}">${esc(a)} (${D.areas[a].length})</button>`).join("");
+  const q = $("#q").value.trim().toLowerCase();
+  const rules = (D.areas[area] || []).filter((e) => !q || JSON.stringify(e).toLowerCase().includes(q));
+  $("#list").innerHTML = rules.map((e) => `<div class="rule">
+      <h3>${code(e.rule)}</h3>
+      <p class="now"><b>Now</b>${code(e.after || "")}</p>
+      ${e.before ? `<p class="row"><b>Before</b>${code(e.before)}</p>` : ""}
+      ${e.why ? `<p class="row"><b>Why</b>${code(e.why)}</p>` : ""}
+      ${example(e)}
+      <div class="meta">
+        ${e.where ? `<span>in <code>${esc(e.where)}</code></span>` : ""}
+        ${e.tests ? `<span>proved by <code>${esc(e.tests)}</code></span>` : ""}
+        ${e.source ? `<span>source: ${code(e.source)}</span>` : ""}
+        ${e.ticket ? `<span>${esc(e.ticket)}</span>` : ""}<span>changed ${esc(e.date || "")}</span>
+      </div>
+      ${e.history.length > 1 ? `<details><summary>${e.history.length} changes</summary>${e.history.map((h) =>
+        `<p class="row">${esc(h.date)} · ${esc(h.ticket || h.quest)}: ${code(h.before || "?")} &rarr; ${code(h.after || "?")}</p>`).join("")}</details>` : ""}
+    </div>`).join("") || `<p class="empty">${q ? "No rule matches." : "No rules yet: they appear as backend quests explain their rule changes."}</p>`;
+}
+
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("#tabs button");
+  if (!b) return;
+  area = b.dataset.a;
+  try { localStorage.setItem("rulebook-area", area); } catch (e) {}
+  render();
+});
+$("#q").addEventListener("input", render);
+fetch("/rules.json", { cache: "no-store" }).then((r) => r.json()).then((d) => { D = d; render(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guild Rule Drill</title>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  /* The weekly drill: three rules, your answer first, then the truth. You are the judge. */
+  html:root body { max-width: 900px; }
+  .score { font-size: 14px; color: var(--dim); margin: 0 0 18px; }
+  .q { background: rgba(255,250,235,.62); border: 1px solid var(--line); border-radius: 5px; padding: 14px 16px; margin: 0 0 14px; }
+  .q h3 { margin: 0 0 8px; font-size: 16px; } .q h3::before { content: none; }
+  .area { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  textarea { box-sizing: border-box; width: 100%; min-height: 70px; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: rgba(255,250,235,.8); }
+  .truth { display: none; margin-top: 10px; background: rgba(63,125,58,.12); border-left: 3px solid var(--ok); padding: 8px 12px; font-size: 14px; }
+  .q.shown .truth { display: block; }
+  .truth b { font-variant: small-caps; color: var(--ok); margin-right: 6px; }
+  .where { font-size: 12.5px; color: var(--dim); margin-top: 6px; }
+  .judge { display: none; gap: 8px; margin-top: 10px; }
+  .q.shown .judge { display: flex; }
+  button { font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer; background: rgba(255,255,255,.4); color: var(--text); }
+  button.go { background: #8a4b12; color: #fff5dc; border-color: #8a4b12; }
+  button.right { background: var(--ok); color: #fff5dc; border-color: var(--ok); }
+  button.wrong { background: var(--bad); color: #fff5dc; border-color: var(--bad); }
+  .done { font-weight: 700; margin-top: 8px; }
+  .done.r { color: var(--ok); } .done.w { color: var(--bad); }
+  .empty { color: var(--dim); font-style: italic; }
+</style>
+</head>
+<body>
+<h1>This Week's Rule Drill</h1>
+<p class="lead">Three business rules from the work. Answer each in your own words first, then check the truth and mark yourself. A miss comes back next week. <a href="/rules">The rule book</a> has them all.</p>
+<p class="score" id="score"></p>
+<div id="list"></div>
+<button class="go" id="check" type="button">Check my answers</button>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const code = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
+let D = null;
+
+function render() {
+  $("#score").textContent = `${D.week}: you have been asked ${D.asked} of ${D.total} rules; ${D.right} right the last time.`;
+  $("#list").innerHTML = D.items.map((i, n) => {
+    const a = i.answered;
+    return `<div class="q ${a ? "shown" : ""}" data-k="${esc(i.key)}">
+      <div class="area">${esc(i.area)}${i.ticket ? " · " + esc(i.ticket) : ""}</div>
+      <h3>${n + 1}. ${code(i.question)}</h3>
+      <textarea placeholder="Your answer, in your own words" ${a ? "disabled" : ""}>${esc(a ? a.answer : "")}</textarea>
+      <div class="truth"><b>The truth</b>${code(i.truth)}
+        <div class="where">${i.where ? `in <code>${esc(i.where)}</code>` : ""}${i.tests ? ` · proved by <code>${esc(i.tests)}</code>` : ""}</div></div>
+      ${a ? `<p class="done ${a.right ? "r" : "w"}">${a.right ? "You had it." : "Missed: it comes back next week."}</p>`
+          : `<div class="judge"><button class="right" data-r="1">I had it</button><button class="wrong" data-r="0">I missed it</button></div>`}
+    </div>`;
+  }).join("") || `<p class="empty">No rules to drill yet: they appear as backend quests explain their rule changes.</p>`;
+  $("#check").hidden = !D.items.some((i) => !i.answered);
+}
+
+$("#check").addEventListener("click", () => document.querySelectorAll(".q").forEach((q) => q.classList.add("shown")));
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-r]");
+  if (!b) return;
+  const q = b.closest(".q");
+  await fetch("/drill/grade", { method: "POST", body: JSON.stringify({ key: q.dataset.k, right: b.dataset.r === "1", answer: q.querySelector("textarea").value }) });
+  load();
+});
+function load() { fetch("/drill.json", { cache: "no-store" }).then((r) => r.json()).then((d) => { D = d; render(); }); }
+load();
+</script>
+</body>
+</html>

@@ -109,6 +109,9 @@ guild up ~/Workspace
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
 | `guild story "<name>" TICKET...` | Name the campaign board row those tickets sit in (an empty name removes it) |
 | `guild validate <slug>` / `guild validate export <slug> [--out F]` | The quest's end-to-end checklist, run before a merge; a standalone copy for the team |
+| `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
+| `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
+| `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
@@ -186,6 +189,16 @@ Every Jev call is logged with its tokens (`~/.guild/jev-usage.jsonl`); add `"jev
 
 How costs are counted: Claude Code writes one log line per content block of a reply, each carrying the same usage, so guild counts each reply once by its message id. A pooled worktree also holds the logs of earlier quests, so a quest counts only lines written after it started.
 
+## Understanding the business rules
+
+Three habits, built in, so the rules behind the work reach you whole: why each exists, what it changes, and what comes next.
+
+**The Why card.** Every quest starts by putting a card on the docket with five questions you answer in your own words: the **pain** (who suffers today, one real example), the **rule** (in one sentence), the **decision** (who decided, what was rejected), the **impact** (what changes, for which users, data or money) and the **future** (what it unlocks or blocks). The AI never fills it in: thinking first is the point. Your answers are kept in `why.json` and top the quest's plan and wrap-up, so you judge the result against your own why. The adventurer then checks your card against the ticket, the spec and the code, and raises up to three challenges on the war table where something contradicts it or is missing. `--no-why` skips it; helpers never get one.
+
+**The rule book.** Every backend wrap-up explains its business rule changes in a rules file (`guild impact --rules`): the rule, before, after, where, why, and an example with real values, its source and the tests that prove it. `guild rules` gathers them from every quest, live and closed, into one book per area, with search and the history of each rule (which quests changed it, and when).
+
+**The weekly drill.** `guild drill` asks three rules a week: first those you were never asked, then those you missed, then the ones asked longest ago. You answer first, then see the truth with where it lives in the code, and mark yourself right or wrong; a miss comes back the next week. The docket says when this week's drill waits.
+
 ## The learning loop
 
 History is only useful if it changes the next quest.
@@ -246,10 +259,14 @@ Comment `@quartermaster repo:work-api build the fair pay list` on a ticket, and 
 
 Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` and `JIRA_API_TOKEN=...` in `~/.guild/local/env`. `guild jira once` polls one time; with `"watch": true` the cockpit opens a `jira` tab running `guild jira watch`.
 
+## Housekeeping
+
+Once a month the war table server runs `guild tidy`: events older than 30 days move from `events.log` to `events/YYYY-MM.log` (the readers' byte cursors are shifted, so nothing is replayed or missed, and history, the retro and lessons read the monthly files too), and quests closed more than 60 days ago get their boards and screenshots packed into `files.tar.gz`, keeping meta, costs, grades and certificates as they are. `guild tidy --dry-run` shows what it would do.
+
 ## Tests
 
 ```sh
-./test/run.sh      # 307 checks, about 3 minutes, no model calls
+./test/run.sh      # 350 checks, about 3 minutes, no model calls
 ```
 
 The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table and the docket, the trial gate in both forms, checks and grades, costs and the retro, budget caps, helpers, lessons, revive and close. Fakes stand in for everything outside: a fake Jira, a fake Jev, a fake ntfy, a fake GitHub PR cache, and a fake `ssh` that runs the "remote" guild in its own home. `test/cockpit.py` drives a real tmux client in a pty to test keys and clicks. It also runs in CI on every push.

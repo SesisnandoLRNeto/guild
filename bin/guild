@@ -70,6 +70,9 @@ guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the cam
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild rules                         the rule book: every business rule the work changed, per area
+guild drill                         this week's three-question drill on those rules (you answer first)
+guild why <slug>                    the quest's Why card: show it, or put it on the docket again (open)
 guild tidy [--dry-run]              move old events to monthly files, pack old closed quests (runs monthly on its own)
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
@@ -660,6 +663,7 @@ cmd_quest() {
       --machine) machine="$2"; shift 2 ;;
       --headless) headless=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
+      --no-why) export GUILD_NO_WHY=1; shift ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
       --branch) branch="$2"; shift 2 ;;
@@ -844,6 +848,10 @@ PLAN
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
   # headless: another machine's guild asked for this quest; its tab lives over there
   [ -n "$headless" ] || open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
+  # the guildmaster writes why this quest exists, in their own words (helpers and remote copies skip it)
+  if [ -z "${GUILD_NO_WHY:-}" ] && [ -z "$parent" ] && [ -z "$headless" ]; then
+    python3 "$GUILD_REPO/bin/why.py" open "$slug" >/dev/null 2>&1 && echo "why card: on the docket for the guildmaster" || true
+  fi
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -1068,6 +1076,8 @@ cmd_impact() {
     base=$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD || echo main)
   fi
   local extra=(); [ -n "$rules" ] && extra=(--rules "$rules")
+  # the rule book reads every quest's rules.json: keep a copy with the quest
+  if [ -n "$rules" ] && [ -n "$slug" ] && [ -d "$(qdir "$slug")" ] && [ -f "$rules" ]; then cp "$rules" "$(qdir "$slug")/rules.json"; fi
   if [ -n "$into" ]; then
     python3 "$GUILD_REPO/bin/impact.py" into "$into" "$repo" "$base" ${extra[@]+"${extra[@]}"}
   elif [ -n "$out" ]; then
@@ -1345,6 +1355,9 @@ case "${1:-}" in
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
+  rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+    echo "http://127.0.0.1:$port/$page"; [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/$page" 2>/dev/null || true ;;
+  why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;

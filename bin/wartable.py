@@ -112,6 +112,11 @@ GLANCE_CSS = """<style>
 .gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
 .gg-tile b{font-size:17px}.gg-go{text-decoration:none;color:inherit;border-color:#0d6b63;background:rgba(13,107,99,.08)}
 .gg-go:hover{background:rgba(13,107,99,.16)}.gg-tile i{display:block;font-size:11.5px;color:var(--dim,#6e5a41);font-style:normal}
+.gw{margin-top:12px;border-top:1px dashed var(--line,#cdb88e);padding-top:10px}
+.gw-head{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41);margin-bottom:6px}
+.gw-head i{text-transform:none;letter-spacing:0;font-style:italic}
+.gw-row{display:grid;grid-template-columns:90px 1fr;gap:10px;font-size:14px;padding:2px 0}
+.gw-row b{font-variant:small-caps;color:#8a4b12}
 @media (max-width:640px){.gg-path li{font-size:10.5px}}
 </style>"""
 
@@ -192,6 +197,9 @@ def glance(quest):
                   (grade or {}).get("verdict", "") or "on the right side"))
     model = meta.get("model") or ""
     head = " · ".join(_html.escape(x) for x in [ticket, model, os.path.basename(meta.get("repo", ""))] if x)
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import why
+    card = why.glance_html(quest)
     return (GLANCE_CSS + '<section class="gg" aria-label="At a glance">'
             f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{_html.escape(say)}</span>'
             f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
@@ -199,7 +207,7 @@ def glance(quest):
             + "".join((f'<a class="gg-tile gg-go" href="{t[3]}" target="_top">' if len(t) > 3 else '<div class="gg-tile">')
                       + f'<span>{_html.escape(t[0])}</span><b>{_html.escape(str(t[1]))}</b><i>{_html.escape(t[2])}</i>'
                       + ("</a>" if len(t) > 3 else "</div>") for t in tiles)
-            + "</div></section>")
+            + "</div>" + card + "</section>")
 
 
 def load_json_safe(path):
@@ -325,6 +333,19 @@ def answer_board(quest, board, payload):
     if meta.get("wrapup"):
         grade_wrapup(quest, board, meta, decision)
         return
+    if meta.get("kind") == "why":             # the guildmaster's own words on why this quest exists
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import why
+        card = why.save(quest, decision)
+        with open(EVENTS, "a") as f:
+            f.write(f"{now()}\t{quest}\twhy\t{card.get('rule', '')[:100]}\n")
+        text = ("The guildmaster wrote the Why card for this quest (also in why.json):\n" + why.as_text(card)
+                + "\nCheck it against the ticket, the spec and the code before you go on. Where something contradicts "
+                  "it or is missing, raise up to three short challenges on the war table (guild ask), each quoting the "
+                  "source. Your plan and your wrap-up answer this card.")
+        guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+        threading.Thread(target=lambda: subprocess.run([guild, "send", quest, text], capture_output=True), daemon=True).start()
+        return
     if meta.get("kind") == "lesson":         # accepted lessons reach lessons.md, rejected ones are kept apart
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import lessons
@@ -360,6 +381,16 @@ def board_questions(bdir, meta):
     qpath = os.path.join(bdir, "decisions.json")
     questions = json.load(open(qpath)).get("questions", []) if os.path.exists(qpath) else []
     return (GRADE_QUESTIONS + questions) if meta.get("wrapup") else questions
+
+
+def drill_due():
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import rulebook
+        d = rulebook.drill()
+        return {"due": d["due"], "count": sum(1 for i in d["items"] if not i["answered"])}
+    except Exception:
+        return {"due": False, "count": 0}
 
 
 def docket_items():
@@ -407,7 +438,7 @@ def docket_items():
     open_.sort(key=lambda i: (i["wrapup"], i["created"]))          # decisions first, then reviews
     held.sort(key=lambda i: i["held_until"])
     recent.sort(key=lambda i: i["at"], reverse=True)
-    return {"open": open_, "held": held, "recent": recent[:12], "today": today}
+    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due()}
 
 
 def hold_board(quest, board, until, note=""):
@@ -537,6 +568,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
+            if path in ("/rules", "/drill"):   # the rule book, and the weekly drill
+                return self.send(200, open(os.path.join(WEB, path.strip("/") + ".html")).read())
+            if path in ("/rules.json", "/drill.json"):
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import rulebook
+                if path == "/drill.json":
+                    return self.send(200, json.dumps(rulebook.drill()), "application/json")
+                book = rulebook.collect()
+                return self.send(200, json.dumps({"areas": book, "count": sum(len(v) for v in book.values())}), "application/json")
             if path == "/treasury":        # the treasury: what the work cost and what it was worth
                 return self.send(200, open(os.path.join(WEB, "treasury.html")).read())
             if path == "/treasury.json":
@@ -605,6 +645,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"ok": True}), "application/json")
             except Exception as e:
                 return self.send(500, json.dumps({"error": str(e)}), "application/json")
+        if path == "/drill/grade":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import rulebook
+            return self.send(200, json.dumps(rulebook.grade(str(body.get("key", "")), bool(body.get("right")), body.get("answer", ""))),
+                             "application/json")
         v = re.match(r"^/q/([A-Za-z0-9._-]+)/validate/(mark|send)$", path)
         if v:
             length = int(self.headers.get("Content-Length", 0))
