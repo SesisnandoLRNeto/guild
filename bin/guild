@@ -32,7 +32,7 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
-guild status <slug> <state> [note] [--no-wrapup]
+guild status <slug> <state> [note] [--no-wrapup] [--no-scenarios]
                                     set state: working|blocked|needs-decision|done|failed|stopped|planned
                                     (a code quest needs a wrap-up board before done; --no-wrapup opts out)
 guild wait [timeout-seconds] [--for slug,slug]
@@ -69,6 +69,8 @@ guild docket                        every open decision on one page: rule, hold 
 guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
+guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
 guild notify test                   check that notifications reach you (Mac, and ntfy if set)
@@ -914,6 +916,7 @@ cmd_status() {
     case "$1" in
       --no-wrapup) export GUILD_NO_WRAPUP=1; shift ;;
       --no-impact) export GUILD_NO_IMPACT=1; shift ;;
+      --no-scenarios) export GUILD_NO_SCENARIOS=1; shift ;;
       *) note="$1"; shift ;;
     esac
   done
@@ -936,6 +939,18 @@ cmd_status() {
     [ -z "$why" ] || die "$why"
   fi
 
+  # Every code quest hands the guildmaster an end-to-end checklist to run before a merge
+  # (scenarios.json, shown at /q/<slug>/validate); a frontend change adds the screen map.
+  if [ "$state" = done ] && [ -z "${GUILD_NO_WRAPUP:-}" ] && [ -z "${GUILD_NO_SCENARIOS:-}" ] && [ -n "$(quest_committed "$slug")" ]; then
+    local problems fe=""
+    [ -n "$(frontend_changed "$slug")" ] && fe="--frontend"
+    problems=$(python3 "$GUILD_REPO/bin/scenarios.py" check "$slug" $fe)
+    [ -z "$problems" ] || die "the guildmaster validates every code quest end to end before a merge, and its checklist is not ready:
+$(printf '%s\n' "$problems" | sed 's/^/     - /')
+     Write $(qdir "$slug")/scenarios.json (war-table skill, \"Validation scenarios\"), then report done again.
+     Nothing a person can run (docs, config)? guild status $slug done --no-scenarios \"<why>\""
+  fi
+
   local board=""
   [ "$state" = needs-decision ] && board=$(open_board "$slug")
   # A decision already on a board keeps that board's title when no note is given.
@@ -950,6 +965,7 @@ cmd_status() {
   fi
   [ "$state" = done ] && [ -n "${GUILD_NO_WRAPUP:-}" ] && note="$note (no wrap-up)"
   [ "$state" = done ] && [ -n "${GUILD_NO_IMPACT:-}" ] && note="$note (no impact section)"
+  [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ] && note="$note (no validation scenarios)"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
 }
@@ -980,6 +996,33 @@ PY2
   local pane; pane=$(content_pane "$SESSION:$1")
   [ -n "$pane" ] && tm run-shell -b "sleep 2; tmux -L '$SOCKET' respawn-pane -k -t '$pane' \"GUILD_RESUME=1 GUILD_HANDOFF=1 bash '$q/launch.sh'\"" 2>/dev/null || true
   echo "plan phase over: $1 restarts on $build in a moment"
+}
+
+# Prints the UI files a quest changed (screens a person must look at), or nothing.
+frontend_changed() { # slug
+  local q wt base
+  q="$(qdir "$1")"
+  wt=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('worktree',''))")
+  base=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('base',''))")
+  [ -d "$wt" ] && [ -n "$base" ] || return 0
+  git -C "$wt" diff --name-only "$(git -C "$wt" merge-base HEAD "$base" 2>/dev/null || echo "$base")" HEAD 2>/dev/null |
+    grep -E '\.(tsx|jsx|vue|svelte|css|scss|html)$' | grep -vE '(\.test\.|\.spec\.|/__tests__/|/test/)' || true
+}
+
+# The end-to-end checklist for a quest: open it, or export a standalone copy for the team.
+cmd_validate() { # [export] slug [--out FILE]
+  local port
+  if [ "${1:-}" = export ]; then
+    shift; need_quest "${1:-}"
+    python3 "$GUILD_REPO/bin/scenarios.py" export "$@"
+    return
+  fi
+  need_quest "${1:-}"
+  [ -f "$(qdir "$1")/scenarios.json" ] || die "quest $1 has no scenarios.json yet"
+  port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+  local url="http://127.0.0.1:$port/q/$1/validate"
+  echo "$url"
+  [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
 }
 
 # Prints why the wrap-up still lacks its impact section, or nothing when it is fine.
@@ -1299,6 +1342,7 @@ case "${1:-}" in
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
   treasury) shift; cmd_treasury "$@" ;;
+  validate) shift; cmd_validate "$@" ;;
   docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;

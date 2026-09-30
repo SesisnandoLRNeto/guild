@@ -75,7 +75,7 @@ Write it so someone who does not read code knows what happened in one minute. Th
 2. **What it looks like**: real screenshots in before and after pairs, same viewport and same data (`guild shot`). Each caption says what changed for the user.
 3. **How it works**: one diagram (Mermaid flow, state machine or sequence) with one line under it saying what to notice. Prefer a picture to a paragraph whenever the point has arrows.
 4. **How we know it works**: a table of proofs in plain words ("a rate typed the old way still opens"), each with its result as `class="pass"` or `class="fail"`. Say what was checked, not the command.
-5. **Your decision**: merge as is, change something, or split a follow-up, and what happens after each.
+5. **Your decision**: merge as is, change something, or split a follow-up, and what happens after each. Point to the validation checklist (below): "ready to merge" waits for it.
 6. **For developers**, folded in `<details class="dev">`: the file list with one line each, performance numbers and how you measured them, pain points, the design choices you made alone with their reasons, what you ruled out, the quests this touches (`guild roster`), and the backend section below.
 
 - **Backend: data model, impact and business rules.** When the change touches migrations, entities, services or validation, the report gets a drawn section. Guild builds it; you explain it:
@@ -91,6 +91,48 @@ Write it so someone who does not read code knows what happened in one minute. Th
   3. `guild impact --into <page.html> --rules rules.json` puts the section where the page has `<!--GUILD-IMPACT-->` (or at the end): an ER diagram of the changed tables with NEW, CHANGED and REMOVED columns, before and after column lists, the constraints the database now enforces, a module impact map, the endpoints, and your rules table. Rerunning it replaces the section.
   4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.
   `guild status done` refuses a backend quest whose wrap-up lacks this section or leaves rules unexplained. `--no-impact "<why>"` is the recorded escape.
+
+## Validation scenarios (scenarios.json)
+
+Every code quest ends with an end-to-end checklist the guildmaster runs before any merge. Write it to `quests/<slug>/scenarios.json` (the quest folder is in your prompt); the war table shows it at `/q/<slug>/validate`, the At-a-glance strip links to it, and `guild status done` is refused without it (`--no-scenarios "<why>"` only when there is nothing a person can run). The guildmaster marks each scenario pass, fail or skip. When the last one passes, guild writes a certificate for the commit it was run on; a wrap-up cannot be graded "ready to merge" without a certificate for the current commit, so a new commit means the list is run again. Failed scenarios come back to you with the guildmaster's notes.
+
+```json
+{
+  "title": "Pay rates: equations per level, end to end",
+  "lede": "What this run proves, in one or two sentences a product person can read.",
+  "tested": [{"what": "HAS_VALUE and keyword IF", "ticket": "SARA-1064", "pr": "#179", "state": "in review"}],
+  "setup": [
+    {"title": "project-api on the quest branch", "text": "JDK 25 on JAVA_HOME.",
+     "cmd": "cd ~/Workspace/crowdgen-project-api\ngit fetch origin && git switch --detach origin/SARA-1064/has-value\n./scripts/up   # API on :8081",
+     "note": "If the port is busy, stop the other stack first."},
+    {"title": "Shell helpers", "cmd": "export API=http://localhost:8081\nrc() { curl -s -w '\\nHTTP %{http_code}\\n' -H 'Content-Type: application/json' \"$@\"; }"}
+  ],
+  "screens": [
+    {"id": "S1", "name": "Project pay rates", "route": "/projects/:id/pay-rates", "what": "New tabs and the version badge.",
+     "before": "shots/s1-before.png", "after": "shots/s1-after.png", "next": [{"to": "S2", "action": "Add rate"}]},
+    {"id": "S2", "name": "Equation builder", "route": "(dialog)", "after": "shots/s2-after.png"}
+  ],
+  "groups": [
+    {"id": "A", "title": "Dated equations and supersession", "refs": "#160 #162", "scenarios": [
+      {"id": "A1", "do": "Create an hourly equation on the objective.",
+       "cmd": "rc -X POST $API/rate-configs -d '{\"rateUom\":\"hour\",\"equationText\":\"FAIR_PAY() * 1.2\"}'",
+       "expect": "201, active, effectiveTo 2099-12-31, `warnings` with `NO_FAIR_PAY_FLOOR`."},
+      {"id": "A2", "do": "Open the project and the Pay rates tile.", "screen": "S1",
+       "expect": "Four tabs; the objective's hourly row is Active with a version badge."}]}
+  ],
+  "gaps": [{"gap": "No gap list on save", "why": "waiting on product", "where": "SARA-1054"}]
+}
+```
+
+How to write it (the guildmaster's model is a run sheet a colleague could follow cold):
+
+- **Setup first, exact.** Every command to get the change running locally: branches (detached when the branch lives in a worktree), ports, env vars, seed data, the shell helpers the scenarios use. Nothing like "start the app".
+- **Groups in run order.** Group A creates the data later groups read. Say so in a group title when it matters. `refs` lists the PRs or tickets the group covers.
+- **One scenario, one check.** `do` is a single action in plain words; `cmd` is the exact command to paste (the page adds a Copy button), or leave it out for a UI step; `expect` is what the guildmaster must see: status codes, values, messages, row counts, what must NOT happen. Put names in backticks: they render as code.
+- **Cover the edges, not only the happy path:** the error each rule should give, the case that crashed before, permissions, empty states, and one regression group for what must still work.
+- **Frontend: the screen map.** One entry per screen a person must look at, with its route and `next` actions (the map draws the path through the app). Take the pair with `guild shot`: `before` on the base branch, `after` on your branch, same URL, same data, same flags; store them under the quest folder (`shots/`). A new screen has no `before`. Every UI scenario names its `screen`.
+- **Known gaps** are what the guildmaster should not report as bugs, each with why and where it is tracked.
+- Plain B1 English, no emojis, no em dashes.
 
 ## Diagrams and screenshots
 

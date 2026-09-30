@@ -565,6 +565,12 @@ def board():
             ungraded = not grade and q["state"] in ("done", "trial-pass", "trial-skip")
             links.append({"label": "grade it" if ungraded else "wrap-up", "href": f"/b/{q['slug']}/{q['wrapup']}/",
                           "hot": ungraded})
+        if os.path.exists(os.path.join(q["dir"], "scenarios.json")):       # the checklist before a merge
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import scenarios
+            v = scenarios.summary(q["slug"])
+            links.append({"label": "validated" if v["certified"] else "validate again" if v["stale"] else f"validate {v['pass']}/{v['total']}",
+                          "href": f"/q/{q['slug']}/validate", "hot": not v["certified"] and q["state"] in ("done", "trial-pass", "trial-skip")})
         for b in q["open_boards"] if q["state"] not in ("done", "failed") else []:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
         pr_info = pr_of.get(q["slug"])

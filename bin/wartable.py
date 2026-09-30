@@ -110,7 +110,8 @@ GLANCE_CSS = """<style>
 .gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
 .gg-tile{background:rgba(255,255,255,.35);border:1px solid var(--line,#cdb88e);border-radius:4px;padding:7px 10px}
 .gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
-.gg-tile b{font-size:17px}.gg-tile i{display:block;font-size:11.5px;color:var(--dim,#6e5a41);font-style:normal}
+.gg-tile b{font-size:17px}.gg-go{text-decoration:none;color:inherit;border-color:#0d6b63;background:rgba(13,107,99,.08)}
+.gg-go:hover{background:rgba(13,107,99,.16)}.gg-tile i{display:block;font-size:11.5px;color:var(--dim,#6e5a41);font-style:normal}
 @media (max-width:640px){.gg-path li{font-size:10.5px}}
 </style>"""
 
@@ -181,6 +182,12 @@ def glance(quest):
     if pr:
         tiles.append(("Pull request", f"#{pr.get('number')} {pr.get('state')}",
                       ", ".join(x for x in [pr.get("review", ""), f"checks {pr['checks']}" if pr.get("checks") else ""] if x)))
+    v = scenarios_mod().summary(quest)
+    if v["exists"]:
+        word = ("certified" if v["certified"] else "out of date, run again" if v["stale"]
+                else f"{v['fail']} failed" if v["fail"] else f"{v['open']} to run")
+        tiles.append(("Validation", f"{v['pass']}/{v['total']} passed", word + ": open the checklist",
+                      f"/q/{quest}/validate"))
     tiles.append(("Your grade", f"{grade['grade']}/5" if grade and grade.get("grade") else "not yet",
                   (grade or {}).get("verdict", "") or "on the right side"))
     model = meta.get("model") or ""
@@ -189,8 +196,9 @@ def glance(quest):
             f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{_html.escape(say)}</span>'
             f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
             f'<ol class="gg-path">{"".join(items)}</ol><div class="gg-tiles">'
-            + "".join(f'<div class="gg-tile"><span>{_html.escape(a)}</span><b>{_html.escape(str(b))}</b><i>{_html.escape(c)}</i></div>'
-                      for a, b, c in tiles)
+            + "".join((f'<a class="gg-tile gg-go" href="{t[3]}" target="_top">' if len(t) > 3 else '<div class="gg-tile">')
+                      + f'<span>{_html.escape(t[0])}</span><b>{_html.escape(str(t[1]))}</b><i>{_html.escape(t[2])}</i>'
+                      + ("</a>" if len(t) > 3 else "</div>") for t in tiles)
             + "</div></section>")
 
 
@@ -261,21 +269,49 @@ def grade_wrapup(quest, board, meta, decision):
     if verdict in ("merge", "split"):
         threading.Thread(target=lambda: (time.sleep(3), sweep()), daemon=True).start()
     if verdict == "changes":
-        guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
-        text = (f"The guildmaster reviewed your wrap-up ({meta.get('title', board)}): grade {grade}/5, "
-                f"changes needed. {msg or 'See the board for notes.'} Make the changes, run the trial again, "
-                f"post a new wrap-up, then report done.")
-        record(quest, "working", f"changes asked on the wrap-up ({grade}/5)")
-        # its tab may be closed already (graded merge before): bring the agent back first
-        revived = subprocess.run([guild, "revive", quest], capture_output=True, text=True).stdout
-        if "revived" in revived:
-            time.sleep(10)                  # let the session come up before typing into it
-        subprocess.run([guild, "send", quest, text], capture_output=True)
+        send_back(quest, (f"The guildmaster reviewed your wrap-up ({meta.get('title', board)}): grade {grade}/5, "
+                          f"changes needed. {msg or 'See the board for notes.'} Make the changes, run the trial again, "
+                          f"post a new wrap-up, then report done."), f"changes asked on the wrap-up ({grade}/5)")
+
+
+def send_back(quest, text, why):
+    """Hand notes back to a quest's adventurer, bringing its session back first if its tab is closed."""
+    guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+    record(quest, "working", why)
+    revived = subprocess.run([guild, "revive", quest], capture_output=True, text=True).stdout
+    if "revived" in revived:
+        time.sleep(10)                      # let the session come up before typing into it
+    subprocess.run([guild, "send", quest, text], capture_output=True)
+
+
+def scenarios_mod():
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import scenarios
+    return scenarios
+
+
+def merge_blocked(quest, answers):
+    """Why a "ready to merge" verdict cannot be accepted yet, or "" when it can."""
+    if answers.get("verdict") != "merge":
+        return ""
+    sc = scenarios_mod()
+    s = sc.summary(quest)
+    if not s["exists"] or s["certified"]:
+        return ""
+    if s["stale"]:
+        return (f"Not ready to merge yet: the validation certificate is for an older commit and the branch changed "
+                f"since. Run the checklist again at /q/{quest}/validate.")
+    return (f"Not ready to merge yet: the validation checklist has {s['fail']} failed and {s['open']} not run "
+            f"(of {s['total']}). Run it at /q/{quest}/validate, or pick \"needs changes\".")
 
 
 def answer_board(quest, board, payload):
     """Write the guildmaster's answer; the waiting adventurer picks it up with `guild board wait`."""
     d = board_dir(quest, board)
+    if json.load(open(os.path.join(d, "board.json"))).get("wrapup"):
+        why = merge_blocked(quest, payload.get("answers", {}))
+        if why:
+            raise ValueError(why)
     decision = {
         "answers": payload.get("answers", {}),
         "message": payload.get("message", ""),
@@ -516,6 +552,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(404, "not installed: run install.sh")
                 with open(target, "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            v = re.match(r"^/q/([A-Za-z0-9._-]+)/(validate|validate\.json|validate/export|file/(.+))$", path)
+            if v:
+                return self.validation_get(v.group(1), v.group(2), v.group(3))
             m = re.match(r"^/b/([^/]+)/([^/]+)/?(.*)$", path)
             if not m:
                 return self.send(404, "not found")
@@ -566,6 +605,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"ok": True}), "application/json")
             except Exception as e:
                 return self.send(500, json.dumps({"error": str(e)}), "application/json")
+        v = re.match(r"^/q/([A-Za-z0-9._-]+)/validate/(mark|send)$", path)
+        if v:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            quest, sc = v.group(1), scenarios_mod()
+            try:
+                if v.group(2) == "mark":
+                    out = sc.mark(quest, str(body.get("id", "")), str(body.get("status", "")), str(body.get("note", "")))
+                    out = dict(out, stamp=sc.stamp(out), certificate=None)
+                else:
+                    failed = sc.failures_text(quest)
+                    if not failed:
+                        raise ValueError("nothing failed")
+                    threading.Thread(target=send_back, daemon=True, args=(quest,
+                        "The guildmaster ran your validation checklist and these scenarios failed:\n" + failed
+                        + "\nFix them, update scenarios.json if a scenario itself was wrong, run the trial again, "
+                          "post a new wrap-up, then report done.", "validation failed: back to the forge")).start()
+                    out = {"did": "Sent to the adventurer"}
+                return self.send(200, json.dumps(out), "application/json")
+            except (ValueError, OSError) as e:
+                return self.send(200, json.dumps({"error": str(e)}), "application/json")
         c = re.match(r"^/campaign/(jump|pin|todo|close|story)$", path)
         if c:
             length = int(self.headers.get("Content-Length", 0))
@@ -597,6 +657,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send(200, json.dumps({"ok": True}), "application/json")
         except Exception as e:
             return self.send(500, json.dumps({"error": str(e)}), "application/json")
+
+    def validation_get(self, quest, what, rel):
+        sc = scenarios_mod()
+        qd = os.path.join(QUESTS, quest)
+        if not os.path.isdir(qd):
+            return self.send(404, "no such quest")
+        if rel:                                   # a screenshot from the quest folder
+            target = os.path.realpath(os.path.join(qd, rel))
+            if not target.startswith(os.path.realpath(qd) + os.sep) or not os.path.isfile(target):
+                return self.send(404, "not found")
+            import mimetypes
+            with open(target, "rb") as f:
+                return self.send(200, f.read(), mimetypes.guess_type(target)[0] or "application/octet-stream")
+        if what == "validate.json":
+            return self.send(200, json.dumps({"summary": sc.summary(quest), "marks": sc.state(quest)}, default=str), "application/json")
+        if not sc.load(quest):
+            return self.send(404, "this quest has no scenarios.json yet")
+        meta = load_json_safe(os.path.join(qd, "meta.json")) or {}
+        import prs as prmod
+        pr = prmod.by_slug().get(quest)
+        pr = pr if pr and not pr.get("error") else None
+        if what == "validate/export":
+            body = sc.export(quest, meta, pr).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{quest}-validation.html"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return None
+        return self.send(200, sc.page(quest, meta, image=lambda r: "file/" + r, prs=pr))
 
     def render_index(self):
         rows = []

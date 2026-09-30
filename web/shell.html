@@ -178,7 +178,15 @@ async function send(ended) {
   const missing = QUESTIONS.filter(q => q.required !== false && answers[q.id] === undefined);
   if (missing.length && !confirm(`${missing.length} question(s) not answered. Send anyway?`)) return;
   document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = true;
-  await fetch("reply", { method: "POST", body: JSON.stringify({ answers, message: box.value, attachments, ended }) });
+  const r = await fetch("reply", { method: "POST", body: JSON.stringify({ answers, message: box.value, attachments, ended }) });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok || out.error) {                  // e.g. "ready to merge" before the validation checklist is green
+    document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = false;
+    const st = document.getElementById("state");
+    st.textContent = out.error || "Could not send.";
+    st.style.color = "#a8322a";
+    return;
+  }
   document.getElementById("state").innerHTML = '<span class="sent">sent, the adventurer is working on it</span>';
 }
 document.getElementById("send").onclick = () => send(false);

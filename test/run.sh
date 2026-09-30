@@ -175,8 +175,21 @@ HTML
 out=$(GUILD_QUEST=alpha "$GUILD" board open --html "$TMP/wrap.html" --wrapup --title "alpha shipped" --no-open 2>&1)
 has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
 is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
+out=$("$GUILD" status alpha done "shipped it" 2>&1)
+has "a code quest needs its validation scenarios before done" "$out" "there is no scenarios.json"
+cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
+{"title": "Alpha end to end", "setup": [{"title": "Run it", "cmd": "make run"}],
+ "groups": [{"id": "A", "title": "Basics", "scenarios": [
+   {"id": "A1", "do": "Call the endpoint.", "cmd": "curl -s localhost:8080/x", "expect": "200 and `ok`"},
+   {"id": "A2", "do": "Call it without a token.", "expect": "401"}]}]}
+JSON
 "$GUILD" status alpha done "shipped it" >/dev/null 2>&1
-is "with a wrap-up, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+is "with a wrap-up and scenarios, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+vurl="http://127.0.0.1:4899/q/alpha/validate"
+has "the war table shows the checklist" "$(curl -s "$vurl")" "Call the endpoint."
+has "with the command to copy and what to expect" "$(curl -s "$vurl")" '<p class="expect"><b>Expect</b> 200 and <code>ok</code></p>'
+has "a fail needs a note" "$(curl -s -X POST "$vurl/mark" -d '{"id":"A1","status":"fail"}')" "needs a note"
+curl -s -X POST "$vurl/mark" -d '{"id":"A1","status":"pass"}' >/dev/null
 # EDD on the result: the wrap-up asks for a grade, and the grade feeds the retro
 wb=$(python3 -c "
 import json,os,sys
@@ -184,6 +197,14 @@ root=sys.argv[1]
 for b in sorted(os.listdir(root)):
     if json.load(open(os.path.join(root,b,'board.json'))).get('wrapup'): print(b)" "$GUILD_HOME/quests/alpha/boards" | tail -1)
 has "a wrap-up asks for a grade" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" '"id": "grade"'
+out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}')
+has "ready to merge waits for the validation" "$out" "Not ready to merge yet"
+[ -f "$GUILD_HOME/quests/alpha/grade.json" ] && bad "and nothing is recorded" "graded anyway" || ok "and nothing is recorded"
+curl -s -X POST "$vurl/mark" -d '{"id":"A2","status":"skip","note":"no auth locally"}' >/dev/null
+has "the last pass writes a certificate for the commit" "$(cat "$GUILD_HOME/quests/alpha/certificate.json")" '"passed": 1'
+has "the page says it is validated" "$(curl -s "$vurl")" "Validated.</b> 1 of 2 passed, 1 skipped with a reason"
+has "and the event is logged" "$(cat "$GUILD_HOME/events.log")" "alpha	validated"
+has "the export for the team carries the guildmaster's results" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" export alpha --out "$TMP/alpha-v.html" && cat "$TMP/alpha-v.html")" "Guildmaster: <b>skip</b>, no auth locally"
 curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}' >/dev/null
 is "the grade is kept beside the quest" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/grade.json'))['grade'])")" "4"
 is "grading does not reopen a finished quest" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
@@ -193,6 +214,9 @@ rm -f "$GUILD_HOME/quests/alpha/boards/$wb/decision.json"
 curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"2","verdict":"changes"},"message":"the edge case is missing"}' >/dev/null
 is "asking for changes puts the quest back to work" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 "$GUILD" status alpha working "carrying on" >/dev/null   # later sections need it live
+echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" commit -qm "fix the edge case"
+is "a new commit makes the certificate stale" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" summary alpha | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["stale"], d["certified"])')" "True False"
+has "and the page asks to run it again" "$(curl -s "$vurl")" "Certificate out of date"
 
 section "quartermaster guard"
 guard() { echo "$1" | GUILD_HOME="$GUILD_HOME" "$REPO/hooks/qm-guard.sh" >/dev/null 2>&1; echo $?; }
@@ -776,7 +800,7 @@ GUILD_QUEST=cur "$GUILD" impact --into "$TMP/wrap-b.html" --rules "$TMP/rules.js
 is "rerunning replaces the section" "$(grep -c 'class="guild-impact"' "$TMP/wrap-b.html")" "1"
 has "the rule is in plain words" "$(cat "$TMP/wrap-b.html")" "A rate needs a currency"
 GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
-"$GUILD" status cur done "PR" >/dev/null 2>&1
+"$GUILD" status cur done "PR" --no-scenarios "backend fixture, covered by alpha" >/dev/null 2>&1
 is "with the section and the rules explained, done goes through" "$(cut -f1 "$GUILD_HOME/quests/cur/status")" "done"
 "$GUILD" close cur --force >/dev/null 2>&1
 

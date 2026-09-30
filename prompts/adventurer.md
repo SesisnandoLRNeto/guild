@@ -50,7 +50,8 @@ Criteria with no `check:` are manual: show them on your wrap-up page instead.
    ```bash
    guild board open --html <page> --assets --wrapup --title "<what shipped>"
    ```
-   `guild status {{SLUG}} done` is refused for a quest that committed code until that page exists. A quest with nothing to show (docs, a spec, an investigation) ends with `guild status {{SLUG}} done --no-wrapup "<result>"`, and that shows up in the history.
+   Write the **validation scenarios** too: `{{QDIR}}/scenarios.json`, the end-to-end checklist the guildmaster runs before any merge (the `war-table` skill, "Validation scenarios", shows the format). Exact setup commands, then scenarios in groups, each with what to do, the command to copy and exactly what to expect. If the frontend changed, add the screen map with before shots from the base branch and after shots from yours (`guild shot`, same flags for both). A wrap-up cannot be graded "ready to merge" until every scenario passed.
+   `guild status {{SLUG}} done` is refused for a quest that committed code until that page and the scenarios exist. A quest with nothing to show (docs, a spec, an investigation) ends with `guild status {{SLUG}} done --no-wrapup "<result>"`, and that shows up in the history.
 6. Report `done` with the PR url. Do not merge. The guildmaster reviews every PR.
 
 ## Investigation quests

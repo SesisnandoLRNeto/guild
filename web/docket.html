@@ -209,13 +209,14 @@ document.addEventListener("click", async (ev) => {
     const ready = (data.open || []).filter(isReady);
     b.disabled = true;
     let sent = 0;
+    const failed = [];
     for (const i of ready) {
       const k = key(i), answers = {};
       for (const [q, o] of Object.entries(picks[k] || {})) if (o) answers[q] = o;
       try { await post("/docket/rule", { quest: i.quest, board: i.board, answers, message: notes[k] || "" }); sent++; delete picks[k]; delete notes[k]; }
-      catch (e) { $("#status").textContent = `Could not send "${i.title}": ${e.message}`; }
+      catch (e) { failed.push(`"${i.title}": ${e.message}`); }
     }
-    $("#status").textContent = `${sent} ruling${sent === 1 ? "" : "s"} sent. The adventurers ride on.`;
+    $("#status").textContent = `${sent} ruling${sent === 1 ? "" : "s"} sent. The adventurers ride on.` + (failed.length ? ` Held back: ${failed.join(" ")}` : "");
     load();
   }
 });
