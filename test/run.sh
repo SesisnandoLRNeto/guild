@@ -215,7 +215,7 @@ rm -f "$GUILD_HOME/quests/alpha/boards/$wb/decision.json"
 curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"2","verdict":"changes"},"message":"the edge case is missing"}' >/dev/null
 is "asking for changes puts the quest back to work" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 "$GUILD" status alpha working "carrying on" >/dev/null   # later sections need it live
-echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" commit -qm "fix the edge case"
+echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "fix the edge case"
 is "a new commit makes the certificate stale" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" summary alpha | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["stale"], d["certified"])')" "True False"
 has "and the page asks to run it again" "$(curl -s "$vurl")" "Certificate out of date"
 
