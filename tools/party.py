@@ -42,94 +42,147 @@ SPEED = {             # cells per frame, for depth: far moves slowest
 }
 
 # ── the party ─────────────────────────────────────────────────────────────────
-# Each figure is 9 rows: 7 of body, then 2 of legs. A body row and a leg frame are the same
-# width, so a weapon that reaches the ground (the staff) is drawn in the leg frames too.
-# Characters listed in "accent" take another color (the staff's star).
+# Two sets: the full figures (12 rows: 9 of body, 3 of legs) and small ones (9 rows) for
+# short or narrow windows. A body row and a leg row are the same width, so gear that reaches
+# the ground (the staff) is added to the leg rows with "legs_extra" (column -> char).
+# Characters in "accent" take another color (the staff's star). Rows may differ in length.
+
+LEGS = [             # four walking frames, 3 rows, drawn from the hips down; feet point right
+    ["  /  \\  ", " /    \\ ", "/_     \\_"],   # stride
+    ["  |  \\  ", "  |   \\ ", " _|    \\_"],   # back leg swings forward
+    ["  |  |  ", "  |  |  ", " _|  _|  "],     # passing
+    ["  /  |  ", " /   |  ", "/_   _|  "],     # front leg plants
+]
+LEGS_SMALL = [
+    [" /  \\ ", "/    \\"],
+    [" |  \\ ", " |_  \\"],
+    [" |  | ", " |_  |_"],
+    [" /  | ", "/    |_"],
+]
+
+ARCHER = {           # small cap, one hand up holding arrows, tall bow, arrow on the string
+    "color": "archer",
+    "body": [
+        "         /\\          ",
+        "        /__\\   .     ",
+        "  \\|/  ( oo )   \\    ",
+        "   |    '--'     \\   ",
+        "   \\   _|  |_     |  ",
+        "    \\_/ |  |o- - -|->",
+        "        |  |      |  ",
+        "        |==|     /   ",
+        "        |/\\|    /    ",
+    ],
+    "hip": 8,
+    "accent": {},
+}
+
+MAGE = {             # tall hat with a brim, cape down the back, staff with a star
+    "color": "mage",
+    "body": [
+        "       /\\        *  ",
+        "      /  \\       |  ",
+        "     /    \\      |  ",
+        "   _/______\\_    |  ",
+        "     ( oo )      |  ",
+        "    / '--' \\     |  ",
+        "   //|    |\\\\---o  ",
+        "  // |    |      |  ",
+        " //__|____|      |  ",
+    ],
+    "hip": 6,
+    "accent": {"*": "star"},
+    "legs_extra": {17: "|"},
+}
+
+KNIGHT = {           # domed helmet with a visor, oval shield, long sword held high
+    "color": "knight",
+    "body": [
+        "       _^_        /",
+        "      /   \\      / ",
+        "     | [=] |    /  ",
+        "      \\___/    /   ",
+        "  .--. |  |   /    ",
+        " / #! \\|  |\\-o     ",
+        "|  #   |  |        ",
+        " \\ +  /|__|        ",
+        "  '--' |  |        ",
+    ],
+    "hip": 7,
+    "accent": {},
+}
+
+ARCHER_SMALL = {"color": "archer", "hip": 6, "accent": {}, "body": [
+    "       /\\    )     ",
+    "  \\|/ (oo)    \\    ",
+    "   #   )(      |   ",
+    "   #--/  \\-----|-->",
+    "   #  |  |     |   ",
+    "      |__|    /    ",
+    "      |  |   )     "]}
+MAGE_SMALL = {"color": "mage", "hip": 4, "accent": {"*": "star"}, "legs_extra": {12: "|"}, "body": [
+    "     /\\     *  ",
+    "    /  \\    |  ",
+    "   /____\\   |  ",
+    "    (oo)    |  ",
+    "   //  \\\\--o  ",
+    "  //|  |    |  ",
+    " //_|__|    |  "]}
+KNIGHT_SMALL = {"color": "knight", "hip": 5, "accent": {}, "body": [
+    "      _^_     / ",
+    "     [=#=]   /  ",
+    "  __  )(    /   ",
+    " /##\\/  \\--+    ",
+    " |##||  |  '    ",
+    " \\##/|__|       ",
+    "  \\/ |  |       "]}
+
+PARTIES = {                          # left to right; they walk right
+    "full": [ARCHER, MAGE, KNIGHT],
+    "small": [ARCHER_SMALL, MAGE_SMALL, KNIGHT_SMALL],
+}
+GAP = 3                              # columns between two figures
 
 
-def legs(width, hip, extra=None):
-    """Four walking frames for a figure whose torso starts at column `hip`.
-    `extra` adds fixed characters (column -> char) to every leg row, like a staff."""
-    frames = [
-        (" /  \\ ", "/    \\"),     # stride
-        (" |  \\ ", " |_  \\"),     # back leg comes forward
-        (" |  | ", " |_  |_"),      # passing
-        (" /  | ", "/    |_"),      # front leg plants
-    ]
+def legs(width, hip, frames, extra=None):
+    """The leg rows of each walking frame, placed under a torso that starts at column `hip`."""
     out = []
-    for top, bottom in frames:
+    for frame in frames:
         rows = []
-        for part in (top, bottom):
+        for part in frame:
             row = [" "] * width
+            lead = 2 if len(frame) == 3 else 1          # the full legs start two columns left of the hip
             for i, ch in enumerate(part):
-                col = hip - 1 + i
+                col = hip - lead + i
                 if ch != " " and 0 <= col < width:
                     row[col] = ch
             for col, ch in (extra or {}).items():
-                row[col] = ch
+                if col < width:
+                    row[col] = ch
             rows.append("".join(row))
         out.append(rows)
     return out
 
 
-ARCHER = {           # pointed cap, quiver of arrows on the back, bow drawn with an arrow
-    "color": "archer",
-    "body": [
-        "       /\\    )     ",
-        "  \\|/ (oo)    \\    ",
-        "   #   )(      |   ",
-        "   #--/  \\-----|-->",
-        "   #  |  |     |   ",
-        "      |__|    /    ",
-        "      |  |   )     ",
-    ],
-    "hip": 6,
-    "accent": {},
-}
+for name, party in PARTIES.items():
+    for fig in party:
+        width = max(len(r) for r in fig["body"])      # rows may differ; they are padded here
+        fig["body"] = [r.ljust(width) for r in fig["body"]]
+        fig["width"] = width
+        fig["legs"] = legs(width, fig["hip"], LEGS if name == "full" else LEGS_SMALL, fig.get("legs_extra"))
+        fig["rows"] = len(fig["body"]) + len(fig["legs"][0])
 
-MAGE = {             # tall pointed hat, cape flowing behind, staff with a star
-    "color": "mage",
-    "body": [
-        "     /\\     *  ",
-        "    /  \\    |  ",
-        "   /____\\   |  ",
-        "    (oo)    |  ",
-        "   //  \\\\--o  ",
-        "  //|  |    |  ",
-        " //_|__|    |  ",
-    ],
-    "hip": 4,
-    "accent": {"*": "star"},
-    "legs_extra": {12: "|"},
-}
-
-KNIGHT = {           # plumed helmet with a visor, crossed shield, sword raised
-    "color": "knight",
-    "body": [
-        "      _^_     / ",
-        "     [=#=]   /  ",
-        "  __  )(    /   ",
-        " /##\\/  \\--+    ",
-        " |##||  |  '    ",
-        " \\##/|__|       ",
-        "  \\/ |  |       ",
-    ],
-    "hip": 5,
-    "accent": {},
-}
-
-PARTY = [ARCHER, MAGE, KNIGHT]      # left to right; they walk right
-GAP = 2                             # columns between two figures
-FIGURE_ROWS = 9
-
-for fig in PARTY:
-    width = max(len(r) for r in fig["body"])      # rows may differ; they are padded here
-    fig["body"] = [r.ljust(width) for r in fig["body"]]
-    fig["width"] = width
-    fig["legs"] = legs(width, fig["hip"], fig.get("legs_extra"))
 
 # ── the forest ────────────────────────────────────────────────────────────────
-PINES = {
+PINES = {            # for the full figures: the tall pines stand above the party, as in a forest
+    "tall": ["     ^     ", "    /|\\    ", "   //|\\\\   ", "   //|\\\\   ", "  ///|\\\\\\  ", "  ///|\\\\\\  ",
+             " ////|\\\\\\\\ ", " ////|\\\\\\\\ ", "     |     ", "     |     ", "     |     ", "     |     ",
+             "     |     "],
+    "mid": ["    ^    ", "   /|\\   ", "  //|\\\\  ", "  //|\\\\  ", " ///|\\\\\\ ", " ///|\\\\\\ ",
+            "    |    ", "    |    ", "    |    "],
+    "small": ["  ^  ", " /|\\ ", "//|\\\\", "//|\\\\", "  |  ", "  |  "],
+}
+PINES_SMALL = {      # for the small figures
     "tall": ["    ^    ", "   /|\\   ", "  //|\\\\  ", " ///|\\\\\\ ", "////|\\\\\\\\",
              "    |    ", "    |    ", "    |    "],
     "mid": ["   ^   ", "  /|\\  ", " //|\\\\ ", "///|\\\\\\", "   |   ", "   |   "],
@@ -205,12 +258,12 @@ class Canvas:
         return "".join(out)
 
 
-def scenery(canvas, frame, ground_row, full):
+def scenery(canvas, frame, ground_row, full, figure_rows, pines=PINES):
     """Stars, two layers of pines, bushes, the dotted trail and grass below it."""
     w = canvas.w
     # stars: fixed places for this width, a few twinkle
     rnd = random.Random(w)
-    sky_rows = max(0, ground_row - 9)
+    sky_rows = max(0, ground_row - figure_rows)
     if sky_rows:
         for i in range(max(3, w // (9 if full else 14))):
             x, y = rnd.randrange(w), rnd.randrange(sky_rows + 1)
@@ -229,11 +282,11 @@ def scenery(canvas, frame, ground_row, full):
 
     if full:
         for x, kind in FAR:
-            for sx in each(x, "far", len(PINES[kind][0])):
-                solid(canvas, PINES[kind], sx, ground_row - len(PINES[kind]), "pine_far")
+            for sx in each(x, "far", len(pines[kind][0])):
+                solid(canvas, pines[kind], sx, ground_row - len(pines[kind]), "pine_far")
     for x, kind in NEAR:                                 # near trees hide what is behind them
-        for sx in each(x, "near", len(PINES[kind][0])):
-            solid(canvas, PINES[kind], sx, ground_row - len(PINES[kind]), "pine")
+        for sx in each(x, "near", len(pines[kind][0])):
+            solid(canvas, pines[kind], sx, ground_row - len(pines[kind]), "pine")
     for x in GROUND:
         for sx in each(x, "ground", len(BUSH[0])):
             solid(canvas, BUSH, sx, ground_row - len(BUSH), "bush")
@@ -268,28 +321,39 @@ def figure(canvas, fig, x, top, step):
                 canvas.put(x + j, y, ch, fig["accent"].get(ch, fig["color"]))
 
 
+def party_width(party):
+    return sum(f["width"] for f in party) + GAP * (len(party) - 1)
+
+
 def scene(width, height, frame):
-    """The whole picture for one frame, sized to the terminal."""
+    """The whole picture for one frame, sized to the terminal: the full figures when they fit,
+    the small ones in a short or narrow window, only the warrior when even those do not fit."""
     canvas = Canvas(width, height)
-    party_w = sum(f["width"] for f in PARTY) + GAP * (len(PARTY) - 1)
-    if height < FIGURE_ROWS + 2 or width < KNIGHT["width"] + 2:
+    full, small = PARTIES["full"], PARTIES["small"]
+    if height >= full[0]["rows"] + 4 and width >= party_width(full) + 6:
+        party = full
+    elif height >= small[0]["rows"] + 2 and width >= party_width(small) + 4:
+        party = small
+    elif height >= small[0]["rows"] + 2 and width >= KNIGHT_SMALL["width"] + 2:
+        party = [KNIGHT_SMALL]
+    else:
         msg = "make the window bigger"
         canvas.text(max(0, (width - len(msg)) // 2), height // 2, msg[:width], "star")
         return canvas
+    rows = max(f["rows"] for f in party)
     # the picture: up to 4 rows of sky, the figures, the trail, one row of grass
-    scene_h = min(height, FIGURE_ROWS + 2 + 4)
+    scene_h = min(height, rows + 2 + (4 if party is full else 3))
     top = (height - scene_h) // 2
     ground_row = top + scene_h - 2
-    full = width >= party_w + 20 and height >= FIGURE_ROWS + 6
-    party = PARTY if width >= party_w + 4 else [KNIGHT]        # a narrow window: only the leader
-    scenery(canvas, frame, ground_row, full)
+    deep = party is full and width >= party_width(full) + 24
+    scenery(canvas, frame, ground_row, deep, rows, PINES if party is full else PINES_SMALL)
     step = frame // STEP_EVERY
-    pw = sum(f["width"] for f in party) + GAP * (len(party) - 1)
+    pw = party_width(party)
     x = (width - pw) // 2
-    for y in range(ground_row - FIGURE_ROWS, ground_row):    # a clear path through the trees
+    for y in range(ground_row - rows, ground_row):        # a clear path through the trees
         canvas.clear_span(x - 1, x + pw + 1, y)
     for n, fig in enumerate(party):
-        figure(canvas, fig, x, ground_row - FIGURE_ROWS, step + n)   # out of step with each other
+        figure(canvas, fig, x, ground_row - fig["rows"], step + n)   # out of step with each other
         x += fig["width"] + GAP
     return canvas
 
