@@ -148,7 +148,7 @@ PARTIES = {                          # left to right; they walk right
     "small": [ARCHER_SMALL, MAGE_SMALL, KNIGHT_SMALL],
 }
 GAP = 3                              # columns between two figures
-HD = True                            # fine line art in Braille dots (Unicode); --ascii turns it off
+HD = True                            # the traced scene; --ascii uses the small hand-drawn figures
 MODE = {"now": ""}                   # what the last frame drew, said on exit
 
 
@@ -339,18 +339,15 @@ def scene(width, height, frame):
     canvas = Canvas(width, height)
     full, small = PARTIES["full"], PARTIES["small"]
     if HD:
-        # the line art shrinks to fit: full size in a big window, down to 55% in a small one
-        k = min(1.0, (height - 5) / HD_ROWS, (width - 4) / hd_party_width())
-        if k >= 0.55:
-            rows = int(HD_ROWS * k + 0.99)
-            top = (height - (rows + 6)) // 2
-            ground_row = max(rows + 1, top + rows + 4)
-            hd_scene(canvas, width, frame, ground_row, width >= hd_party_width() * k + 30, k)
-            MODE["now"] = f"line art at {round(k * 100)}% size"
+        # the traced scene scales to the window: 26 rows and 90 columns at full size
+        k = min(2.2, (height - 1) / 27, (width - 2) / ((PARTY_RIGHT - PARTY_LEFT) / 12 + 4))
+        if k >= 0.5:
+            trace_scene(canvas, frame, k)
+            MODE["now"] = f"traced scene at {round(k * 100)}% size"
             return canvas
-        MODE["now"] = f"ASCII: {width}x{height} is too small for line art (it needs about {int(hd_party_width() * 0.55) + 4}x{int(HD_ROWS * 0.55) + 6})"
+        MODE["now"] = f"small ASCII figures: {width}x{height} is too small for the traced scene"
     else:
-        MODE["now"] = "ASCII (--ascii, or the terminal is not UTF-8)"
+        MODE["now"] = "small ASCII figures (--ascii)"
     if height >= full[0]["rows"] + 4 and width >= party_width(full) + 6:
         party = full
     elif height >= small[0]["rows"] + 2 and width >= party_width(small) + 4:
@@ -379,267 +376,251 @@ def scene(width, height, frame):
     return canvas
 
 
-# ── HD mode: the party as fine line art in Braille dots (--hd) ─────────────────
-# A Braille character is a 2x4 grid of dots in one terminal cell, so lines can be thin and
-# curves smooth: round heads, a real bow, knees that bend. The figures are shapes (lines,
-# circles, arcs) in "units": 1 unit = 1 column across = half a row down, so circles are round.
-# This mode uses Unicode (U+2800..U+28FF), so it is opt-in; the default stays plain ASCII.
+# ── the traced scene: the reference picture, redrawn as dashed ASCII outlines ──
+# The figures, trees and ground are outlines traced from the reference picture, in its own
+# pixel coordinates (1536 x 1024, ground at y = 742). Each outline is drawn with the ASCII
+# character closest to its angle (- _ / | \), which gives the dashed look. The whole scene
+# scales with the window: at scale 1, 12 pixels are one column and 24 pixels are one row.
 import math  # noqa: E402
 
+GROUND_Y = 742
 WALK_FRAMES = 12          # frames per full walking cycle (two steps)
-HIP, THIGH, SHIN = 11.0, 5.5, 5.5
-SWING = math.radians(20)  # how far a thigh swings forward and back
-KNEE = math.radians(40)   # how much the swinging knee bends
-# the stance foot slides back one stride per half cycle; the ground scrolls at that speed
-STRIDE = 2 * (THIGH + SHIN) * math.sin(SWING)
-HD_SPEED = STRIDE / (WALK_FRAMES / 2)
-BRAILLE = {(0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (1, 0): 0x08,
-           (1, 1): 0x10, (1, 2): 0x20, (0, 3): 0x40, (1, 3): 0x80}
+SWING = math.radians(24)  # how far a thigh swings forward and back
+KNEE = math.radians(42)   # how much the swinging knee bends
 
 
-class Dots:
-    """A layer of Braille dots over the canvas: 2 dots across and 4 down per cell."""
-
-    def __init__(self, canvas):
-        self.canvas, self.bits, self.color = canvas, {}, {}
-
-    def plot(self, dx, dy, color):
-        dx, dy = int(math.floor(dx + 0.5)), int(math.floor(dy + 0.5))
-        cell = (dx // 2, dy // 4)
-        if 0 <= cell[0] < self.canvas.w and 0 <= cell[1] < self.canvas.h:
-            self.bits[cell] = self.bits.get(cell, 0) | BRAILLE[(dx % 2, dy % 4)]
-            self.color[cell] = color
-
-    def unplot(self, dx, dy):
-        cell = (dx // 2, dy // 4)
-        if cell in self.bits:
-            self.bits[cell] &= ~BRAILLE[(dx % 2, dy % 4)]
-
-    def clear_cells(self, x0, x1, row):
-        for x in range(x0, x1):
-            self.bits.pop((x, row), None)
-
-    def flush(self):
-        for (x, y), b in self.bits.items():
-            if b:
-                self.canvas.put(x, y, chr(0x2800 + b), self.color[(x, y)])
+def stroke_char(dcol, drow):
+    """The ASCII character for a stroke going dcol across and drow down (in cells)."""
+    a = math.degrees(math.atan2(-drow * 2, dcol)) % 180     # a row is twice as tall as a column
+    if a < 22.5 or a >= 157.5:
+        return "-"
+    if a < 67.5:
+        return "/"
+    if a < 112.5:
+        return "|"
+    return "\\"
 
 
 class Pen:
-    """Draws shapes into the dot layer around an origin (the figure's feet on the ground)."""
+    """Draws outlines given in picture pixels onto the canvas."""
 
-    def __init__(self, dots, ox, ground_row, color, scale=1.0):
-        self.d, self.ox, self.gy, self.color, self.k = dots, ox, ground_row, color, scale
+    def __init__(self, canvas, x0, y0, scale, color):
+        self.c, self.x0, self.y0, self.sx, self.sy, self.color = canvas, x0, y0, scale / 12, scale / 24, color
 
-    def dot(self, x, y):                       # units -> dot coordinates
-        return (self.ox + x * self.k) * 2, (self.gy + y * self.k / 2) * 4
+    def at(self, x, y):
+        return self.x0 + x * self.sx, self.y0 + y * self.sy
 
-    def line(self, x0, y0, x1, y1, color=None, dash=False):
-        (ax, ay), (bx, by) = self.dot(x0, y0), self.dot(x1, y1)
-        n = int(max(abs(bx - ax), abs(by - ay)) * 2) + 1
-        for i in range(n + 1):
-            if dash and (i * 4 // n if n else 0) % 2 and (i // 3) % 2:
-                continue
-            t = i / n
-            self.d.plot(ax + (bx - ax) * t, ay + (by - ay) * t, color or self.color)
+    def line(self, x0, y0, x1, y1, color=None):
+        """One character per row on a steep line, one per column on a flat one: no doubled strokes."""
+        (c0, r0), (c1, r1) = self.at(x0, y0), self.at(x1, y1)
+        ch = stroke_char(c1 - c0, r1 - r0)
+        steep = abs(r1 - r0) * 2 >= abs(c1 - c0)
+        if steep:
+            a, b = sorted((r0, r1))
+            rows = range(int(math.floor(a + 0.5)), int(math.floor(b + 0.5)) + 1)
+            for row in rows:
+                t = 0.0 if r1 == r0 else (row - r0) / (r1 - r0)
+                t = min(1.0, max(0.0, t))
+                self.c.put(int(math.floor(c0 + (c1 - c0) * t + 0.5)), row, ch, color or self.color)
+        else:
+            a, b = sorted((c0, c1))
+            for col in range(int(math.floor(a + 0.5)), int(math.floor(b + 0.5)) + 1):
+                t = 0.0 if c1 == c0 else min(1.0, max(0.0, (col - c0) / (c1 - c0)))
+                rf = r0 + (r1 - r0) * t
+                row = int(math.floor(rf + 0.5))
+                c = "_" if ch == "-" and rf - row > 0.15 else ch     # a flat stroke low in its cell
+                self.c.put(col, row, c, color or self.color)
 
-    def dashed(self, x0, y0, x1, y1, on=1.6, off=1.2, color=None):
-        length = math.hypot(x1 - x0, y1 - y0)
-        pos = 0.0
-        while pos < length:
-            end = min(length, pos + on)
-            self.line(x0 + (x1 - x0) * pos / length, y0 + (y1 - y0) * pos / length,
-                      x0 + (x1 - x0) * end / length, y0 + (y1 - y0) * end / length, color)
-            pos += on + off
-
-    def path(self, pts, **kw):
+    def path(self, pts, color=None, closed=False):
+        pts = list(pts) + ([pts[0]] if closed else [])
         for (a, b), (c, d) in zip(pts, pts[1:]):
-            self.line(a, b, c, d, **kw)
+            self.line(a, b, c, d, color)
 
-    def arc(self, cx, cy, rx, ry, t0=0, t1=360, color=None):
-        """An ellipse or part of one; degrees, 0 = right, 90 = down."""
-        steps = int(max(rx, ry) * 12 * self.k) + 12
-        for i in range(steps + 1):
-            t = math.radians(t0 + (t1 - t0) * i / steps)
-            self.d.plot(*self.dot(cx + rx * math.cos(t), cy + ry * math.sin(t)), color or self.color)
-
-    def spot(self, x, y, color=None):
-        self.d.plot(*self.dot(x, y), color or self.color)
+    def arc(self, cx, cy, rx, ry, t0, t1, steps=24):
+        return [(cx + rx * math.cos(math.radians(t0 + (t1 - t0) * i / steps)),
+                 cy + ry * math.sin(math.radians(t0 + (t1 - t0) * i / steps))) for i in range(steps + 1)]
 
     def text(self, x, y, s, color=None):
-        """Plain characters over the drawing (the shield's marks, the star)."""
-        col, row = int(math.floor(self.ox + x * self.k + 0.5)), int(math.floor(self.gy + y * self.k / 2 + 0.5))
+        c, r = self.at(x, y)
         for i, ch in enumerate(s):
-            self.d.bits.pop((col + i, row), None)
-            self.d.canvas.put(col + i, row, ch, color or self.color)
-
-    def erase(self, pts):
-        """Clear the dots inside a polygon, so what is in front hides what is behind.
-        A scanline fill: per dot row, where the edges cross it, cleared in pairs."""
-        poly = [self.dot(x, y) for x, y in pts]
-        edges = list(zip(poly, poly[1:] + poly[:1]))
-        ys = [p[1] for p in poly]
-        bits = self.d.bits
-        for dy in range(int(math.ceil(min(ys))), int(max(ys)) + 1):
-            if not any((x // 2, dy // 4) in bits for x in range(0, self.d.canvas.w * 2, 2)):
-                continue
-            xs = sorted(xi + (dy - yi) * (xj - xi) / (yj - yi)
-                        for (xi, yi), (xj, yj) in edges if (yi > dy) != (yj > dy))
-            for x0, x1 in zip(xs[::2], xs[1::2]):
-                for dx in range(int(math.ceil(x0)), int(x1) + 1):
-                    self.d.unplot(dx, dy)
+            if ch != " ":
+                self.c.put(int(math.floor(c + 0.5)) + i, int(math.floor(r + 0.5)), ch, color or self.color)
 
 
-def walk_legs(pen, phase, spread=1.0):
-    """Two legs with boots. `phase` runs 0..1 over a full cycle; the far leg is drawn first."""
-    for k, side in ((0.5, -1), (0.0, 1)):
-        p = 2 * math.pi * (phase + k)
-        a = SWING * math.sin(p)                            # thigh angle, forward is positive
-        bend = KNEE * max(0.0, math.cos(p))                 # the knee bends while the leg swings
-        for off in (-spread / 2, spread / 2):               # two strokes: a leg with some width
-            hx, hy = side * 0.9 + off, -HIP
-            kx, ky = hx + THIGH * math.sin(a), hy + THIGH * math.cos(a)
-            fx, fy = kx + SHIN * math.sin(a - bend), ky + SHIN * math.cos(a - bend)
-            pen.line(hx, hy, kx, ky)
-            pen.line(kx, ky, fx, fy)
-        pen.line(fx - spread, fy, fx + 2.4, fy)             # the boot
-        pen.line(fx + 2.4, fy, fx + 1.6, fy - 1.2)
+def leg(pen, hip, phase, thigh, shin, width=10):
+    """One leg with a boot. phase 0..1; the thigh swings, the knee bends while the leg comes forward."""
+    p = 2 * math.pi * phase
+    a = SWING * math.sin(p)
+    bend = KNEE * max(0.0, math.cos(p))
+    hx, hy = hip
+    kx, ky = hx + thigh * math.sin(a), hy + thigh * math.cos(a)
+    ax, ay = kx + shin * math.sin(a - bend), ky + shin * math.cos(a - bend)
+    for off in (-width, width):                                  # a leg has two sides
+        pen.path([(hx + off, hy), (kx + off, ky), (ax + off * 0.8, ay)])
+    pen.path([(kx - width, ky - 4), (kx + width, ky - 4)])       # knee
+    boot_y = GROUND_Y - 2 if phase % 1.0 > 0.5 or math.cos(p) <= 0 else ay + 30
+    pen.path([(ax - width, ay), (ax - width - 2, boot_y), (ax + width + 30, boot_y),
+              (ax + width + 24, boot_y - 12), (ax + width, ay - 6)])
+    pen.path([(ax - width, ay + 4), (ax + width, ay)])           # cuff
+
+
+def cape_hem(pts, phase, amount=7):
+    """The cape's last points sway a little as the figure walks."""
+    return [(x + (amount * math.sin(2 * math.pi * phase + i) if i >= len(pts) - 4 else 0), y)
+            for i, (x, y) in enumerate(pts)]
 
 
 def draw_archer(pen, phase):
-    walk_legs(pen, phase)
-    pen.path([(-3.4, -12), (-3.8, -8.5), (3.8, -8.5), (3.4, -12)])     # shorts
-    pen.path([(-3, -20), (-3.4, -12), (3.4, -12), (3, -20)])            # tunic
-    pen.line(-3.4, -13.4, 3.4, -13.4)                                    # belt
-    pen.arc(0, -24.5, 3.1, 3.1)                                         # head
-    pen.spot(-1.1, -25), pen.spot(1.1, -25)                             # eyes
-    pen.path([(-2.4, -27.3), (0, -31.5), (2.4, -27.3)])                 # cap
-    pen.line(-3.6, -27.4, 3.6, -27.4)
-    pen.path([(-3, -19.5), (-6.8, -16.5), (-6.8, -23)])                 # arm up, holding arrows
-    for dx in (-1.4, 0, 1.4):
-        pen.line(-6.8, -23, -6.8 + dx, -26.5)
-    pen.line(3, -19, 7.6, -18.6)                                        # arm out to the bow
-    pen.arc(8.2, -18.6, 0.7, 0.7)
-    pen.dashed(9, -18.6, 16.8, -18.6)                                    # the arrow
-    pen.path([(15.6, -20), (17.2, -18.6), (15.6, -17.2)])
-    pen.arc(9.4, -18.6, 4.6, 10, -90, 90)                               # the bow
+    for k, hip in ((0.5, (398, 600)), (0.0, (442, 600))):          # far leg first
+        leg(pen, hip, phase + k, 54, 60)
+    pen.path(cape_hem([(378, 452), (345, 500), (310, 555), (278, 598), (252, 616), (286, 620), (300, 640), (332, 642)], phase))
+    pen.path([(362, 470), (330, 540), (305, 600)])                 # a fold in the cape
+    pen.path([(372, 454), (376, 412), (390, 382), (412, 366), (436, 368), (452, 386), (456, 408), (450, 422),
+              (446, 434), (436, 442)])                              # the hood over the head
+    pen.path([(426, 372), (440, 396), (438, 424)])                  # the hood's edge by the face
+    for x0, x1 in ((340, 350), (348, 357), (356, 364)):             # arrows in the quiver
+        pen.line(x0, 432, x1 + 2, 398)
+    pen.text(342, 392, "\\|/")
+    pen.path([(344, 432), (360, 500)])                              # the quiver
+    pen.path([(362, 428), (378, 496)])
+    pen.path([(382, 456), (408, 440), (434, 446)])                  # the arm drawing the string
+    pen.path([(424, 440), (538, 440)])                              # the arm holding the bow
+    pen.path([(428, 466), (520, 462)])
+    pen.path([(520, 434), (546, 434), (546, 468), (520, 468)])      # the hand on the grip
+    pen.path([(378, 454), (382, 528)])                              # tunic
+    pen.path([(438, 470), (440, 528)])
+    pen.path([(380, 526), (440, 526)])                              # belt and buckle
+    pen.path([(380, 540), (440, 540)])
+    pen.path([(402, 526), (402, 540), (418, 540), (418, 526)])
+    pen.path([(380, 540), (368, 600), (456, 600), (440, 540)])     # skirt of the tunic
+    bow = pen.arc(452, 450, 98, 126, -80, 80)
+    pen.path(bow)                                                   # the bow
+    pen.path([bow[0], (486, 318), (494, 326), (488, 334)])          # its curled tips
+    pen.path([bow[-1], (482, 584)])
+    pen.path([bow[0], (436, 448), bow[-1]])                         # the string, drawn back
+    pen.path([(436, 448), (578, 448)])                              # the arrow
+    pen.path([(566, 440), (580, 448), (566, 456)])
 
 
 def draw_mage(pen, phase):
-    walk_legs(pen, phase, spread=0.9)
-    robe = [(-3, -20.5), (-5, -8), (5, -8), (3, -20.5)]
-    pen.erase(robe)                                                     # the robe hides the thighs
-    pen.path(robe + [robe[0]])
-    pen.dashed(-3, -20.5, -10, -0.5, 1.4, 0.9)                          # the cape, down to the ground
-    pen.dashed(-10, -0.5, -5.5, -0.5, 1.4, 0.9)
-    pen.dashed(-2.4, -17.5, -6.6, -2.5, 1.4, 0.9)
-    pen.arc(0, -24, 3, 3)                                               # head
-    pen.spot(-1.1, -24.4), pen.spot(1.1, -24.4)
-    pen.line(-5.6, -27, 5.6, -27)                                       # hat brim
-    pen.path([(-3.2, -27), (-1, -34.5), (1.4, -36.5), (3.8, -35.2)])    # the hat, tip bent over
-    pen.path([(3.2, -27), (1.4, -33.6), (1.4, -36.5)])
-    pen.line(3, -20, 8.2, -17.4)                                        # arm to the staff
-    pen.line(9.2, 0, 9.2, -32)                                          # the staff
-    pen.arc(9.2, -17.4, 1, 1)                                           # hand on the staff
-    pen.text(9.2, -34, "*", "star")
+    for k, hip in ((0.5, (746, 640)), (0.0, (790, 640))):
+        leg(pen, hip, phase + k, 42, 50, 8)
+    pen.path(cape_hem([(736, 392), (716, 442), (690, 502), (656, 570), (622, 630), (604, 656), (640, 652),
+                       (656, 668), (702, 664)], phase, 6))          # the cloak streaming back
+    pen.path([(752, 452), (742, 560), (732, 684)])                  # folds of the robe
+    pen.path([(772, 456), (776, 560), (780, 690)])
+    pen.path([(796, 440), (806, 500), (816, 560), (822, 690)])      # the robe's front
+    pen.path([(702, 690), (780, 696), (824, 690)])                  # hem
+    pen.path([(742, 540), (792, 540)])                              # belt
+    pen.path([(724, 566), (746, 566), (748, 592), (722, 592)], closed=True)   # pouch
+    pen.path([(688, 366), (760, 378), (822, 388)])                  # hat brim
+    pen.path([(722, 376), (734, 350), (744, 334), (760, 342), (776, 362), (792, 382)])   # the hat, tip bent
+    pen.path([(790, 388), (798, 402), (794, 412), (802, 426), (792, 450), (780, 470), (768, 462)])  # face, beard
+    pen.path([(790, 446), (816, 496), (848, 500)])                  # the arm to the staff
+    pen.path([(796, 472), (810, 516), (846, 516)])
+    pen.path([(846, 490), (864, 490), (866, 518), (846, 518)])      # the hand
+    pen.path([(876, 394), (868, 442), (860, 490)])                  # the staff
+    pen.path([(858, 518), (846, 604), (836, 694)])
+    pen.text(877, 378, "*", "star")
+    pen.text(862, 356, ".", "star"), pen.text(892, 356, ".", "star")
 
 
 def draw_knight(pen, phase):
-    walk_legs(pen, phase)
-    pen.path([(-3.2, -20), (-3, -12), (3, -12), (3.2, -20), (-3.2, -20)])   # body
-    pen.line(-3, -13.4, 3, -13.4)
-    pen.path([(-3, -12), (-3.6, -9), (3.6, -9), (3, -12)])
-    pen.arc(0, -24.6, 3.4, 3.8)                                         # helmet
-    pen.line(0, -28.4, 0, -30.6)                                        # crest
-    pen.arc(0.8, -31, 1.2, 0.8, 180, 360)
-    pen.path([(-2, -25.8), (2.2, -25.8), (2.2, -23.8), (-2, -23.8), (-2, -25.8)])   # visor
-    pen.line(0, -25.8, 0, -23.8)
-    pen.path([(3.2, -19), (6, -15.6), (8.2, -17.6)])                    # sword arm
-    pen.arc(8.2, -17.6, 0.9, 0.9)
-    pen.line(9, -19, 18, -34)                                           # the blade, held high
-    pen.line(6.6, -20.6, 10.8, -17.2)                                   # crossguard
-    shield = [(-6.2 + 4.6 * math.cos(t / 12 * 2 * math.pi), -15 + 9.6 * math.sin(t / 12 * 2 * math.pi)) for t in range(12)]
-    pen.erase(shield)                                                   # the shield is in front
-    pen.arc(-6.2, -15, 4.6, 9.6)
-    pen.text(-7.6, -19, "#!")
-    pen.text(-7.6, -15, "#")
-    pen.text(-5.2, -11, "+")
+    for k, hip in ((0.5, (1096, 612)), (0.0, (1140, 612))):
+        leg(pen, hip, phase + k, 54, 60)
+    pen.path(cape_hem([(1100, 432), (1060, 472), (1000, 522), (950, 562), (914, 592), (954, 602), (976, 632),
+                       (1002, 652)], phase, 8))                     # the long cape
+    pen.path([(1082, 452), (1022, 540), (986, 612)])
+    pen.path([(1098, 452), (1104, 402), (1120, 376), (1140, 364), (1160, 372), (1168, 392), (1166, 412),
+              (1160, 426), (1150, 434)])                            # hood and face
+    pen.path([(1146, 392), (1166, 392)])                            # the eye slit
+    pen.path([(1104, 420), (1088, 442)])
+    pen.path([(1090, 452), (1086, 524)])                            # tunic
+    pen.path([(1146, 456), (1146, 524)])
+    pen.path([(1082, 522), (1146, 522)])
+    pen.path([(1082, 536), (1146, 536)])
+    pen.path([(1084, 536), (1076, 612), (1152, 612), (1146, 536)])
+    pen.path([(1140, 462), (1176, 490), (1210, 488)])               # the sword arm
+    pen.path([(1140, 488), (1170, 512), (1210, 510)])
+    pen.path([(1208, 480), (1230, 480), (1230, 514), (1208, 514)])  # fist
+    pen.path([(1224, 476), (1290, 294)])                            # the blade
+    pen.path([(1238, 478), (1300, 298)])
+    pen.path([(1290, 294), (1298, 284), (1300, 298)])
+    pen.path([(1204, 468), (1252, 490)])                            # crossguard
+    pen.path([(1220, 514), (1214, 538)])                            # pommel
 
 
-HD_PARTY = [         # (draw, color, left, right): the extent in columns around the feet
-    (draw_archer, "archer", -9, 18),
-    (draw_mage, "mage", -11, 11),
-    (draw_knight, "knight", -12, 19),
-]
-HD_ROWS = 19         # the tallest figure (the mage's hat), in rows
-HD_GAP = 3
-HD_PINES = {"tall": 40, "mid": 30, "small": 20}
+PARTY_PX = [(draw_archer, "archer"), (draw_mage, "mage"), (draw_knight, "knight")]
+PARTY_LEFT, PARTY_RIGHT, SCENE_TOP = 240, 1310, 140     # the party's extent and the sky's top, in pixels
+TILE_PX = 1536
 
 
-def hd_party_width():
-    return sum(r - l + 1 for _, _, l, r in HD_PARTY) + HD_GAP * (len(HD_PARTY) - 1)
+def trace_pine(pen, x, top, base, w):
+    """A pine as in the picture: a trunk, then chevrons of branches that droop at the tips."""
+    pen.line(x, top, x, base)
+    layers = max(3, int((base - top) / 70))
+    for i in range(layers):
+        y = top + 18 + i * (base - top - 100) / layers
+        ww = w * (0.35 + 0.65 * (i + 1) / layers)
+        pen.path([(x - 5, y), (x - ww, y + 48), (x - ww + 16, y + 50)])
+        pen.path([(x + 5, y), (x + ww, y + 48), (x + ww - 16, y + 50)])
 
 
-def hd_pine(pen, x, height):
-    """A pine like the reference: a tip, then a few pairs of branch strokes that widen, and a
-    bare trunk below the crown."""
-    pen.line(x, 0, x, -height)
-    crown, y, n = height * 0.62, -height + 1.5, 0
-    while y < -height + crown:
-        w = 1.0 + n * 1.15
-        for k in (0.0, 1.1):                               # two strokes a side, like a brush
-            pen.line(x - 0.5 - k, y + k, x - w - k * 0.6, y + w * 1.35 + k)
-            pen.line(x + 0.5 + k, y + k, x + w + k * 0.6, y + w * 1.35 + k)
-        y += 3.4
-        n += 1
+TREES = [(125, 265, 660, 82), (230, 405, 680, 46), (1320, 470, 690, 60), (1433, 335, 690, 80),
+         (600, 440, 690, 55), (860, 300, 670, 85), (1010, 430, 690, 50)]
+BUSHES = [(78, 160), (1352, 1425), (560, 640)]
+TUFTS = [55, 240, 405, 560, 760, 905, 1120, 1285, 1475]
+STARS = [(195, 157, "*"), (318, 250, "*"), (560, 182, "*"), (865, 200, "*"), (1225, 216, "*"),
+         (98, 215, "."), (693, 234, "."), (1087, 157, "."), (1008, 273, "."), (1335, 273, "."), (1462, 251, ".")]
 
 
-def hd_scene(canvas, width, frame, ground_row, deep, k=1.0):
-    """Stars, two layers of pines, bushes, the trail and grass; then the party, all in dots."""
-    w, dots = canvas.w, Dots(canvas)
+def trace_scene(canvas, frame, scale):
+    """The whole traced picture for one frame, centered on the party, the ground scrolling."""
+    w, h = canvas.w, canvas.h
+    px_w = w * 12 / scale                                    # the window's width, in picture pixels
+    center = (PARTY_LEFT + PARTY_RIGHT) / 2
+    x0 = w / 2 - center * scale / 12                         # picture x -> column
+    y0 = (h - (GROUND_Y + 50 - SCENE_TOP) * scale / 24) / 2 - SCENE_TOP * scale / 24
+    step = 2 * 114 * math.sin(SWING) / (WALK_FRAMES / 2)     # pixels the ground moves per frame
+    pen = Pen(canvas, x0, y0, scale, "pine")
+    view0, view1 = center - px_w / 2, center + px_w / 2
+
+    def repeats(x, speed):
+        """Every picture x where something at tile position x shows, scrolled."""
+        base = (x - frame * step * speed - view0) % TILE_PX + view0
+        return [base + k * TILE_PX for k in range(-1, int(px_w / TILE_PX) + 2) if view0 - 200 < base + k * TILE_PX < view1 + 200]
+
     rnd = random.Random(w)
-    for i in range(max(4, w // 8)):
-        x, y = rnd.randrange(w), rnd.randrange(max(1, ground_row - int(HD_ROWS * k) - 1))
-        big = rnd.random() < 0.35
-        canvas.put(x, y, "*" if big != ((frame // 6 + i) % 7 == 0) else ".", "star")
-    speeds = {"far": HD_SPEED * k * 0.3, "near": HD_SPEED * k * 0.6, "ground": HD_SPEED * k}
-
-    def spots(x, layer):
-        base = int(x - frame * speeds[layer]) % TILE
-        return range(base - TILE * ((base + 24) // TILE + 1), w + 24, TILE)
-
-    far, near = Pen(dots, 0, ground_row, "pine_far", k), Pen(dots, 0, ground_row, "pine", k)
-    if deep:
-        for x, kind in FAR:
-            for sx in spots(x, "far"):
-                hd_pine(far, sx / k, HD_PINES[kind] * 0.65)
-    for x, kind in NEAR:
-        for sx in spots(x, "near"):
-            h = HD_PINES[kind]
-            u = sx / k                                                   # the pen scales; place in units
-            near.erase([(u - h * 0.5, 0), (u, -h - 1), (u + h * 0.5, 0)])   # near pines hide far ones
-            hd_pine(near, u, h)
-    pw = int(hd_party_width() * k + 0.5)
-    px = (width - pw) // 2
-    for y in range(ground_row - int(HD_ROWS * k) - 1, ground_row):          # a clear path for the party
-        dots.clear_cells(px - 1, px + pw + 1, y)
-    x = float(px)
-    for n, (draw, color, left, right) in enumerate(HD_PARTY):
-        phase = ((frame % WALK_FRAMES) / WALK_FRAMES + n * 0.3) % 1.0         # out of step
-        draw(Pen(dots, x - left * k, ground_row, color, k), phase)
-        x += (right - left + 1 + HD_GAP) * k
-    dots.flush()
-    for x in GROUND:
-        for sx in spots(x, "ground"):
-            if not (px - 8 < sx < px + pw + 2):
-                solid(canvas, BUSH, sx, ground_row - len(BUSH), "bush")
-    shift = int(frame * speeds["ground"])
-    for x in range(w):
-        if (x + shift) % 2 == 0:
-            canvas.put(x, ground_row, ".", "trail")
-    for x, tuft in GRASS:
-        for sx in spots(x, "ground"):
-            canvas.text(sx, ground_row + 1, tuft, "tuft")
+    for x, y, ch in STARS:                                   # the sky does not scroll
+        for sx in range(int(view0 // TILE_PX) - 1, int(view1 // TILE_PX) + 2):
+            twinkle = (frame // 6 + x) % 9 == 0
+            pen.text(x + sx * TILE_PX, y, "." if twinkle and ch == "*" else ch, "star")
+    moon = pen.arc(1398, 182, 26, 34, 95, 265, 10)
+    pen.path([(mx + center - 768, my) for mx, my in moon], "star")
+    for tx, top, base, tw in TREES:
+        for x in repeats(tx, 0.7):
+            trace_pine(pen, x, top, base, tw)
+    for b0, b1 in BUSHES:
+        for x in repeats(b0, 1.0):
+            span = b1 - b0
+            pen.path([(x, 736), (x + span * 0.12, 708), (x + span * 0.45, 692), (x + span * 0.8, 698), (x + span, 716)], "bush")
+    for tx in TUFTS:
+        for x in repeats(tx, 1.0):
+            pen.text(x - 12, 728, "\\V/", "bush")
+    c0, r0 = pen.at(0, GROUND_Y)
+    shift = int(frame * step * scale / 12)
+    for col in range(w):                                     # the dashed ground
+        if (col + shift) % 4 != 3:
+            canvas.put(col, int(r0 + 0.5), "_" if (col + shift) % 7 else ".", "trail")
+    # a clear path for the party, then the party
+    left, right = pen.at(PARTY_LEFT, 0)[0], pen.at(PARTY_RIGHT, 0)[0]
+    top_row = pen.at(0, 280)[1]
+    for row in range(int(top_row), int(r0 + 0.5)):
+        canvas.clear_span(int(left), int(right) + 1, row)
+    for n, (draw, color) in enumerate(PARTY_PX):
+        pen.color = color
+        draw(pen, ((frame % WALK_FRAMES) / WALK_FRAMES + n * 0.3) % 1.0)
+    pen.color = "pine"
 
 
 # ── the terminal ──────────────────────────────────────────────────────────────
@@ -707,21 +688,13 @@ def play(fps):
 def main():
     ap = argparse.ArgumentParser(description="A party walking through a night forest.")
     ap.add_argument("--fps", type=float, default=FPS, help=f"frames per second (default {FPS})")
-    ap.add_argument("--ascii", action="store_true", help="plain ASCII figures instead of the fine line art")
+    ap.add_argument("--ascii", action="store_true", help="the small hand-drawn figures instead of the traced scene")
     ap.add_argument("--frames", type=int, default=0, help="print this many plain frames and exit")
     ap.add_argument("--width", type=int, default=0, help="with --frames: the width to draw")
     ap.add_argument("--height", type=int, default=0, help="with --frames: the height to draw")
     a = ap.parse_args()
     global HD
     HD = not a.ascii
-    if HD and hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")      # Windows consoles default to a code page
-        except (ValueError, OSError):
-            HD = False
-    if HD and not a.frames and os.name != "nt" and "UTF-8" not in (os.environ.get("LC_ALL") or os.environ.get("LC_CTYPE")
-                                                                   or os.environ.get("LANG") or "UTF-8").upper().replace("UTF8", "UTF-8"):
-        HD = False                                        # a terminal set to another charset: plain ASCII
     if a.frames:
         size = shutil.get_terminal_size((100, 16))
         for f in range(a.frames):
