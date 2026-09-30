@@ -149,6 +149,7 @@ PARTIES = {                          # left to right; they walk right
 }
 GAP = 3                              # columns between two figures
 HD = True                            # fine line art in Braille dots (Unicode); --ascii turns it off
+MODE = {"now": ""}                   # what the last frame drew, said on exit
 
 
 def legs(width, hip, frames, extra=None):
@@ -337,11 +338,19 @@ def scene(width, height, frame):
     the small ones in a short or narrow window, only the warrior when even those do not fit."""
     canvas = Canvas(width, height)
     full, small = PARTIES["full"], PARTIES["small"]
-    if HD and height >= HD_ROWS + 5 and width >= hd_party_width() + 6:
-        top = (height - (HD_ROWS + 6)) // 2
-        ground_row = top + HD_ROWS + 4
-        hd_scene(canvas, width, frame, ground_row, width >= hd_party_width() + 30)
-        return canvas
+    if HD:
+        # the line art shrinks to fit: full size in a big window, down to 55% in a small one
+        k = min(1.0, (height - 5) / HD_ROWS, (width - 4) / hd_party_width())
+        if k >= 0.55:
+            rows = int(HD_ROWS * k + 0.99)
+            top = (height - (rows + 6)) // 2
+            ground_row = max(rows + 1, top + rows + 4)
+            hd_scene(canvas, width, frame, ground_row, width >= hd_party_width() * k + 30, k)
+            MODE["now"] = f"line art at {round(k * 100)}% size"
+            return canvas
+        MODE["now"] = f"ASCII: {width}x{height} is too small for line art (it needs about {int(hd_party_width() * 0.55) + 4}x{int(HD_ROWS * 0.55) + 6})"
+    else:
+        MODE["now"] = "ASCII (--ascii, or the terminal is not UTF-8)"
     if height >= full[0]["rows"] + 4 and width >= party_width(full) + 6:
         party = full
     elif height >= small[0]["rows"] + 2 and width >= party_width(small) + 4:
@@ -419,11 +428,11 @@ class Dots:
 class Pen:
     """Draws shapes into the dot layer around an origin (the figure's feet on the ground)."""
 
-    def __init__(self, dots, ox, ground_row, color):
-        self.d, self.ox, self.gy, self.color = dots, ox, ground_row, color
+    def __init__(self, dots, ox, ground_row, color, scale=1.0):
+        self.d, self.ox, self.gy, self.color, self.k = dots, ox, ground_row, color, scale
 
     def dot(self, x, y):                       # units -> dot coordinates
-        return (self.ox + x) * 2, (self.gy + y / 2) * 4
+        return (self.ox + x * self.k) * 2, (self.gy + y * self.k / 2) * 4
 
     def line(self, x0, y0, x1, y1, color=None, dash=False):
         (ax, ay), (bx, by) = self.dot(x0, y0), self.dot(x1, y1)
@@ -449,7 +458,7 @@ class Pen:
 
     def arc(self, cx, cy, rx, ry, t0=0, t1=360, color=None):
         """An ellipse or part of one; degrees, 0 = right, 90 = down."""
-        steps = int(max(rx, ry) * 12) + 12
+        steps = int(max(rx, ry) * 12 * self.k) + 12
         for i in range(steps + 1):
             t = math.radians(t0 + (t1 - t0) * i / steps)
             self.d.plot(*self.dot(cx + rx * math.cos(t), cy + ry * math.sin(t)), color or self.color)
@@ -459,7 +468,7 @@ class Pen:
 
     def text(self, x, y, s, color=None):
         """Plain characters over the drawing (the shield's marks, the star)."""
-        col, row = int(math.floor(self.ox + x + 0.5)), int(math.floor(self.gy + y / 2 + 0.5))
+        col, row = int(math.floor(self.ox + x * self.k + 0.5)), int(math.floor(self.gy + y * self.k / 2 + 0.5))
         for i, ch in enumerate(s):
             self.d.bits.pop((col + i, row), None)
             self.d.canvas.put(col + i, row, ch, color or self.color)
@@ -585,39 +594,40 @@ def hd_pine(pen, x, height):
         n += 1
 
 
-def hd_scene(canvas, width, frame, ground_row, deep):
+def hd_scene(canvas, width, frame, ground_row, deep, k=1.0):
     """Stars, two layers of pines, bushes, the trail and grass; then the party, all in dots."""
     w, dots = canvas.w, Dots(canvas)
     rnd = random.Random(w)
     for i in range(max(4, w // 8)):
-        x, y = rnd.randrange(w), rnd.randrange(max(1, ground_row - HD_ROWS - 1))
+        x, y = rnd.randrange(w), rnd.randrange(max(1, ground_row - int(HD_ROWS * k) - 1))
         big = rnd.random() < 0.35
         canvas.put(x, y, "*" if big != ((frame // 6 + i) % 7 == 0) else ".", "star")
-    speeds = {"far": HD_SPEED * 0.3, "near": HD_SPEED * 0.6, "ground": HD_SPEED}
+    speeds = {"far": HD_SPEED * k * 0.3, "near": HD_SPEED * k * 0.6, "ground": HD_SPEED * k}
 
     def spots(x, layer):
         base = int(x - frame * speeds[layer]) % TILE
         return range(base - TILE * ((base + 24) // TILE + 1), w + 24, TILE)
 
-    far, near = Pen(dots, 0, ground_row, "pine_far"), Pen(dots, 0, ground_row, "pine")
+    far, near = Pen(dots, 0, ground_row, "pine_far", k), Pen(dots, 0, ground_row, "pine", k)
     if deep:
         for x, kind in FAR:
             for sx in spots(x, "far"):
-                hd_pine(far, sx, HD_PINES[kind] * 0.65)
+                hd_pine(far, sx / k, HD_PINES[kind] * 0.65)
     for x, kind in NEAR:
         for sx in spots(x, "near"):
             h = HD_PINES[kind]
-            near.erase([(sx - h * 0.5, 0), (sx, -h - 1), (sx + h * 0.5, 0)])   # near pines hide far ones
-            hd_pine(near, sx, h)
-    pw = hd_party_width()
+            u = sx / k                                                   # the pen scales; place in units
+            near.erase([(u - h * 0.5, 0), (u, -h - 1), (u + h * 0.5, 0)])   # near pines hide far ones
+            hd_pine(near, u, h)
+    pw = int(hd_party_width() * k + 0.5)
     px = (width - pw) // 2
-    for y in range(ground_row - HD_ROWS - 1, ground_row):                  # a clear path for the party
+    for y in range(ground_row - int(HD_ROWS * k) - 1, ground_row):          # a clear path for the party
         dots.clear_cells(px - 1, px + pw + 1, y)
-    x = px
+    x = float(px)
     for n, (draw, color, left, right) in enumerate(HD_PARTY):
         phase = ((frame % WALK_FRAMES) / WALK_FRAMES + n * 0.3) % 1.0         # out of step
-        draw(Pen(dots, x - left, ground_row, color), phase)
-        x += right - left + 1 + HD_GAP
+        draw(Pen(dots, x - left * k, ground_row, color, k), phase)
+        x += (right - left + 1 + HD_GAP) * k
     dots.flush()
     for x in GROUND:
         for sx in spots(x, "ground"):
@@ -717,7 +727,11 @@ def main():
         for f in range(a.frames):
             print(scene(a.width or size.columns, a.height or 16, f * STEP_EVERY).render(color=False))
         return
-    play(max(1.0, a.fps))
+    try:
+        play(max(1.0, a.fps))
+    finally:
+        if MODE["now"]:
+            print(f"party.py drew: {MODE['now']}")
 
 
 if __name__ == "__main__":
