@@ -1,9 +1,10 @@
 // The party for guild calm mode: three small adventurers walking through a night forest,
 // packed as Claude Code Raster cells.
 //
-// Simple and a bit silly on purpose: big round faces that blink, an archer who now and then
-// lets an arrow fly across the screen, a warrior who swings his sword, a wizard whose star
-// sparkles. Ten rows, so it stays out of the way.
+// Seen from the side like the reference picture: a hooded archer drawing a bow, a wizard in a
+// brimmed hat with a staff, a hooded warrior with a cape and a raised sword, all walking right.
+// A bit silly too: eyes blink, the archer now and then lets an arrow fly across the screen, the
+// warrior swings his sword, the wizard's star sparkles. Eleven rows, so it stays out of the way.
 //
 // A Raster's `cells` prop is base64 of columns * rows little-endian u32 triplets
 // [codePoint, foreground, background]. Colors are 0x00RRGGBB, and bit 24 alone
@@ -16,8 +17,8 @@ export const PARTY_KEY = "guild-calm-party";
 /** How often the scene moves. The party steps every other tick. */
 export const PARTY_TICK_MS = 140;
 
-/** Ten rows: sky, seven of forest and figures, the trail, and grass. */
-export const PARTY_ROWS = 10;
+/** Eleven rows: sky, eight of forest and figures, the trail, and grass. */
+export const PARTY_ROWS = 11;
 
 const MAX_COLUMNS = 512;
 const MARGIN = 2;
@@ -48,69 +49,77 @@ export function partyColumns(viewportColumns: number | undefined): number {
   return Math.max(60, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
 }
 
-// ── the adventurers: five rows of body, two of legs ───────────────────────────
-// Change the art here. "o.o" is each face (it blinks), "*" the wizard's star (it sparkles).
-const ARCHER = [
-  "     _/\\_    .    ",
-  "    ( o.o)    \\   ",
-  "  \\|/|  |\\----|-> ",
-  "   |  |__|     |  ",
-  "   |  |  |    /   ",
+// ── the adventurers, seen from the side, walking right ─────────────────────────
+// Six rows of body, then two of legs. Change the art here. "o>" is an eye and a nose (it blinks),
+// "*" the wizard's star (it sparkles). Rows may differ in length.
+type Sprite = { hip: number; rows: string[]; extra?: Record<number, string>; staff?: number };
+const ARCHER: Sprite = { hip: 5, rows: [          // hood, quiver on the back, bow drawn, cape behind
+  "        __      ,     ",
+  " \\|/   /  \\      \\    ",
+  "  |   |  o>       |   ",
+  "  |   _\\_/o- - - -|-> ",
+  "  |  / |==|       |   ",
+  " _/_/  |__|      /    ",
+] };
+const ARCHER_LOOSED: Sprite = { ...ARCHER, rows: ARCHER.rows.map((r, i) => (i === 3 ? "  |   _\\_/o       |   " : r)) };
+const MAGE: Sprite = { hip: 6, staff: 21, extra: { 0: "  /", 1: " /_" }, rows: [   // brimmed hat, beard, cloak, staff
+  "         /\\          * ",
+  "       _/  \\_        | ",
+  "    -----------      | ",
+  "        ( o>         | ",
+  "       / )))\\--------o ",
+  "    __/ |   |        | ",
+] };
+const KNIGHT: Sprite = { hip: 5, rows: [          // hood with a visor, cape behind, sword held high
+  "        __        /  ",
+  "       /  \\      //  ",
+  "      | [=>     //   ",
+  "      _\\__/   -+-    ",
+  "   __/ |##|--o/      ",
+  " _/___ |__|          ",
+] };
+const KNIGHT_SWING: Sprite = { ...KNIGHT, rows: [   // the sword comes down in front: a mighty swing at nothing
+  "        __           ",
+  "       /  \\          ",
+  "      | [=>          ",
+  "      _\\__/          ",
+  "   __/ |##|--o-+===- ",
+  " _/___ |__|          ",
+] };
+const LEGS = [                // four walking frames; the boots point the way they walk
+  [" /  \\  ", "/_   \\_"],
+  [" |  \\  ", " |_  \\_"],
+  [" |  |  ", " |_ |_ "],
+  [" /  |  ", "/_  |_ "],
 ];
-const ARCHER_LOOSED = [       // the arrow is gone: it is flying across the screen
-  "     _/\\_    .    ",
-  "    ( o.o)    \\   ",
-  "  \\|/|  |\\-   |   ",
-  "   |  |__|     |  ",
-  "   |  |  |    /   ",
-];
-const MAGE = [
-  "      /\\      *  ",
-  "     /  \\     |  ",
-  "    /____\\    |  ",
-  "    ( o.o)    |  ",
-  "   /|~~~~|\\---o  ",
-];
-const KNIGHT = [
-  "      _^_      / ",
-  "     [o.o]    /  ",
-  "  .-. |=| \\__+   ",
-  " ( # )|  |       ",
-  "  '-' |__|       ",
-];
-const KNIGHT_SWING = [        // the sword comes down in front: a mighty swing at nothing
-  "      _^_        ",
-  "     [o.o]       ",
-  "  .-. |=| \\__+==-",
-  " ( # )|  |       ",
-  "  '-' |__|       ",
-];
-const LEGS = [                // four walking frames
-  ["     /  \\  ", "    /    \\ "],
-  ["     |  \\  ", "    _|   \\ "],
-  ["     |  |  ", "    _| _|  "],
-  ["     /  |  ", "    /  _|  "],
-];
-
-type Figure = { color: keyof PartyPalette; legOffset: number; staff?: number };
-const FIGURES: Figure[] = [
-  { color: "archer", legOffset: 1 },
-  { color: "wizard", legOffset: 0, staff: 14 },
-  { color: "knight", legOffset: 1 },
-];
-const WIDTHS = [ARCHER, MAGE, KNIGHT].map((art) => Math.max(...art.map((r) => r.length)));
-const GAP = 3;
+const COLORS: Array<keyof PartyPalette> = ["archer", "wizard", "knight"];
+const WIDTHS = [ARCHER, MAGE, KNIGHT].map((s) => Math.max(...s.rows.map((r) => r.length)) + 1);
+const GAP = 2;
 const PARTY_WIDTH = WIDTHS.reduce((a, b) => a + b, 0) + GAP * (WIDTHS.length - 1);
+const FIGURE_ROWS = 8;
+
+/** The eight rows of a figure for one walking frame. */
+function figureRows(sp: Sprite, frame: number, width: number): string[] {
+  const rows = sp.rows.map((r) => r.padEnd(width));
+  LEGS[frame % 4]!.forEach((leg, i) => {
+    const row = [...(" ".repeat(sp.hip) + leg).padEnd(width)];
+    [...(sp.extra?.[i] ?? "")].forEach((ch, j) => { if (ch !== " ") row[j] = ch; });   // the cloak down the back
+    if (sp.staff !== undefined) row[sp.staff] = "|";                                  // the staff to the ground
+    rows.push(row.join(""));
+  });
+  return rows;
+}
 
 // jokes, in ticks
 const BLINK_EVERY = 26, ARROW_EVERY = 70, ARROW_FLIGHT = 40, SWING_EVERY = 45, SWING_FOR = 5;
 
 // ── the forest ────────────────────────────────────────────────────────────────
-const TALL_PINE = ["   ^   ", "  /|\\  ", " //|\\\\ ", "///|\\\\\\", "   |   ", "   |   "];
+const TALL_PINE = ["    ^    ", "   /|\\   ", "  //|\\\\  ", "  //|\\\\  ", " ///|\\\\\\ ", "////|\\\\\\\\", "    |    ", "    |    "];
+const MID_PINE = ["   ^   ", "  /|\\  ", " //|\\\\ ", "///|\\\\\\", "   |   ", "   |   "];
 const SMALL_PINE = ["  ^  ", " /|\\ ", "//|\\\\", "  |  "];
 const BUSH = [" .^^. ", "(    )"];
-const STRIP: Array<[number, "tall" | "small" | "bush"]> = [
-  [0, "tall"], [11, "small"], [19, "bush"], [30, "tall"], [42, "small"], [50, "bush"], [58, "tall"],
+const STRIP: Array<[number, "tall" | "mid" | "small" | "bush"]> = [
+  [0, "tall"], [11, "small"], [19, "bush"], [29, "mid"], [40, "tall"], [52, "bush"], [60, "small"],
 ];
 const STRIP_LEN = 70;
 const GRASS = "  \\V/      ,      \\V/    .     \\V/        ,   \\V/     ";
@@ -145,11 +154,14 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette)
   // the forest drifts left: the world passing a party that walks right
   const drift = Math.floor(tick / 2);
   const shift = (x: number, span: number) => ((((x - drift) % span) + span) % span);
+  const x0 = Math.floor((columns - PARTY_WIDTH) / 2);
   for (let base = -STRIP_LEN; base < columns + STRIP_LEN; base += STRIP_LEN) {
     for (const [offset, kind] of STRIP) {
       const x = base + shift(offset, STRIP_LEN);
-      if (x < -8 || x > columns) continue;
-      solid(kind === "tall" ? TALL_PINE : kind === "small" ? SMALL_PINE : BUSH, x, kind === "bush" ? palette.bush : palette.tree);
+      if (x < -10 || x > columns) continue;
+      if (x + 9 > x0 - 1 && x < x0 + PARTY_WIDTH + 1) continue;       // behind the party: hidden whole, never cut in half
+      solid(kind === "tall" ? TALL_PINE : kind === "mid" ? MID_PINE : kind === "small" ? SMALL_PINE : BUSH, x,
+            kind === "bush" ? palette.bush : palette.tree);
     }
   }
   for (let c = 0; c < columns; c++) {                                 // the dotted trail and the grass under it
@@ -158,25 +170,21 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette)
     if (g !== " ") put(GROUND_ROW + 1, c, g, palette.ground);
   }
 
-  // the party, in a clear path through the trees
-  const x0 = Math.floor((columns - PARTY_WIDTH) / 2);
-  for (let row = 1; row < GROUND_ROW; row++) for (let c = x0 - 1; c <= x0 + PARTY_WIDTH; c++) put(row, c, " ", DEFAULT_COLOR);
+  // the party
   const step = Math.floor(tick / 2);
   const blink = tick % BLINK_EVERY < 2;
   const arrowAt = tick % ARROW_EVERY;
   const flying = arrowAt < ARROW_FLIGHT;
   const swinging = tick % SWING_EVERY < SWING_FOR;
   const sparkle = ["*", "+", "x", "+"][Math.floor(tick / 3) % 4]!;
-  const arts = [flying ? ARCHER_LOOSED : ARCHER, MAGE, swinging ? KNIGHT_SWING : KNIGHT];
+  const sprites = [flying ? ARCHER_LOOSED : ARCHER, MAGE, swinging ? KNIGHT_SWING : KNIGHT];
   let x = x0;
-  FIGURES.forEach((fig, n) => {
-    const color = palette[fig.color];
-    const legs = LEGS[(step + n) % 4]!;
-    const rows = [...arts[n]!, ...legs.map((l) => " ".repeat(fig.legOffset) + l)];
+  sprites.forEach((sp, n) => {
+    const color = palette[COLORS[n]!];
+    const rows = figureRows(sp, step + n, WIDTHS[n]!);
     rows.forEach((line, i) => {
-      const row = GROUND_ROW - rows.length + i;
-      let text = blink ? line.replace("o.o", "-.-") : line;
-      if (fig.staff !== undefined && i >= 5) text = text.padEnd(fig.staff + 1).slice(0, fig.staff) + "|" + text.slice(fig.staff + 1);
+      const row = GROUND_ROW - FIGURE_ROWS + i;
+      const text = blink && n < 2 ? line.replace("o>", "->") : line;
       [...text].forEach((ch, j) => {
         if (ch === " ") return;
         if (ch === "*" && n === 1) put(row, x + j, sparkle, palette.sky);   // the wizard's star
@@ -190,7 +198,7 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette)
   if (flying) {
     const from = x0 + PARTY_WIDTH + 2;
     const ax = from + Math.floor((arrowAt / ARROW_FLIGHT) * (columns - from + 4));
-    draw(GROUND_ROW - 5, ax, "-->", palette.archer);
+    draw(GROUND_ROW - FIGURE_ROWS + 3, ax, "-->", palette.archer);
   }
 
   const bytes = new Uint8Array(size * 12);
