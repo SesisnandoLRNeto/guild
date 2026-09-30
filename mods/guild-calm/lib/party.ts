@@ -1,27 +1,29 @@
-// The party for guild calm mode: three adventurers walking through a night forest,
+// The party for guild calm mode: three small adventurers walking through a night forest,
 // packed as Claude Code Raster cells.
+//
+// Simple and a bit silly on purpose: big round faces that blink, an archer who now and then
+// lets an arrow fly across the screen, a warrior who swings his sword, a wizard whose star
+// sparkles. Ten rows, so it stays out of the way.
 //
 // A Raster's `cells` prop is base64 of columns * rows little-endian u32 triplets
 // [codePoint, foreground, background]. Colors are 0x00RRGGBB, and bit 24 alone
-// (0x01000000) asks for the terminal's own default color.
-//
-// Only plain ASCII glyphs are used. A wide glyph takes two terminal columns and shears
-// the whole grid, and ASCII is narrow everywhere.
+// (0x01000000) asks for the terminal's own default color. Only plain ASCII is drawn: a wide
+// glyph takes two columns and shears the grid.
 
 /** Name of the Raster inside the working row, so a repaint can find it again. */
 export const PARTY_KEY = "guild-calm-party";
 
-/** How often the scene moves. The party steps every other tick, the forest slower still. */
+/** How often the scene moves. The party steps every other tick. */
 export const PARTY_TICK_MS = 140;
 
-/** Eight rows: sky, six of forest and figures, and the ground. */
-export const PARTY_ROWS = 8;
+/** Ten rows: sky, seven of forest and figures, the trail, and grass. */
+export const PARTY_ROWS = 10;
 
 const MAX_COLUMNS = 512;
 const MARGIN = 2;
 const DEFAULT_COLOR = 0x01000000;
 const SPACE = 32;
-const GROUND_ROW = PARTY_ROWS - 1;
+const GROUND_ROW = PARTY_ROWS - 2;
 
 export type PartyPalette = {
   archer: number; wizard: number; knight: number;
@@ -30,8 +32,8 @@ export type PartyPalette = {
 export type PartyFamily = "dark" | "light";
 
 export const PARTY_PALETTES: Record<PartyFamily, PartyPalette> = {
-  dark: { archer: 0xe8a95c, wizard: 0x7fd3e6, knight: 0xe0675a,
-          tree: 0x86b97f, bush: 0x6fa66a, ground: 0x5e8c5a, sky: 0xf2e3a6 },
+  dark: { archer: 0xf0a430, wizard: 0x3ec6ec, knight: 0xef4a3c,
+          tree: 0x6fb86a, bush: 0x5fa85a, ground: 0x4f8f4a, sky: 0xf2e3a6 },
   light: { archer: 0xb5651d, wizard: 0x1e7fa0, knight: 0xb33a2e,
            tree: 0x3f7d3a, bush: 0x4e8a49, ground: 0x7fa37a, sky: 0xa8841f },
 };
@@ -43,124 +45,152 @@ export function partyFamily(theme: unknown): PartyFamily {
 
 /** Scene width for a viewport: the working row minus its margin, inside the Raster limit. */
 export function partyColumns(viewportColumns: number | undefined): number {
-  return Math.max(48, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
+  return Math.max(60, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
 }
 
-// ── The adventurers: small and clear, five rows each, standing on the ground ──
-// Four body rows and two frames of feet; `flip` starts a figure on the other frame so the
-// three do not march in lockstep.
-type Figure = { rows: string[]; legs: [string[], string[]]; color: keyof PartyPalette; flip: boolean };
+// ── the adventurers: five rows of body, two of legs ───────────────────────────
+// Change the art here. "o.o" is each face (it blinks), "*" the wizard's star (it sparkles).
+const ARCHER = [
+  "     _/\\_    .    ",
+  "    ( o.o)    \\   ",
+  "  \\|/|  |\\----|-> ",
+  "   |  |__|     |  ",
+  "   |  |  |    /   ",
+];
+const ARCHER_LOOSED = [       // the arrow is gone: it is flying across the screen
+  "     _/\\_    .    ",
+  "    ( o.o)    \\   ",
+  "  \\|/|  |\\-   |   ",
+  "   |  |__|     |  ",
+  "   |  |  |    /   ",
+];
+const MAGE = [
+  "      /\\      *  ",
+  "     /  \\     |  ",
+  "    /____\\    |  ",
+  "    ( o.o)    |  ",
+  "   /|~~~~|\\---o  ",
+];
+const KNIGHT = [
+  "      _^_      / ",
+  "     [o.o]    /  ",
+  "  .-. |=| \\__+   ",
+  " ( # )|  |       ",
+  "  '-' |__|       ",
+];
+const KNIGHT_SWING = [        // the sword comes down in front: a mighty swing at nothing
+  "      _^_        ",
+  "     [o.o]       ",
+  "  .-. |=| \\__+==-",
+  " ( # )|  |       ",
+  "  '-' |__|       ",
+];
+const LEGS = [                // four walking frames
+  ["     /  \\  ", "    /    \\ "],
+  ["     |  \\  ", "    _|   \\ "],
+  ["     |  |  ", "    _| _|  "],
+  ["     /  |  ", "    /  _|  "],
+];
 
-const ARCHER: Figure = {            // hooded, a bow with its string, the arrow crossing it
-  rows: ["  ,^.  |\\  ",
-         "  (o)  | \\ ",
-         " /|\\---+-->",
-         "  |    | / "],
-  legs: [[" / \\   |/  "], ["  | |  |/  "]],
-  color: "archer", flip: false,
-};
-
-const WIZARD: Figure = {            // pointed hat, robe, a staff whose star twinkles
-  rows: ["   /\\   *  ",
-         "  /__\\  |  ",
-         "  (oo)  |  ",
-         " /|\\/|\\-|  "],
-  legs: [[" /_||_\\ |  "], [" /_/\\_\\ |  "]],
-  color: "wizard", flip: true,
-};
-
-const KNIGHT: Figure = {            // helmet with a visor, a shield in front, sword raised
-  rows: ["   _    /  ",
-         "  [=]  /   ",
-         " (|#|)/    ",
-         "  |#|      "],
-  legs: [["  / \\      "], ["  | |      "]],
-  color: "knight", flip: false,
-};
-
-// Walking right: the archer covers the back, the wizard walks in the middle, the knight leads.
-const PARTY: Figure[] = [ARCHER, WIZARD, KNIGHT];
+type Figure = { color: keyof PartyPalette; legOffset: number; staff?: number };
+const FIGURES: Figure[] = [
+  { color: "archer", legOffset: 1 },
+  { color: "wizard", legOffset: 0, staff: 14 },
+  { color: "knight", legOffset: 1 },
+];
+const WIDTHS = [ARCHER, MAGE, KNIGHT].map((art) => Math.max(...art.map((r) => r.length)));
 const GAP = 3;
-const PARTY_WIDTH = PARTY.reduce((w, f) => w + f.rows[0]!.length, 0) + GAP * (PARTY.length - 1);
+const PARTY_WIDTH = WIDTHS.reduce((a, b) => a + b, 0) + GAP * (WIDTHS.length - 1);
 
-// ── The forest: tall pines, small pines, bushes with grass, along a long repeating strip ──
+// jokes, in ticks
+const BLINK_EVERY = 26, ARROW_EVERY = 70, ARROW_FLIGHT = 40, SWING_EVERY = 45, SWING_FOR = 5;
+
+// ── the forest ────────────────────────────────────────────────────────────────
 const TALL_PINE = ["   ^   ", "  /|\\  ", " //|\\\\ ", "///|\\\\\\", "   |   ", "   |   "];
 const SMALL_PINE = ["  ^  ", " /|\\ ", "//|\\\\", "  |  "];
-const BUSH = ["(__)"];
+const BUSH = [" .^^. ", "(    )"];
 const STRIP: Array<[number, "tall" | "small" | "bush"]> = [
-  [0, "tall"], [10, "small"], [18, "bush"], [27, "tall"], [38, "small"], [47, "bush"],
+  [0, "tall"], [11, "small"], [19, "bush"], [30, "tall"], [42, "small"], [50, "bush"], [58, "tall"],
 ];
-const STRIP_LEN = 60;
-const GROUND = ".,  '. ^^  . ,'.  ^. ,  .' ,. ^^ '.  ,. '";
+const STRIP_LEN = 70;
+const GRASS = "  \\V/      ,      \\V/    .     \\V/        ,   \\V/     ";
 
 /** One frame of the night forest with the party walking through it. */
 export function partyFrame(columns: number, tick: number, palette: PartyPalette): string {
   const size = columns * PARTY_ROWS;
   const cp = new Uint32Array(size).fill(SPACE);
   const fg = new Uint32Array(size).fill(DEFAULT_COLOR);
-
   const put = (row: number, col: number, ch: string, color: number) => {
     if (row < 0 || row >= PARTY_ROWS || col < 0 || col >= columns) return;
-    const at = row * columns + col;
-    cp[at] = ch.charCodeAt(0);
-    fg[at] = color;
+    cp[row * columns + col] = ch.charCodeAt(0);
+    fg[row * columns + col] = color;
   };
   const draw = (row: number, col: number, text: string, color: number) =>
     [...text].forEach((ch, i) => { if (ch !== " ") put(row, col + i, ch, color); });
+  const solid = (art: string[], x: number, color: number) =>          // stands on the ground, hides what is behind
+    art.forEach((line, i) => {
+      const row = GROUND_ROW - art.length + i;
+      const first = line.search(/\S/), last = line.length - 1 - [...line].reverse().join("").search(/\S/);
+      for (let c = first; c <= last && first >= 0; c++) put(row, x + c, " ", DEFAULT_COLOR);
+      draw(row, x, line, color);
+    });
 
-  // Sky: stars over the top rows that twinkle, and a crescent moon near the right edge.
-  for (let c = 3; c < columns; c += 9) {
-    const twinkle = (c * 7 + Math.floor(tick / 5)) % 5 === 0;
-    put((c * 13) % 2, c, twinkle ? "*" : ".", palette.sky);
+  // sky: stars that twinkle, and a small moon
+  for (let c = 4; c < columns; c += 11) {
+    const twinkle = (c * 7 + Math.floor(tick / 5)) % 6 === 0;
+    put(0, c, twinkle ? "*" : ".", palette.sky);
   }
-  const moon = columns - 9;
-  draw(0, moon, " .-", palette.sky);
-  draw(1, moon, "(", palette.sky);
-  draw(2, moon, " '-", palette.sky);
+  draw(0, columns - 8, "(", palette.sky);
 
-  // Forest and ground drift left slowly: the world passing a party that walks right.
-  const drift = Math.floor(tick / 5);
+  // the forest drifts left: the world passing a party that walks right
+  const drift = Math.floor(tick / 2);
   const shift = (x: number, span: number) => ((((x - drift) % span) + span) % span);
-  for (let c = 0; c < columns; c++) {
-    const g = GROUND[shift(c, GROUND.length)]!;
-    if (g !== " ") put(GROUND_ROW, c, g, palette.ground);
-  }
-  const standOn = (art: string[], x: number, color: number) =>        // bottom row sits on the ground
-    art.forEach((line, i) => draw(GROUND_ROW - art.length + i, x, line, color));
   for (let base = -STRIP_LEN; base < columns + STRIP_LEN; base += STRIP_LEN) {
     for (const [offset, kind] of STRIP) {
       const x = base + shift(offset, STRIP_LEN);
       if (x < -8 || x > columns) continue;
-      if (kind === "tall") standOn(TALL_PINE, x, palette.tree);
-      else if (kind === "small") standOn(SMALL_PINE, x, palette.tree);
-      else standOn(BUSH, x, palette.bush);
+      solid(kind === "tall" ? TALL_PINE : kind === "small" ? SMALL_PINE : BUSH, x, kind === "bush" ? palette.bush : palette.tree);
     }
   }
-
-  // The party walks in the foreground: its block is cleared of trees and bushes (a path
-  // through the forest) and only the ground comes back under its feet. Without this,
-  // trunks and branches mix into the figures.
-  const step = Math.floor(tick / 2);
-  let x = (step % (columns + PARTY_WIDTH + 4)) - PARTY_WIDTH;
-  for (let c = x - 1; c <= x + PARTY_WIDTH; c++) {
-    for (let row = 1; row < GROUND_ROW; row++) put(row, c, " ", DEFAULT_COLOR);
-    const g = GROUND[shift(c, GROUND.length)] ?? " ";
-    put(GROUND_ROW, c, g, g === " " ? DEFAULT_COLOR : palette.ground);
+  for (let c = 0; c < columns; c++) {                                 // the dotted trail and the grass under it
+    if ((c + drift) % 2 === 0) put(GROUND_ROW, c, ".", palette.sky);
+    const g = GRASS[shift(c, GRASS.length)]!;
+    if (g !== " ") put(GROUND_ROW + 1, c, g, palette.ground);
   }
-  const sparkle = ["*", "+", "."][Math.floor(tick / 3) % 3]!;
-  for (const fig of PARTY) {
+
+  // the party, in a clear path through the trees
+  const x0 = Math.floor((columns - PARTY_WIDTH) / 2);
+  for (let row = 1; row < GROUND_ROW; row++) for (let c = x0 - 1; c <= x0 + PARTY_WIDTH; c++) put(row, c, " ", DEFAULT_COLOR);
+  const step = Math.floor(tick / 2);
+  const blink = tick % BLINK_EVERY < 2;
+  const arrowAt = tick % ARROW_EVERY;
+  const flying = arrowAt < ARROW_FLIGHT;
+  const swinging = tick % SWING_EVERY < SWING_FOR;
+  const sparkle = ["*", "+", "x", "+"][Math.floor(tick / 3) % 4]!;
+  const arts = [flying ? ARCHER_LOOSED : ARCHER, MAGE, swinging ? KNIGHT_SWING : KNIGHT];
+  let x = x0;
+  FIGURES.forEach((fig, n) => {
     const color = palette[fig.color];
-    const legs = fig.legs[(step + (fig.flip ? 1 : 0)) % 2]!;
-    const art = [...fig.rows, ...legs];
-    art.forEach((line, i) => {
-      const row = GROUND_ROW - art.length + i;
-      [...line].forEach((ch, j) => {
+    const legs = LEGS[(step + n) % 4]!;
+    const rows = [...arts[n]!, ...legs.map((l) => " ".repeat(fig.legOffset) + l)];
+    rows.forEach((line, i) => {
+      const row = GROUND_ROW - rows.length + i;
+      let text = blink ? line.replace("o.o", "-.-") : line;
+      if (fig.staff !== undefined && i >= 5) text = text.padEnd(fig.staff + 1).slice(0, fig.staff) + "|" + text.slice(fig.staff + 1);
+      [...text].forEach((ch, j) => {
         if (ch === " ") return;
-        if (fig === WIZARD && ch === "*") put(row, x + j, sparkle, palette.sky);   // the staff's star
+        if (ch === "*" && n === 1) put(row, x + j, sparkle, palette.sky);   // the wizard's star
         else put(row, x + j, ch, color);
       });
     });
-    x += fig.rows[0]!.length + GAP;
+    x += WIDTHS[n]! + GAP;
+  });
+
+  // the loosed arrow shows up past the party (it flew over their heads) and leaves the screen
+  if (flying) {
+    const from = x0 + PARTY_WIDTH + 2;
+    const ax = from + Math.floor((arrowAt / ARROW_FLIGHT) * (columns - from + 4));
+    draw(GROUND_ROW - 5, ax, "-->", palette.archer);
   }
 
   const bytes = new Uint8Array(size * 12);
