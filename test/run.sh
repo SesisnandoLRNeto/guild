@@ -204,6 +204,8 @@ has "ready to merge waits for the validation" "$out" "Not ready to merge yet"
 curl -s -X POST "$vurl/mark" -d '{"id":"A2","status":"skip","note":"no auth locally"}' >/dev/null
 has "the last pass writes a certificate for the commit" "$(cat "$GUILD_HOME/quests/alpha/certificate.json")" '"passed": 1'
 has "the page says it is validated" "$(curl -s "$vurl")" "Validated.</b> 1 of 2 passed, 1 skipped with a reason"
+has "the checklist has a way back to the report" "$(curl -s "$vurl")" "Back to the report"
+has "war table pages are never kept stale by the browser" "$(curl -s -D - -o /dev/null "$vurl")" "Cache-Control: no-store"
 has "and the event is logged" "$(cat "$GUILD_HOME/events.log")" "alpha	validated"
 has "the export for the team carries the guildmaster's results" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" export alpha --out "$TMP/alpha-v.html" && cat "$TMP/alpha-v.html")" "Guildmaster: <b>skip</b>, no auth locally"
 curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}' >/dev/null

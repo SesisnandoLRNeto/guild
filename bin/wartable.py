@@ -80,6 +80,7 @@ def list_boards():
 THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
          b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
          b'<script src="/lightbox.js" defer></script>'   # click a picture to zoom it or go full screen
+         b'<script>addEventListener("pageshow",function(e){if(e.persisted)location.reload()});</script>'   # Back shows fresh state
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
          b'return /prefers-color-scheme:\\s*dark/.test(q)?{matches:false,media:q,addEventListener:function(){},'
          b'removeEventListener:function(){},addListener:function(){},removeListener:function(){}}:m.call(window,q);};})();</script>')
@@ -547,6 +548,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             body = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        if ctype.startswith(("text/html", "application/json")):   # states change: never show a stale copy
+            self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

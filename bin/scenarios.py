@@ -267,6 +267,20 @@ def screen_map(screens):
     return "".join(out)
 
 
+def report_url(slug):
+    """The quest's newest wrap-up page on the war table, or "" when it has none."""
+    bdir = os.path.join(qdir(slug), "boards")
+    best = ""
+    for b in sorted(os.listdir(bdir)) if os.path.isdir(bdir) else []:
+        try:
+            m = json.load(open(os.path.join(bdir, b, "board.json")))
+        except (OSError, ValueError):
+            continue
+        if m.get("wrapup") and m.get("created", "") >= best.split("|")[0]:
+            best = f"{m.get('created', '')}|/b/{slug}/{b}/"
+    return best.split("|", 1)[1] if best else ""
+
+
 def page(slug, meta=None, export=False, image=None, prs=None):
     """The checklist page. `image(rel)` turns a quest-folder path into a URL (or a data URI in an export)."""
     spec = load(slug) or {"groups": []}
@@ -280,7 +294,9 @@ def page(slug, meta=None, export=False, image=None, prs=None):
     pr_label = f"PR #{prs['number']}" if prs and prs.get("number") else ""
     eyebrow = " · ".join(x for x in [os.path.basename(meta.get("repo", "")), meta.get("ticket", ""), pr_label,
                                       "updated " + time.strftime("%d %b %Y")] if x)
-    h = [f'<header><div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
+    back = "" if export else (f'<a class="btn back" href="{esc(report_url(slug) or "/campaign")}" id="back">'
+                              f'&larr; Back to the {"report" if report_url(slug) else "campaign board"}</a>')
+    h = [f'<header>{back}<div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
     if spec.get("lede"):
         h.append(f'<p class="lede">{rich(spec["lede"])}</p>')
     h.append('<div class="progress"><span id="count"></span><div class="bar" aria-hidden="true">'
@@ -410,7 +426,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1
 .bar{flex:1 1 220px;height:9px;background:var(--line);border-radius:99px;overflow:hidden;display:flex}
 .bar i{display:block;height:100%;width:0;transition:width .2s}.bp{background:var(--ok)}.bf{background:var(--bad)}.bs{background:var(--warn)}
 .btn{font:600 12.5px/1 inherit;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:7px 11px;cursor:pointer;text-decoration:none}
-.btn.warn{background:var(--bad);color:#fff5dc;border-color:var(--bad)}.btn:hover{background:#d9a441;border-color:#a87a25}
+.btn.warn{background:var(--bad);color:#fff5dc;border-color:var(--bad)}.btn.back{justify-self:start}.btn:hover{background:#d9a441;border-color:#a87a25}
 .pill{display:inline-block;font:600 11px/1 inherit;padding:4px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
 .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
 table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}th,td{text-align:left;vertical-align:top;padding:8px 12px;border-top:1px solid var(--line)}
@@ -466,6 +482,9 @@ function paint(counts,total){var p=function(n){return (total?n/total*100:0)+'%'}
 """
 
 LIVE_JS = r"""
+var back=document.getElementById('back');
+if(back&&document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){
+  back.addEventListener('click',function(e){e.preventDefault();history.back();});}
 var cards=[].slice.call(document.querySelectorAll('.scen.live'));
 function tally(){var c={pass:0,fail:0,skip:0};cards.forEach(function(s){if(c[s.dataset.st]!==undefined)c[s.dataset.st]++});paint(c,cards.length);
   document.getElementById('sendfail').hidden=!c.fail;}

@@ -108,6 +108,8 @@
   </aside>
 </main>
 <script>
+addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); });   // Back shows fresh state
+
 const QUESTIONS = {{QUESTIONS}};
 const answers = {}, attachments = [];
 const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
