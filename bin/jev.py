@@ -93,19 +93,32 @@ def active(scope):
 
 
 # ── the call ──────────────────────────────────────────────────────────────────
-def ask(state, questions, timeout=4):
-    """POST to Jev. Returns the answers dict, or None on any problem (callers fall back)."""
+USAGE = os.path.join(GUILD_HOME, "jev-usage.jsonl")
+
+
+def ask(state, questions, timeout=4, why="", slug=""):
+    """POST to Jev. Returns the answers dict, or None on any problem (callers fall back).
+    Every call that reaches Jev is logged with its tokens, for the treasury page."""
     body = json.dumps({"model": config()["model"], "state": state[-6000:], "questions": questions}).encode()
     req = urllib.request.Request(ENDPOINT, data=body, method="POST",
                                  headers={"Authorization": f"Bearer {key()}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read()).get("answers")
+            out = json.loads(r.read())
     except (OSError, ValueError, urllib.error.URLError):
         return None
+    usage = out.get("usage") or {}
+    try:
+        with open(USAGE, "a") as f:
+            f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "why": why or next(iter(questions), ""),
+                                "slug": slug or os.environ.get("GUILD_QUEST", ""), "model": out.get("model", ""),
+                                "input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)}) + "\n")
+    except OSError:
+        pass
+    return out.get("answers")
 
 
-def cached(tag, state, questions):
+def cached(tag, state, questions, slug=""):
     """Ask once per distinct text: the board refreshes every few seconds, Jev is asked once."""
     h = hashlib.sha1((tag + state).encode()).hexdigest()
     try:
@@ -114,7 +127,7 @@ def cached(tag, state, questions):
         c = {}
     if h in c:
         return c[h]["answers"]
-    answers = ask(state, questions)
+    answers = ask(state, questions, why=tag, slug=slug)
     if answers is not None:
         c[h] = {"answers": answers, "at": time.time()}
         if len(c) > 2000:                                   # keep the newest
@@ -178,7 +191,7 @@ def stop(slug, transcript):
     text = last_assistant_text(transcript)
     if not active("quests") or not text or not allowed(wt):
         print("none"); return
-    a = ask(text[-4000:], STOP)
+    a = ask(text[-4000:], STOP, why="stop", slug=slug)
     if not a or "kind" not in a or (a["kind"].get("confidence") or 0) < 0.55:
         print("none"); return
     kind = a["kind"].get("choice", "")
@@ -203,7 +216,7 @@ def risk(slug):
         raise SystemExit(f"jev: {wt} is blocked by the data rule; no risk score")
     mb = subprocess.run(["git", "-C", wt, "merge-base", "HEAD", base], capture_output=True, text=True).stdout.strip() or base
     diff = subprocess.run(["git", "-C", wt, "diff", mb, "--stat", "-p"], capture_output=True, text=True).stdout
-    a = ask(diff[-6000:], RISK)
+    a = ask(diff[-6000:], RISK, why="risk", slug=slug)
     if not a or "risk" not in a:
         raise SystemExit("jev: no answer (key, network or service); the trial goes on without it")
     r = a["risk"]
@@ -278,7 +291,7 @@ def main():
     elif cmd == "test":
         if not key():
             raise SystemExit("jev: no key. Put TYPESAFE_API_KEY=... in ~/.guild/local/env")
-        ans = ask("Should I keep the old endpoint, or drop it?", WAITING)
+        ans = ask("Should I keep the old endpoint, or drop it?", WAITING, why="test")
         if ans is None:
             raise SystemExit("jev: no answer: check the key, the network, or https://status.typesafe.ai")
         w = ans["waiting"]

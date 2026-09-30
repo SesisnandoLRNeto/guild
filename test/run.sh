@@ -205,21 +205,25 @@ is "malformed input never blocks" "$(guard 'not json')" "0"
 
 section "ledger"
 # A synthetic session log with round numbers: sonnet 5 at $2/$10/$2.50/$0.20 per M.
+# The reply "m1" is written twice (Claude Code logs one line per content block, same usage):
+# it counts once. A line from before the quest started (an earlier quest in a pooled slot) is ignored.
 proj="$HOME/.claude/projects/$(echo "$WT" | sed 's#/#-#g; s#\.#-#g')"
 mkdir -p "$proj"
 python3 - "$proj/session.jsonl" <<'PY'
 import json, sys
-rows = [{"type": "assistant", "timestamp": "2026-09-23T10:00:00Z",
-         "message": {"model": "claude-sonnet-5",
-                     "usage": {"input_tokens": 1_000_000, "output_tokens": 1_000_000,
-                               "cache_creation_input_tokens": 1_000_000,
-                               "cache_read_input_tokens": 1_000_000}}},
-        {"type": "assistant", "timestamp": "2026-09-23T10:30:00Z",
-         "message": {"model": "claude-sonnet-5", "usage": {"input_tokens": 0, "output_tokens": 0}}}]
+from datetime import datetime, timedelta, timezone
+t0 = datetime.now(timezone.utc) + timedelta(minutes=1)
+iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+big = {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "cache_creation_input_tokens": 1_000_000, "cache_read_input_tokens": 1_000_000}
+rows = [{"type": "assistant", "timestamp": iso(t0 - timedelta(days=3)), "message": {"id": "old", "model": "claude-sonnet-5", "usage": big}},
+        {"type": "assistant", "timestamp": iso(t0), "message": {"id": "m1", "model": "claude-sonnet-5", "usage": big}},
+        {"type": "assistant", "timestamp": iso(t0), "message": {"id": "m1", "model": "claude-sonnet-5", "usage": big}},
+        {"type": "assistant", "timestamp": iso(t0 + timedelta(minutes=30)),
+         "message": {"id": "m2", "model": "claude-sonnet-5", "usage": {"input_tokens": 0, "output_tokens": 0}}}]
 open(sys.argv[1], "w").write("\n".join(json.dumps(r) for r in rows))
 PY
 out=$("$GUILD" cost alpha)
-has "cost is priced from the session log" "$out" '$14.70'   # 2 + 10 + 2.50 + 0.20
+has "cost is priced from the session log, each reply once" "$out" '$14.70'   # 2 + 10 + 2.50 + 0.20
 has "the model is named" "$out" "claude-sonnet-5"
 has "duration is measured" "$out" "30m"
 out=$("$GUILD" cost)

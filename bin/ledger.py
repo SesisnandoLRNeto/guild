@@ -13,7 +13,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import checks  # noqa: E402  (bin/checks.py: the acceptance contract and its runs)
@@ -42,8 +42,20 @@ def project_dir_for(path):
     return os.path.join(PROJECTS, path.replace("/", "-").replace(".", "-"))
 
 
-def read_usage(worktree):
-    """Tokens per model, message count and the time span, from a worktree's session logs."""
+def utc_stamp(local):
+    """A quest's local "created" time as the UTC ISO string Claude's logs use, for comparing."""
+    try:
+        return datetime.fromisoformat(local).astimezone().astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    except (TypeError, ValueError):
+        return ""
+
+
+def read_usage(worktree, since="", until=""):
+    """Tokens per model, message count and the time span, from a worktree's session logs.
+    A pooled worktree also holds the logs of earlier quests that used the slot, so only lines
+    written after `since` (UTC, from the quest's created time) count. Claude Code writes one
+    line per content block of a reply, each carrying the same usage, so a reply is counted
+    once, by its message id."""
     models, messages, first, last, sessions = {}, 0, None, None, 0
     d = project_dir_for(worktree)
     if not os.path.isdir(d):
@@ -51,27 +63,35 @@ def read_usage(worktree):
     for name in os.listdir(d):
         if not name.endswith(".jsonl"):
             continue
-        sessions += 1
-        for line in open(os.path.join(d, name), errors="ignore"):
+        counted, replies = False, {}
+        for n, line in enumerate(open(os.path.join(d, name), errors="ignore")):
             try:
                 row = json.loads(line)
             except ValueError:
                 continue
             stamp = row.get("timestamp")
+            if since and (not stamp or stamp[:19] < since):
+                continue
+            if until and stamp and stamp[:19] > until:
+                continue
+            counted = True
             if stamp:
                 first = min(first, stamp) if first else stamp
                 last = max(last, stamp) if last else stamp
             if row.get("type") != "assistant":
                 continue
-            messages += 1
             msg = row.get("message", {})
-            usage = msg.get("usage", {})
-            bucket = models.setdefault(msg.get("model", "unknown"),
-                                       {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0})
+            if msg.get("model") == "<synthetic>":
+                continue                                 # Claude Code's own notices: no model, no tokens
+            replies[msg.get("id") or f"line-{n}"] = (msg.get("model", "unknown"), msg.get("usage", {}))
+        for model, usage in replies.values():
+            messages += 1
+            bucket = models.setdefault(model, {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0})
             bucket["input"] += usage.get("input_tokens", 0)
             bucket["output"] += usage.get("output_tokens", 0)
             bucket["cache_write"] += usage.get("cache_creation_input_tokens", 0)
             bucket["cache_read"] += usage.get("cache_read_input_tokens", 0)
+        sessions += counted
     return models, messages, first, last, sessions
 
 
@@ -114,7 +134,7 @@ def load(d):
         q.update(json.load(open(snapshot)))
         q["source"] = "snapshot"
     else:
-        models, messages, first, last, sessions = read_usage(meta.get("worktree", ""))
+        models, messages, first, last, sessions = read_usage(meta.get("worktree", ""), utc_stamp(meta.get("created", "")))
         cost, unknown = cost_of(models)
         q.update({"models": models, "messages": messages, "first": first, "last": last,
                   "sessions": sessions, "cost": cost, "unknown": unknown, "source": "live"})
@@ -491,7 +511,7 @@ def cmd_snapshot(args):
     if not os.path.isdir(d):
         sys.exit(f"guild: no quest '{args['slug']}'")
     meta = json.load(open(os.path.join(d, "meta.json")))
-    models, messages, first, last, sessions = read_usage(meta.get("worktree", ""))
+    models, messages, first, last, sessions = read_usage(meta.get("worktree", ""), utc_stamp(meta.get("created", "")))
     cost, unknown = cost_of(models)
     json.dump({"models": models, "messages": messages, "first": first, "last": last,
                "sessions": sessions, "cost": cost, "unknown": unknown,
