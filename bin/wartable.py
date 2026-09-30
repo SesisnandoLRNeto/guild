@@ -9,6 +9,7 @@ waiting adventurer reads with `guild board wait`.
 Everything is local: 127.0.0.1 only, no network calls, no accounts.
 """
 import base64
+import html as _html
 import datetime
 import http.server
 import json
@@ -82,6 +83,140 @@ THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
          b'return /prefers-color-scheme:\\s*dark/.test(q)?{matches:false,media:q,addEventListener:function(){},'
          b'removeEventListener:function(){},addListener:function(){},removeListener:function(){}}:m.call(window,q);};})();</script>')
+
+
+# ── "At a glance": a plain header the war table puts on top of every quest page ──
+# A report is written for whoever reads the code; this strip is for anyone: where the work
+# stands, in words and as a path of steps, and the few numbers that matter.
+
+GLANCE_CSS = """<style>
+.gg{font:14px/1.5 inherit;margin:0 0 26px;padding:16px 18px 14px;border:1px solid var(--line,#cdb88e);border-radius:6px;
+  background:rgba(255,250,235,.55)}
+.gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 12px;padding-right:48px}
+.gg-top b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41)}
+.gg-say{font-size:16px;font-weight:600}
+.gg-say.bad{color:var(--bad,#a8322a)}.gg-say.turn{color:#9a5a0c}.gg-say.ok{color:var(--ok,#3f7d3a)}
+.gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0;counter-reset:s}
+.gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:var(--dim,#6e5a41);padding-top:26px;min-width:0}
+.gg-path li::before{content:"";position:absolute;top:4px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;
+  border:2px solid #b9a37a;background:#f6ecd2;z-index:1}
+.gg-path li::after{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:#cdb88e}
+.gg-path li:first-child::after{display:none}
+.gg-path li.done{color:var(--text,#2d2216)}.gg-path li.done::before{background:var(--ok,#3f7d3a);border-color:var(--ok,#3f7d3a)}
+.gg-path li.done::after,.gg-path li.now::after{background:var(--ok,#3f7d3a)}
+.gg-path li.now{color:var(--text,#2d2216);font-weight:700}.gg-path li.now::before{border-color:#b5651d;background:#f3d9a8;box-shadow:0 0 0 4px rgba(217,164,65,.3)}
+.gg-path li.stuck::before{border-color:var(--bad,#a8322a);background:#f2c4bb}
+.gg-path li.skip{opacity:.45}
+.gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.gg-tile{background:rgba(255,255,255,.35);border:1px solid var(--line,#cdb88e);border-radius:4px;padding:7px 10px}
+.gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
+.gg-tile b{font-size:17px}.gg-tile i{display:block;font-size:11.5px;color:var(--dim,#6e5a41);font-style:normal}
+@media (max-width:640px){.gg-path li{font-size:10.5px}}
+</style>"""
+
+
+def glance(quest):
+    """The header's HTML for one quest, or "" when there is nothing to say."""
+    qdir = os.path.join(QUESTS, quest)
+    if not os.path.exists(os.path.join(qdir, "meta.json")):
+        return ""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import ledger
+    import prs as prmod
+    try:
+        q = ledger.load(qdir)
+    except (OSError, ValueError):
+        return ""
+    meta, state, note = q["meta"], q["state"], q["note"]
+    pr = prmod.by_slug().get(quest) or {}
+    if pr.get("error"):
+        pr = {}
+    grade = load_json_safe(os.path.join(qdir, "grade.json"))
+    edd = q.get("edd") or {}
+    planned = os.path.exists(os.path.join(qdir, "plan.md"))
+    built = bool(edd.get("runs")) or state in ("done", "trial-pass", "trial-skip") or bool(pr)
+    checks_ok = edd.get("last_green") or (not edd.get("checks") and built)
+    trial_ok = q.get("trial") in ("pass", "skip")
+    steps = [("Asked", True), ("Plan", planned if meta.get("phase") or planned else None), ("Build", built),
+             ("Checks", bool(checks_ok) and built), ("Trial", trial_ok), ("PR open", bool(pr)),
+             ("Merged", pr.get("state") == "merged")]
+    now = next((i for i, (_, ok) in enumerate(steps) if ok is False), None)
+    stuck = state in ("blocked", "failed", "stopped", "checks-red")
+    items = []
+    for i, (name, ok) in enumerate(steps):
+        cls = "skip" if ok is None else "done" if ok and (now is None or i < now) else ""
+        if i == now:
+            cls = "now stuck" if stuck else "now"
+        items.append(f'<li class="{cls}">{_html.escape(name)}</li>')
+
+    ticket = meta.get("ticket", "")
+    if pr.get("state") == "merged":
+        say, tone = "Merged. This work is in the main branch.", "ok"
+    elif stuck:
+        say, tone = {"blocked": "Blocked", "failed": "Failed", "stopped": "Stopped without a report",
+                     "checks-red": "Checks are failing"}[state] + (f": {note}" if note else "."), "bad"
+    elif state == "needs-decision":
+        say, tone = "Waiting for your decision on the war table.", "turn"
+    elif state in ("done", "trial-pass", "trial-skip") and pr.get("state") in ("open", "draft"):
+        say, tone = f"Finished. PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn"
+    elif state in ("done", "trial-pass", "trial-skip"):
+        say, tone = "Finished." + ("" if grade else " Grade it on the right."), "ok"
+    elif state == "held":
+        say, tone = "On hold until a date you set.", ""
+    else:
+        say, tone = "An agent is working on it now.", ""
+
+    tiles = []
+    cost = q.get("cost") or 0
+    est = " (estimated)" if q.get("unknown") else ""
+    tiles.append(("Cost", ledger.money(cost), f"API price{est}"))
+    dur = ledger.duration(q)
+    if dur:
+        tiles.append(("Time open", dur, f"first to last reply, {q.get('messages', 0)} replies"))
+    if edd.get("checks"):
+        tiles.append(("Checks", "passing" if edd.get("last_green") else "failing" if edd.get("runs") else "not run",
+                      f"{edd['checks']} automatic, {edd.get('manual', 0)} by review"))
+    if q.get("trial"):
+        tiles.append(("Trial", {"pass": "passed", "skip": "skipped"}.get(q["trial"], q["trial"]), "review before the PR"))
+    if pr:
+        tiles.append(("Pull request", f"#{pr.get('number')} {pr.get('state')}",
+                      ", ".join(x for x in [pr.get("review", ""), f"checks {pr['checks']}" if pr.get("checks") else ""] if x)))
+    tiles.append(("Your grade", f"{grade['grade']}/5" if grade and grade.get("grade") else "not yet",
+                  (grade or {}).get("verdict", "") or "on the right side"))
+    model = meta.get("model") or ""
+    head = " · ".join(_html.escape(x) for x in [ticket, model, os.path.basename(meta.get("repo", ""))] if x)
+    return (GLANCE_CSS + '<section class="gg" aria-label="At a glance">'
+            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{_html.escape(say)}</span>'
+            f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
+            f'<ol class="gg-path">{"".join(items)}</ol><div class="gg-tiles">'
+            + "".join(f'<div class="gg-tile"><span>{_html.escape(a)}</span><b>{_html.escape(str(b))}</b><i>{_html.escape(c)}</i></div>'
+                      for a, b, c in tiles)
+            + "</div></section>")
+
+
+def load_json_safe(path):
+    try:
+        return json.load(open(path))
+    except (OSError, ValueError):
+        return None
+
+
+def with_glance(body, quest):
+    """Put the header right after <body>. A page can opt out with <meta name="guild-glance" content="off">."""
+    low = body.lower()
+    if b'name="guild-glance" content="off"' in low:
+        return body
+    try:
+        strip = glance(quest).encode()
+    except Exception:
+        return body
+    if not strip:
+        return body
+    i = low.find(b"<body")
+    if i < 0:
+        return strip + body
+    j = low.find(b">", i) + 1
+    return body[:j] + strip + body[j:]
 
 
 def themed(html):
@@ -403,6 +538,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 body = f.read()
             if target.endswith(".html"):
                 body = themed(body)
+                if rest == "content.html":
+                    body = with_glance(body, quest)
             return self.send(200, body, ctype)
         except Exception as e:  # never take the server down for one bad request
             return self.send(500, f"error: {e}")

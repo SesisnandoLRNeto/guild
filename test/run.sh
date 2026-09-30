@@ -578,6 +578,8 @@ has "board pages get the guild theme" "$(curl -s "${url%/campaign}/b/$bq/$bid/co
 has "and the theme is served" "$(curl -s "${url%/campaign}/theme.css")" "parchment"
 has "board pages get the picture lightbox" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'src="/lightbox.js"'
 has "and the lightbox is served" "$(curl -s "${url%/campaign}/lightbox.js")" "requestFullscreen"
+has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
+has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '>PR open</li>'
 
 
 

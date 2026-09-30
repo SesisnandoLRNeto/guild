@@ -31,50 +31,91 @@
   .pass { color: var(--ok); } .fail { color: var(--bad); }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
   .note { border-left: 3px solid var(--accent); background: var(--card); padding: 10px 14px; border-radius: 0 8px 8px 0; }
+  .caption { color: var(--dim); font-size: 13px; margin-top: 6px; }
 </style>
 </head>
 <body>
 
+<!-- The war table puts an "At a glance" strip above this page on its own: where the quest
+     stands, cost, time, checks, trial, PR and grade. Do not repeat those numbers here.
+     Write the top half for someone who does not read code. Developer detail goes in the
+     "For developers" block at the end. -->
+
 <h1>Title of the decision or the feature</h1>
 <p class="lead">One line: what the guildmaster is looking at and what happens next.</p>
 
-<h2>Options</h2>
+<h2>In plain words</h2>
+<!-- Two to four short sentences a product person can read: what people can do now that they
+     could not before, who it is for, and what is NOT included. No file names, no code words. -->
+<p>Finance can now set a pay rate by picking values in a form, instead of typing a formula.</p>
+<ul class="plain">
+  <li class="yes">What works now, in the words a user would use.</li>
+  <li class="no">What is not part of this, and why.</li>
+</ul>
+
+<h2>What it looks like</h2>
+<!-- Real screenshots, same size, before on the left. For a decision: "today" plus each option. -->
 <div class="grid">
   <figure>
-    <img src="shots/today.png" alt="today">
-    <figcaption><span class="tag">today</span><div>Current state</div><div class="why">What is wrong with it.</div></figcaption>
+    <img src="shots/before.png" alt="before">
+    <figcaption><span class="tag">before</span><div>How it was</div><div class="why">What was wrong with it.</div></figcaption>
   </figure>
   <figure>
-    <img src="shots/a.png" alt="option A">
-    <figcaption><span class="tag">option a</span><div>Name</div><div class="why">Trade-off in one line.</div></figcaption>
+    <img src="shots/after.png" alt="after">
+    <figcaption><span class="tag">after</span><div>How it is now</div><div class="why">What changed for the user.</div></figcaption>
   </figure>
 </div>
 
-<h2>How it flows</h2>
-<!-- Diagrams: write Mermaid inside a pre.mermaid block. It renders offline from the
-     war table itself. Use it for state machines, flows, sequences, anything with arrows. -->
+<h2>How it works</h2>
+<!-- One picture beats a paragraph: a flow, a state machine, who calls whom. Say in one line
+     under it what the reader should notice. Mermaid renders offline. -->
 <pre class="mermaid">
-stateDiagram-v2
-  [*] --> Draft
-  Draft --> Active: finance approves
-  Active --> Superseded: a newer row starts
-  Superseded --> [*]
+flowchart LR
+  A[Finance opens the rate] --> B[Picks the values] --> C[Sees the rate in plain English] --> D[Saves]
 </pre>
+<p class="caption">The rate is always shown back in plain English before it is saved.</p>
 
-<h2>Numbers</h2>
-<table>
-  <tr><th>Measure</th><th>Before</th><th>After</th><th>How measured</th></tr>
-  <tr><td>Example</td><td>—</td><td>—</td><td>—</td></tr>
+<h2>How we know it works</h2>
+<!-- Each proof in plain words, with its result. Say what was checked, not the command. -->
+<table class="proof">
+  <tr><th>What was checked</th><th>Result</th></tr>
+  <tr><td>A rate typed the old way still opens and shows correctly</td><td class="pass">passed</td></tr>
+  <tr><td>Saving a rate with a missing value is refused with a clear message</td><td class="pass">passed</td></tr>
 </table>
 
-<!-- Backend wrap-up: `guild impact --into <this page> --rules rules.json` draws the data model,
-     impact and business rule changes here. -->
-<!--GUILD-IMPACT-->
+<h2>Your decision</h2>
+<!-- What the guildmaster still owns, and what happens after each answer. For a decision board,
+     the options with your recommendation. For a wrap-up: merge, change, or split a follow-up. -->
+<ul>
+  <li><b>Merge as is</b> if the screens above look right.</li>
+  <li><b>Split a follow-up</b> for anything under "not included" that matters now.</li>
+</ul>
 
-<h2>Already ruled out</h2>
-<ul><li>What you tried and why it lost.</li></ul>
+<details class="dev">
+  <summary>For developers: files, numbers, impact, pain points</summary>
 
-<div class="note">Answer in the panel on the right. Add notes or drop screenshots there.</div>
+  <h3>What changed in the code</h3>
+  <table>
+    <tr><th>File</th><th>What</th></tr>
+    <tr><td><code>path/to/file.ts</code></td><td>One line each.</td></tr>
+  </table>
+
+  <h3>Numbers</h3>
+  <table>
+    <tr><th>Measure</th><th>Before</th><th>After</th><th>How measured</th></tr>
+    <tr><td>Example</td><td>-</td><td>-</td><td>-</td></tr>
+  </table>
+
+  <!-- Backend wrap-up: `guild impact --into <this page> --rules rules.json` draws the data model,
+       impact and business rule changes here. -->
+  <!--GUILD-IMPACT-->
+
+  <h3>Pain points and choices made alone</h3>
+  <ul><li>What fought back, and each design choice you made with its reason.</li></ul>
+
+  <h3>Already ruled out</h3>
+  <ul><li>What you tried and why it lost.</li></ul>
+</details>
 
 <script src="/vendor/mermaid.min.js"></script>
 <script>

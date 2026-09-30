@@ -84,3 +84,15 @@ html:root hr { border: 0; height: 22px; margin: 26px 0; opacity: .5;
   background: var(--i-swords) center / 22px 22px no-repeat, linear-gradient(#8a4b12, #8a4b12) center / 100% 1px no-repeat; }
 html:root th { background: rgba(91, 62, 40, .10); }
 html:root blockquote { border-left: 3px solid #8a4b12; margin: 8px 0; padding: 4px 12px; background: rgba(255, 250, 235, .5); font-style: italic; }
+
+/* ── layman-first reports: yes/no lists, a folded developer part ─────────────────── */
+html:root ul.plain > li::before { background: var(--ok); -webkit-mask-image: var(--i-shield); mask-image: var(--i-shield); }
+html:root ul.plain > li.no::before { background: var(--dim); -webkit-mask-image: var(--i-broken); mask-image: var(--i-broken); }
+html:root ul.plain > li.no { color: var(--dim); }
+html:root details.dev { margin: 34px 0 0; border: 1px solid var(--line); border-radius: 5px; background: rgba(255, 250, 235, .45); padding: 0 16px; }
+html:root details.dev > summary { cursor: pointer; padding: 12px 0; font-variant: small-caps; letter-spacing: .04em; font-weight: 700; color: #4a2f1a; }
+html:root details.dev[open] { padding-bottom: 14px; }
+html:root table.proof td.pass::before, html:root table.proof td.fail::before { content: ""; display: inline-block; width: 1em; height: 1em;
+  margin-right: 6px; vertical-align: -.15em; background: currentColor; -webkit-mask: var(--i-shield) center / contain no-repeat; mask: var(--i-shield) center / contain no-repeat; }
+html:root table.proof td.pass { color: var(--ok); font-weight: 700; } html:root table.proof td.fail { color: var(--bad); font-weight: 700; }
+html:root .caption { color: var(--dim); font-size: 13px; font-style: italic; }

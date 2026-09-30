@@ -61,20 +61,23 @@ Write `decisions.json` beside the page and pass `--decisions`:
 ## What a good page holds
 
 **Decision board**
-- The question in one line at the top, and what happens after each choice.
+- The question in one line at the top, in plain words, and what happens after each choice.
 - The options side by side, same vantage point, same size. Use `<img>` for screenshots, real ones, never drawings of what it might look like.
 - The current state as one of the columns, labelled "today", so the guildmaster sees the change, not just the options.
 - A short "what I already ruled out and why".
 - Numbers when they exist: bundle size, query count, render time, token cost.
 
 **Wrap-up report** (after the trial, before or with the PR). Open it with `--wrapup`, which marks it as the quest's report and leaves the quest working instead of waiting on a decision. A code quest cannot report `done` without one.
-- **What changed**: one paragraph, then the file list with one line each.
-- **Before and after**: screenshots in pairs, same viewport and same data. Use the Chrome tools to take them.
-- **Evidence**: the trial's testing table, with results.
-- **Performance**: numbers before and after, and how you measured them.
-- **Pain points**: what fought back, what is still ugly, what you would redo.
-- **Why**: the design choices you made on your own, each with its reason, so the guildmaster can disagree cheaply.
-- **Next to other work**: run `guild roster` and name the quests this touches or blocks.
+
+Write it so someone who does not read code knows what happened in one minute. The war table already puts an "At a glance" strip on top (where the quest stands as a path of steps, cost, time, checks, trial, PR, grade), so do not repeat those numbers. Follow the template's order:
+
+1. **In plain words**: two to four sentences a product person can read. What people can do now that they could not before, who it is for, and a short yes/no list of what is and is not included. No file names, class names or code words here.
+2. **What it looks like**: real screenshots in before and after pairs, same viewport and same data (`guild shot`). Each caption says what changed for the user.
+3. **How it works**: one diagram (Mermaid flow, state machine or sequence) with one line under it saying what to notice. Prefer a picture to a paragraph whenever the point has arrows.
+4. **How we know it works**: a table of proofs in plain words ("a rate typed the old way still opens"), each with its result as `class="pass"` or `class="fail"`. Say what was checked, not the command.
+5. **Your decision**: merge as is, change something, or split a follow-up, and what happens after each.
+6. **For developers**, folded in `<details class="dev">`: the file list with one line each, performance numbers and how you measured them, pain points, the design choices you made alone with their reasons, what you ruled out, the quests this touches (`guild roster`), and the backend section below.
+
 - **Backend: data model, impact and business rules.** When the change touches migrations, entities, services or validation, the report gets a drawn section. Guild builds it; you explain it:
   1. `guild impact --out /tmp/impact.html` gives a first look. Read what it found: the schema diff (every migration replayed on the base and on your branch), changed entities and fields, every module that uses what changed (the files you did *not* touch are the ones to double check), changed endpoints, and the code lines that look like rules.
   2. Write `rules.json` beside your page. For every real business rule change, one entry in plain words a product person can read:
@@ -88,7 +91,6 @@ Write `decisions.json` beside the page and pass `--decisions`:
   3. `guild impact --into <page.html> --rules rules.json` puts the section where the page has `<!--GUILD-IMPACT-->` (or at the end): an ER diagram of the changed tables with NEW, CHANGED and REMOVED columns, before and after column lists, the constraints the database now enforces, a module impact map, the endpoints, and your rules table. Rerunning it replaces the section.
   4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.
   `guild status done` refuses a backend quest whose wrap-up lacks this section or leaves rules unexplained. `--no-impact "<why>"` is the recorded escape.
-- End with the decisions the guildmaster still owns: merge as is, change something, or split a follow-up quest.
 
 ## Diagrams and screenshots
 
