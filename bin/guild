@@ -68,6 +68,7 @@ guild campaign                      the campaign board: every agent, ticket and 
 guild docket                        every open decision on one page: rule, hold until a date, send all (Ctrl-g g)
 guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the campaign board
 guild harnesses                     the agent CLIs guild knows and their model tiers
+guild treasury                      what the work cost and what it was worth, as charts
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
 guild notify test                   check that notifications reach you (Mac, and ntfy if set)
@@ -415,6 +416,14 @@ cmd_docket() {
 cmd_campaign() {
   local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
   local url="http://127.0.0.1:$port/campaign"
+  echo "$url"
+  [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+}
+
+# The treasury: what the work cost (Claude, Jev) and what it was worth (grades, first pass).
+cmd_treasury() {
+  local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+  local url="http://127.0.0.1:$port/treasury"
   echo "$url"
   [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
 }
@@ -1289,6 +1298,7 @@ case "${1:-}" in
   notify) shift; python3 "$GUILD_REPO/bin/notify.py" "${@:-test}" ;;
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
+  treasury) shift; cmd_treasury "$@" ;;
   docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;

@@ -501,6 +501,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
+            if path == "/treasury":        # the treasury: what the work cost and what it was worth
+                return self.send(200, open(os.path.join(WEB, "treasury.html")).read())
+            if path == "/treasury.json":
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import treasury
+                return self.send(200, json.dumps(treasury.data()), "application/json")
             if path == "/campaign.json":
                 return self.send(200, json.dumps(fleet().board()), "application/json")
             v = re.match(r"^/vendor/([A-Za-z0-9._-]+)$", path)

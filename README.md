@@ -108,6 +108,7 @@ guild up ~/Workspace
 | `guild pin [tab]` / `guild unpin [tab]` / `guild pins [menu]` | Keep sessions at the top of the sidebar; the menu jumps to one (`Ctrl-g p`, `Ctrl-g P`) |
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
 | `guild story "<name>" TICKET...` | Name the campaign board row those tickets sit in (an empty name removes it) |
+| `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
@@ -168,6 +169,19 @@ guild log pay-rate-fix         # one quest's whole story
 The live cost of each quest also shows in the cockpit sidebar and the total sits in the status bar. When a quest closes, its numbers are frozen into `ledger.json` next to the archived quest, so history never drifts.
 
 Prices live in `~/.guild/local/pricing.json` (per million tokens, input, output, cache write, cache read). A model that is not in that file is priced with the default and flagged as estimated, so add new models as they ship. On a subscription nothing is billed per token: the dollars are what the same work would have cost on the API, which is still the honest way to compare two quests.
+
+### The treasury
+
+`guild treasury` opens a page on the war table with what the work cost and what it was worth:
+
+- **Spend per day**, last 30 days, for every Claude Code session on this Mac, split by scope (quests, quartermasters, your own sessions) or by model.
+- **Where the money went**: totals per story, ticket, quest, model or repo, for 7 days, 30 days or all time.
+- **Was it worth it?** Per model, tier or harness: quests, total and average cost, your average grade, first-pass rate, overruled calls, stalls. A scatter of cost against grade, one dot per quest, and the token mix per model (cache reads are most tokens but cost little).
+- **Your own sessions by folder**, **Jev** calls and tokens by use, and a sortable table of every quest.
+
+Every Jev call is logged with its tokens (`~/.guild/jev-usage.jsonl`); add `"jev": {"input": N, "output": N}` (dollars per million tokens) to `pricing.json` to see dollars. A model with no price is flagged and priced with the default.
+
+How costs are counted: Claude Code writes one log line per content block of a reply, each carrying the same usage, so guild counts each reply once by its message id. A pooled worktree also holds the logs of earlier quests, so a quest counts only lines written after it started.
 
 ## The learning loop
 

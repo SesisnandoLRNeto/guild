@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guild Treasury</title>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  /* The treasury: what the work cost and what it was worth. Charts are plain SVG drawn
+     here, so the page works offline like every war table page. */
+  html:root body { max-width: 1120px; }
+  .lead { margin-top: 0; }
+  .warn { background: rgba(217, 164, 65, .22); border-left: 3px solid #b5651d; padding: 8px 12px; font-size: 13.5px; margin: 0 0 18px; }
+  .warn code { font-size: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 8px 0 6px; }
+  .tile { background: rgba(255, 250, 235, .6); border: 1px solid var(--line); border-radius: 5px; padding: 10px 14px; }
+  .tile span { display: block; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); }
+  .tile b { font-size: 25px; line-height: 1.2; }
+  .tile i { display: block; font-style: normal; font-size: 12.5px; color: var(--dim); }
+  .bar-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 12.5px; background: rgba(255, 255, 255, .35); border: 0; padding: 3px 10px; cursor: pointer; color: var(--text); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: #8a4b12; color: #fff5dc; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--dim); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  svg text { font-family: inherit; }
+  .chart { width: 100%; height: auto; display: block; }
+  .hint { color: var(--dim); font-size: 13px; font-style: italic; margin: 4px 0 0; }
+  .hbars { display: grid; grid-template-columns: minmax(120px, 34%) 1fr auto; gap: 5px 10px; align-items: center; font-size: 13.5px; }
+  .hbars .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hbars .track { display: block; height: 14px; background: rgba(90, 60, 30, .10); border-radius: 3px; overflow: hidden; }
+  .hbars .fill { display: block; height: 100%; background: #8a4b12; border-radius: 3px; }
+  .hbars .val { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .hbars .val small { color: var(--dim); margin-left: 6px; }
+  table.num td.n, table.num th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table.num th { cursor: pointer; user-select: none; white-space: nowrap; }
+  table.num th.sorted::after { content: " \25BE"; }
+  .stars { color: #b5651d; letter-spacing: 1px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .muted { color: var(--dim); }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } .hbars { grid-template-columns: minmax(90px, 40%) 1fr auto; } }
+</style>
+</head>
+<body>
+<h1>The Treasury</h1>
+<p class="lead">What the work cost, and what it was worth. Dollars are API prices: on a subscription nothing is billed per token, and this is what the same work would cost on the API.</p>
+<div id="warn"></div>
+<div class="tiles" id="tiles"></div>
+
+<h2>Spend per day</h2>
+<div class="bar-head">
+  <span class="seg" id="daily-by"><button data-v="scope" aria-pressed="true">By scope</button><button data-v="model" aria-pressed="false">By model</button></span>
+  <span class="legend" id="daily-legend"></span>
+</div>
+<svg class="chart" id="daily" viewBox="0 0 900 250" role="img" aria-label="Spend per day"></svg>
+<p class="hint">Every Claude Code session on this Mac, last 30 days. Quests are guild's adventurers; your sessions are everything you ran yourself.</p>
+
+<h2>Where the money went</h2>
+<div class="bar-head">
+  <span class="seg" id="group-by"><button data-v="story" aria-pressed="true">Story</button><button data-v="ticket" aria-pressed="false">Ticket</button><button data-v="slug" aria-pressed="false">Quest</button><button data-v="model" aria-pressed="false">Model</button><button data-v="repo" aria-pressed="false">Repo</button></span>
+  <span class="seg" id="period"><button data-v="7" aria-pressed="false">7 days</button><button data-v="30" aria-pressed="true">30 days</button><button data-v="0" aria-pressed="false">All</button></span>
+</div>
+<div class="hbars" id="where"></div>
+<p class="hint" id="where-hint"></p>
+
+<h2>Was it worth it?</h2>
+<div class="bar-head">
+  <span class="seg" id="worth-by"><button data-v="model" aria-pressed="true">By model</button><button data-v="tier" aria-pressed="false">By tier</button><button data-v="harness" aria-pressed="false">By harness</button></span>
+</div>
+<table class="num" id="worth"></table>
+<p class="hint">Your grade is the 1 to 5 you gave on each wrap-up. First pass: the quest met its own acceptance checks on its first real run. Overruled: you picked another option than the agent recommended. Stalls: it stopped without a report.</p>
+<div class="two">
+  <div>
+    <h3>Cost against your grade</h3>
+    <svg class="chart" id="scatter" viewBox="0 0 440 260" role="img" aria-label="Cost against grade, one dot per quest"></svg>
+    <p class="hint">One dot per graded quest. Up and to the left is good value: a high grade for little money.</p>
+  </div>
+  <div>
+    <h3>What the tokens were</h3>
+    <div id="mix"></div>
+    <p class="hint">Cache reads are most of the tokens but cost a tenth of fresh input. Output is few tokens and the most expensive kind.</p>
+  </div>
+</div>
+
+<div class="two">
+  <div>
+    <h2>Your own sessions, by folder</h2>
+    <div class="hbars" id="folders"></div>
+  </div>
+  <div>
+    <h2>Jev</h2>
+    <div id="jev"></div>
+  </div>
+</div>
+
+<h2>Every quest</h2>
+<table class="num" id="quests"></table>
+<p class="hint" id="at"></p>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const money = (v) => v == null ? "-" : v >= 100 ? "$" + Math.round(v).toLocaleString() : v >= 1 ? "$" + v.toFixed(2) : "$" + v.toFixed(3);
+const tok = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n || 0);
+const hours = (m) => !m ? "-" : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m}m`;
+const SCOPE_COLORS = { "Quests": "#8a4b12", "Quartermaster": "#3f7fc4", "Your sessions": "#9a8b72" };
+function modelColor(m) {
+  if (/fable/.test(m)) return "#c9952b"; if (/opus/.test(m)) return "#8e5bd1";
+  if (/sonnet/.test(m)) return "#3f7fc4"; if (/haiku/.test(m)) return "#7c7468"; return "#2a8f8a";
+}
+const short = (m) => String(m).replace(/^claude-/, "").replace(/-\d{8}$/, "");
+let D = null, dailyBy = "scope", groupBy = "story", period = 30, worthBy = "model", sortKey = "created", sortDir = -1;
+try { const s = JSON.parse(localStorage.getItem("treasury") || "{}"); dailyBy = s.dailyBy || dailyBy; groupBy = s.groupBy || groupBy; period = s.period ?? period; worthBy = s.worthBy || worthBy; } catch (e) {}
+const keep = () => { try { localStorage.setItem("treasury", JSON.stringify({ dailyBy, groupBy, period, worthBy })); } catch (e) {} };
+
+function tiles() {
+  const t = D.totals, j = D.jev;
+  const graded = D.quests.filter((q) => q.grade);
+  const avg = graded.length ? (graded.reduce((a, q) => a + q.grade, 0) / graded.length).toFixed(1) : "-";
+  $("#tiles").innerHTML = [
+    ["Last 7 days", money(t.week), "every Claude session on this Mac"],
+    ["Last 30 days", money(t.month), "same, a month"],
+    ["All quests", money(t.quests_all), `${t.quests} quests, average grade ${avg}/5`],
+    ["Jev", j.calls ? (j.priced ? money(j.cost) : `${j.calls} calls`) : "no calls yet",
+      j.calls ? `${tok(j.input + j.output)} tokens` + (j.priced ? `, ${j.calls} calls` : ", no price set") : "counted from now on"],
+  ].map(([a, b, c]) => `<div class="tile"><span>${a}</span><b>${b}</b><i>${c}</i></div>`).join("");
+  $("#warn").innerHTML = D.unknown_models.length
+    ? `<p class="warn">No price is set for <b>${D.unknown_models.map(esc).join(", ")}</b>, so they are priced as ${esc(D.default_model)} and the numbers are estimates. Add them to <code>~/.guild/local/pricing.json</code>.${D.jev.calls && !D.jev.priced ? ' Jev has no price either: add <code>"jev": {"input": N, "output": N}</code> (dollars per million tokens).' : ""}</p>` : "";
+}
+
+// ── stacked bars per day ──
+function daily() {
+  const rows = dailyBy === "scope" ? D.daily.by_scope : D.daily.by_model;
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r).filter((k) => k !== "day")))];
+  keys.sort((a, b) => rows.reduce((s, r) => s + (r[b] || 0), 0) - rows.reduce((s, r) => s + (r[a] || 0), 0));
+  const color = (k) => dailyBy === "scope" ? (SCOPE_COLORS[k] || "#2a8f8a") : modelColor(k);
+  const max = Math.max(1, ...rows.map((r) => keys.reduce((s, k) => s + (r[k] || 0), 0)));
+  const W = 900, H = 250, L = 52, B = 26, T = 10, cw = (W - L - 8) / rows.length, bw = Math.max(4, cw * 0.7);
+  const y = (v) => H - B - (v / max) * (H - B - T);
+  const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((s) => max / s <= 5) || 2000;
+  let g = "";
+  for (let v = 0; v <= max; v += step) g += `<line x1="${L}" x2="${W - 4}" y1="${y(v)}" y2="${y(v)}" stroke="#cdb88e" stroke-width="1"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#6e5a41">$${v}</text>`;
+  rows.forEach((r, i) => {
+    let acc = 0; const x = L + i * cw + (cw - bw) / 2;
+    const total = keys.reduce((s, k) => s + (r[k] || 0), 0);
+    const tip = `${r.day}: ${money(total)}` + keys.filter((k) => r[k]).map((k) => `\n${dailyBy === "model" ? short(k) : k}: ${money(r[k])}`).join("");
+    g += `<g><title>${esc(tip)}</title>`;
+    for (const k of keys) {
+      const v = r[k] || 0; if (!v) continue;
+      g += `<rect x="${x}" y="${y(acc + v)}" width="${bw}" height="${Math.max(0.5, y(acc) - y(acc + v))}" fill="${color(k)}"/>`; acc += v;
+    }
+    g += `</g>`;
+    if (i % 5 === 4 || i === rows.length - 1) g += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6e5a41">${r.day.slice(5)}</text>`;
+  });
+  $("#daily").innerHTML = g;
+  $("#daily-legend").innerHTML = keys.map((k) => `<span><i style="background:${color(k)}"></i>${esc(dailyBy === "model" ? short(k) : k)}</span>`).join("");
+}
+
+function inPeriod(q) {
+  if (!period) return true;
+  const start = new Date(Date.now() - (period - 1) * 86400000).toISOString().slice(0, 10);
+  return (q.created || "").slice(0, 10) >= start;
+}
+
+// ── horizontal bars: grouped totals ──
+function where() {
+  const sums = {};
+  for (const q of D.quests.filter(inPeriod)) {
+    if (groupBy === "model") { for (const [m, v] of Object.entries(q.models)) sums[short(m)] = (sums[short(m)] || 0) + v; continue; }
+    const k = groupBy === "story" ? (q.story || (q.ticket ? q.ticket + " (no story name)" : "no ticket")) : (q[groupBy] || "no " + groupBy);
+    sums[k] = (sums[k] || 0) + q.cost;
+  }
+  const rows = Object.entries(sums).sort((a, b) => b[1] - a[1]);
+  const total = rows.reduce((s, r) => s + r[1], 0), max = rows[0] ? rows[0][1] : 1;
+  $("#where").innerHTML = rows.slice(0, 12).map(([k, v]) => `<span class="name" title="${esc(k)}">${esc(k)}</span>
+    <span class="track"><span class="fill" style="width:${(100 * v / max).toFixed(1)}%;${groupBy === "model" ? "background:" + modelColor(k) : ""}"></span></span>
+    <span class="val">${money(v)}<small>${total ? Math.round(100 * v / total) : 0}%</small></span>`).join("") || `<span class="muted">No quests in this period.</span>`;
+  $("#where-hint").textContent = `${money(total)} across ${D.quests.filter(inPeriod).length} quests` + (rows.length > 12 ? `; the top 12 of ${rows.length} are shown.` : ".")
+    + (groupBy === "story" ? " A story's name comes from guild story, else from the Jira parent." : "");
+}
+
+// ── the evaluation table ──
+function worth() {
+  const groups = {};
+  for (const q of D.quests) {
+    const k = worthBy === "model" ? short(q.model || "unknown") : (q[worthBy] || "not set");
+    (groups[k] = groups[k] || []).push(q);
+  }
+  const rows = Object.entries(groups).map(([k, qs]) => {
+    const graded = qs.filter((q) => q.grade), ran = qs.filter((q) => q.first_pass !== null && q.first_pass !== undefined);
+    const cost = qs.reduce((s, q) => s + q.cost, 0);
+    return { k, n: qs.length, cost, avg: cost / qs.length,
+      grade: graded.length ? graded.reduce((s, q) => s + q.grade, 0) / graded.length : null, graded: graded.length,
+      fp: ran.length ? ran.filter((q) => q.first_pass).length / ran.length : null,
+      over: qs.reduce((s, q) => s + q.overruled, 0), dec: qs.reduce((s, q) => s + q.decisions, 0),
+      stalls: qs.reduce((s, q) => s + q.stalls, 0), min: qs.reduce((s, q) => s + q.minutes, 0) / qs.length };
+  }).sort((a, b) => b.cost - a.cost);
+  $("#worth").innerHTML = `<tr><th>${worthBy}</th><th class="n">Quests</th><th class="n">Total</th><th class="n">Per quest</th><th class="n">Your grade</th><th class="n">First pass</th><th class="n">Overruled</th><th class="n">Stalls</th><th class="n">Time open</th></tr>`
+    + rows.map((r) => `<tr><td>${esc(r.k)}</td><td class="n">${r.n}</td><td class="n">${money(r.cost)}</td><td class="n">${money(r.avg)}</td>
+      <td class="n">${r.grade == null ? '<span class="muted">not graded</span>' : `<span class="stars">${"★".repeat(Math.round(r.grade))}</span> ${r.grade.toFixed(1)} <span class="muted">(${r.graded})</span>`}</td>
+      <td class="n">${r.fp == null ? "-" : Math.round(r.fp * 100) + "%"}</td><td class="n">${r.over} of ${r.dec}</td><td class="n">${r.stalls}</td><td class="n">${hours(Math.round(r.min))}</td></tr>`).join("");
+}
+
+function scatter() {
+  const qs = D.quests.filter((q) => q.grade);
+  const W = 440, H = 260, L = 44, B = 30, T = 12, R = 12;
+  const max = Math.max(1, ...qs.map((q) => q.cost)) * 1.1;
+  const x = (v) => L + (v / max) * (W - L - R), y = (g) => H - B - ((g - 0.5) / 5) * (H - B - T);
+  let g = "";
+  for (let s = 1; s <= 5; s++) g += `<line x1="${L}" x2="${W - R}" y1="${y(s)}" y2="${y(s)}" stroke="#cdb88e"/><text x="${L - 8}" y="${y(s) + 4}" text-anchor="end" font-size="11" fill="#6e5a41">${s}</text>`;
+  const step = [1, 2, 5, 10, 20, 25, 50, 100].find((s) => max / s <= 5) || 200;
+  for (let v = 0; v <= max; v += step) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="#6e5a41">$${v}</text>`;
+  g += `<text x="${W - R}" y="${H - 10 - 14}" text-anchor="end" font-size="11" fill="#6e5a41">cost</text><text x="${L - 30}" y="${T + 2}" font-size="11" fill="#6e5a41">grade</text>`;
+  for (const q of qs) g += `<circle cx="${x(q.cost)}" cy="${y(q.grade)}" r="6" fill="${modelColor(q.model)}" fill-opacity=".8" stroke="#2d2216" stroke-width=".5"><title>${esc(`${q.slug}: ${money(q.cost)}, grade ${q.grade} (${short(q.model)})`)}</title></circle>`;
+  if (!qs.length) g += `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#6e5a41">No graded quests yet.</text>`;
+  $("#scatter").innerHTML = g;
+}
+
+function mix() {
+  const per = {};
+  for (const q of D.quests) for (const [m, c] of Object.entries(q.models)) {
+    const k = short(m); per[k] = per[k] || { cost: 0, t: { input: 0, output: 0, cache_write: 0, cache_read: 0 } }; per[k].cost += c;
+  }
+  // tokens per kind are per quest, not per model; share them by each model's cost in the quest
+  for (const q of D.quests) {
+    const total = Object.values(q.models).reduce((a, b) => a + b, 0) || 1;
+    for (const [m, c] of Object.entries(q.models)) for (const kind in q.tokens) per[short(m)].t[kind] += q.tokens[kind] * c / total;
+  }
+  const kinds = [["cache_read", "cache read", "#b9a06c"], ["cache_write", "cache write", "#b5651d"], ["input", "input", "#3f7fc4"], ["output", "output", "#8a4b12"]];
+  $("#mix").innerHTML = `<div class="legend" style="margin-bottom:8px">${kinds.map(([, n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("")}</div>`
+    + Object.entries(per).sort((a, b) => b[1].cost - a[1].cost).map(([m, v]) => {
+      const all = Object.values(v.t).reduce((a, b) => a + b, 0) || 1;
+      return `<div style="margin:0 0 10px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(m)}</span><span>${tok(all)} tokens · ${money(v.cost)}</span></div>
+        <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(90,60,30,.1)">${kinds.map(([k, n, c]) => `<span title="${n}: ${tok(v.t[k])}" style="width:${(100 * v.t[k] / all).toFixed(2)}%;background:${c}"></span>`).join("")}</div></div>`;
+    }).join("");
+}
+
+function folders() {
+  const rows = D.daily.folders, max = rows[0] ? rows[0].cost : 1;
+  $("#folders").innerHTML = rows.map((r) => `<span class="name" title="${esc(r.name)}">${esc(r.name)}</span>
+    <span class="track"><span class="fill" style="width:${(100 * r.cost / max).toFixed(1)}%;background:#9a8b72"></span></span><span class="val">${money(r.cost)}</span>`).join("")
+    || `<span class="muted">None in the last 30 days.</span>`;
+}
+
+function jev() {
+  const j = D.jev;
+  if (!j.calls) { $("#jev").innerHTML = `<p class="muted">No Jev calls logged yet. Every call is counted from now on, with its tokens, when a Jev scope is on (guild jev status).</p>`; return; }
+  const names = { waiting: "Is a session waiting for you? (board and global)", stop: "Why did a quest stop?", risk: "Risk score in the trial", test: "guild jev test" };
+  $("#jev").innerHTML = `<table class="num"><tr><th>Used for</th><th class="n">Calls</th><th class="n">Tokens</th><th class="n">Cost</th></tr>`
+    + Object.entries(j.by_why).sort((a, b) => b[1].calls - a[1].calls).map(([k, v]) => `<tr><td>${esc(names[k] || k)}</td><td class="n">${v.calls}</td><td class="n">${tok(v.input + v.output)}</td><td class="n">${v.cost == null ? "-" : money(v.cost)}</td></tr>`).join("")
+    + `</table><p class="hint">Counted since ${esc(j.since.slice(0, 10))}. ${j.priced ? "" : "No price set, so no dollars: add a jev entry to pricing.json."}</p>`;
+}
+
+const COLS = [["slug", "Quest"], ["ticket", "Ticket"], ["model", "Model"], ["cost", "Cost", 1], ["tokens", "Tokens", 1], ["minutes", "Time open", 1],
+  ["first_pass", "First pass", 1], ["trial", "Trial", 1], ["grade", "Grade", 1], ["pr", "PR", 1], ["created", "Started", 1]];
+function questsTable() {
+  const val = (q, k) => k === "tokens" ? Object.values(q.tokens).reduce((a, b) => a + b, 0) : q[k] ?? "";
+  const rows = [...D.quests].sort((a, b) => (val(a, sortKey) > val(b, sortKey) ? 1 : val(a, sortKey) < val(b, sortKey) ? -1 : 0) * sortDir);
+  $("#quests").innerHTML = `<tr>${COLS.map(([k, n, num]) => `<th class="${num ? "n" : ""} ${k === sortKey ? "sorted" : ""}" data-k="${k}">${n}</th>`).join("")}</tr>`
+    + rows.map((q) => `<tr><td>${esc(q.slug)}${q.archived ? ' <span class="muted">(closed)</span>' : ""}</td><td>${esc(q.ticket)}</td><td>${esc(short(q.model))}</td>
+      <td class="n">${money(q.cost)}${q.estimated ? '<span class="muted" title="priced with the default model">*</span>' : ""}</td><td class="n">${tok(val(q, "tokens"))}</td><td class="n">${hours(q.minutes)}</td>
+      <td class="n">${q.first_pass == null ? "-" : q.first_pass ? "yes" : "no"}</td><td class="n">${esc(q.trial || "-")}</td>
+      <td class="n">${q.grade ? q.grade + "/5" : "-"}</td><td class="n">${esc(q.pr || "-")}</td><td class="n">${esc((q.created || "").slice(5, 10))}</td></tr>`).join("");
+}
+
+function render() { tiles(); daily(); where(); worth(); scatter(); mix(); folders(); jev(); questsTable();
+  $("#at").textContent = `Updated ${D.at}. * priced with the default model because its own price is not set.`;
+  for (const [id, v] of [["#daily-by", dailyBy], ["#group-by", groupBy], ["#period", String(period)], ["#worth-by", worthBy]])
+    document.querySelectorAll(id + " button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+}
+
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest(".seg button");
+  if (b) {
+    const id = b.parentElement.id, v = b.dataset.v;
+    if (id === "daily-by") dailyBy = v; if (id === "group-by") groupBy = v; if (id === "period") period = Number(v); if (id === "worth-by") worthBy = v;
+    keep(); render(); return;
+  }
+  const th = ev.target.closest("#quests th");
+  if (th) { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : -1; sortKey = k; questsTable(); }
+});
+
+async function load() {
+  try { D = await (await fetch("/treasury.json", { cache: "no-store" })).json(); render(); }
+  catch (e) { $("#at").textContent = "The war table server is not answering. Run guild treasury again."; }
+}
+load();
+setInterval(load, 120000);
+</script>
+</body>
+</html>

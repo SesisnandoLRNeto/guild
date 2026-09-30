@@ -100,7 +100,9 @@ def cost_of(models):
     table, default = pricing()
     total, unknown = 0.0, []
     for model, tokens in models.items():
-        rates = table.get(model)
+        if model == "<synthetic>":
+            continue
+        rates = table.get(model) or table.get(re.sub(r"-\d{8}$", "", model))   # "claude-haiku-4-5-20251001"
         if rates is None:
             unknown.append(model)
             rates = table.get(default, {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.5})

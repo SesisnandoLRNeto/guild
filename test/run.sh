@@ -582,6 +582,10 @@ has "board pages get the guild theme" "$(curl -s "${url%/campaign}/b/$bq/$bid/co
 has "and the theme is served" "$(curl -s "${url%/campaign}/theme.css")" "parchment"
 has "board pages get the picture lightbox" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'src="/lightbox.js"'
 has "and the lightbox is served" "$(curl -s "${url%/campaign}/lightbox.js")" "requestFullscreen"
+has "the treasury page is served" "$(curl -s "${url%/campaign}/treasury")" "The Treasury"
+tj=$(curl -s "${url%/campaign}/treasury.json")
+has "with daily spend by scope" "$tj" '"by_scope"'
+has "and every quest's cost" "$tj" '"quests"'
 has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
 has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '>PR open</li>'
 
@@ -912,7 +916,7 @@ class H(http.server.BaseHTTPRequestHandler):
             a[q] = {"waiting": {"type": "noul", "noul": 0.93, "confidence": 0.9},
                     "kind": {"type": "choice", "choice": "asking", "confidence": 0.88},
                     "risk": {"type": "score", "score": 4, "confidence": 0.8}}[q]
-        out = json.dumps({"model": "jev-test", "answers": a}).encode()
+        out = json.dumps({"model": "jev-test", "answers": a, "usage": {"input_tokens": 300, "output_tokens": 20}}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
     def log_message(self, *a): pass
 http.server.ThreadingHTTPServer(("127.0.0.1", 4895), H).serve_forever()
@@ -937,6 +941,7 @@ is "quests off: no stop verdict" "$(python3 "$REPO/bin/jev.py" stop jq "$TMP/jq.
 "$GUILD" jev on quests >/dev/null
 has "quests on: a silent stop that asks becomes a question" "$(python3 "$REPO/bin/jev.py" stop jq "$TMP/jq.jsonl")" "asking Should I drop the old table"
 has "and the trial gets a risk score" "$(GUILD_QUEST=jq "$GUILD" jev risk 2>&1)" "risk 4"
+has "every Jev call is logged with its tokens" "$(cat "$GUILD_HOME/jev-usage.jsonl")" '"why": "risk", "slug": "jq", "model": "jev-test", "input": 300'
 "$GUILD" jev on global >/dev/null
 has "global scope adds a Stop hook to Claude's settings" "$(cat "$HOME/.claude/settings.json")" "jev.py hook"
 ls "$HOME"/.claude/settings.json.before-guild-jev-* >/dev/null 2>&1 && ok "after a backup" || ok "after a backup (there was no settings file)"
