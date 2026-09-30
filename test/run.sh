@@ -713,6 +713,25 @@ is "and tools run again" "$?" "0"
 rm -f "$GUILD_HOME/.cost-cache.json"; "$GUILD" close ef --force >/dev/null 2>&1
 
 
+# ── housekeeping ──────────────────────────────────────────────────────────────
+section "tidy"
+cp "$GUILD_HOME/events.log" "$TMP/events.before"
+{ printf '2000-01-02T10:00:00\tancient\tworking\tlong ago\n'; cat "$TMP/events.before"; } > "$GUILD_HOME/events.log"
+size=$(wc -c < "$GUILD_HOME/events.log" | tr -d ' ')
+echo "$size" > "$GUILD_HOME/.wait-cursor-test"
+"$GUILD" tidy >/dev/null
+has "old events move to a monthly file" "$(cat "$GUILD_HOME/events/2000-01.log")" "ancient"
+hasnt "and leave events.log" "$(cat "$GUILD_HOME/events.log")" "ancient"
+is "a reader's cursor still points at the end" "$(cat "$GUILD_HOME/.wait-cursor-test")" "$(wc -c < "$GUILD_HOME/events.log" | tr -d ' ')"
+has "history still sees the old events" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import eventlog;print(len(eventlog.lines()))")" "$(($(wc -l < "$TMP/events.before") + 1))"
+mkdir -p "$GUILD_HOME/quests/_archive/oldq-20000101120000/boards/1" "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots"
+echo '{"slug":"oldq"}' > "$GUILD_HOME/quests/_archive/oldq-20000101120000/meta.json"
+echo x > "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots/a.png"
+"$GUILD" tidy >/dev/null
+[ -f "$GUILD_HOME/quests/_archive/oldq-20000101120000/files.tar.gz" ] && [ ! -d "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots" ] && ok "an old closed quest gets its boards and shots packed" || bad "an old closed quest gets its boards and shots packed"
+[ -f "$GUILD_HOME/quests/_archive/oldq-20000101120000/meta.json" ] && ok "and keeps its meta for history" || bad "and keeps its meta for history"
+rm -rf "$GUILD_HOME/quests/_archive/oldq-20000101120000" "$GUILD_HOME/.wait-cursor-test"
+
 # ── backend impact: data model, impact, business rules ───────────────────────
 section "backend impact"
 RB="$TMP/repo-b"; mkdir -p "$RB/src/main/resources/db/changelog/changes" "$RB/src/main/java/com/acme/pay/domain/entity" \

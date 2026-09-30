@@ -17,6 +17,8 @@ import os
 import re
 import sys
 import time
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import eventlog  # noqa: E402  (events.log plus the months tidy.py moved out)
 
 GUILD_HOME = os.environ.get("GUILD_HOME", os.path.expanduser("~/.guild"))
 QUESTS = os.path.join(GUILD_HOME, "quests")
@@ -50,7 +52,7 @@ def sources(slug):
             except OSError:
                 pass
     try:
-        events = [l for l in open(os.path.join(GUILD_HOME, "events.log")).read().splitlines() if f"\t{slug}\t" in l]
+        events = [l for l in eventlog.lines() if f"\t{slug}\t" in l]
         yield "events", "\n".join(events)
     except OSError:
         pass

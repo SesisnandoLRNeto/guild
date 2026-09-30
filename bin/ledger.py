@@ -17,6 +17,8 @@ from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import checks  # noqa: E402  (bin/checks.py: the acceptance contract and its runs)
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import eventlog  # noqa: E402  (events.log plus the months tidy.py moved out)
 
 GUILD_HOME = os.environ.get("GUILD_HOME", os.path.expanduser("~/.guild"))
 QUESTS = os.path.join(GUILD_HOME, "quests")
@@ -289,9 +291,8 @@ def show_one(matches, slug):
                 print(f"  {title[:60]}: {picked}  {DIM}{d.get('message','')[:50]}{RESET}")
             else:
                 print(f"  {title[:60]}: {DIM}still waiting{RESET}")
-    events = os.path.join(GUILD_HOME, "events.log")
-    if os.path.exists(events):
-        mine = [l for l in open(events) if f"\t{q['slug']}\t" in l][-8:]
+    if True:
+        mine = [l + "\n" for l in eventlog.lines() if f"\t{q['slug']}\t" in l][-8:]
         if mine:
             print(f"\n{BOLD}events{RESET}")
             for l in mine:
@@ -349,8 +350,7 @@ def cmd_retro(args):
     rows = [r for r in rows if not cutoff or (created_at(r) or datetime.min) >= cutoff]
     rows.sort(key=lambda r: r["meta"].get("created", ""))
 
-    events = os.path.join(GUILD_HOME, "events.log")
-    lines = open(events).read().splitlines() if os.path.exists(events) else []
+    lines = eventlog.lines()
 
     report = {"window": args.get("since") or "14d", "quests": [], "totals": {}}
     for q in rows:

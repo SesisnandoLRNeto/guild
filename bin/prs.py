@@ -38,7 +38,9 @@ def quest_prs(days=7):
     """{slug: pr url} for live quests and those closed in the last week."""
     events = {}
     try:
-        for line in open(os.path.join(GUILD_HOME, "events.log")):
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import eventlog
+        for line in eventlog.lines():
             parts = line.rstrip("\n").split("\t")
             if len(parts) >= 4:
                 m = PR.search(parts[3])

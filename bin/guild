@@ -70,6 +70,7 @@ guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the cam
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild tidy [--dry-run]              move old events to monthly files, pack old closed quests (runs monthly on its own)
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
@@ -1343,6 +1344,7 @@ case "${1:-}" in
   campaign) shift; cmd_campaign "$@" ;;
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
+  tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
   docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   harnesses) harness list ;;

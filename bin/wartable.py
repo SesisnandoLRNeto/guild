@@ -780,6 +780,12 @@ def refresh_prs_forever():
             sweep()
         except Exception:
             pass
+        try:                                   # once a month: rotate old events, pack old closed quests
+            import contextlib, io, tidy
+            with contextlib.redirect_stdout(io.StringIO()):
+                tidy.maybe()
+        except Exception:
+            pass
         time.sleep(120)
 
 

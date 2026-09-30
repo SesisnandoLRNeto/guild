@@ -196,8 +196,8 @@ def quests():
     import prs as prmod
     pr_of = prmod.by_slug()
     names, parents = stories()
-    events = os.path.join(GUILD_HOME, "events.log")
-    lines = [l.split("\t") for l in open(events).read().splitlines()] if os.path.exists(events) else []
+    import eventlog
+    lines = [l.split("\t") for l in eventlog.lines()]
     out = []
     for d in ledger.quest_dirs():
         try:
