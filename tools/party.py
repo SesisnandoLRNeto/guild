@@ -465,18 +465,19 @@ class Pen:
             self.d.canvas.put(col + i, row, ch, color or self.color)
 
     def erase(self, pts):
-        """Clear the dots inside a polygon, so what is in front hides what is behind."""
+        """Clear the dots inside a polygon, so what is in front hides what is behind.
+        A scanline fill: per dot row, where the edges cross it, cleared in pairs."""
         poly = [self.dot(x, y) for x, y in pts]
-        xs, ys = [p[0] for p in poly], [p[1] for p in poly]
-        for dy in range(int(min(ys)), int(max(ys)) + 1):
-            for dx in range(int(min(xs)), int(max(xs)) + 1):
-                inside, j = False, len(poly) - 1
-                for i in range(len(poly)):
-                    (xi, yi), (xj, yj) = poly[i], poly[j]
-                    if (yi > dy) != (yj > dy) and dx < (xj - xi) * (dy - yi) / (yj - yi) + xi:
-                        inside = not inside
-                    j = i
-                if inside:
+        edges = list(zip(poly, poly[1:] + poly[:1]))
+        ys = [p[1] for p in poly]
+        bits = self.d.bits
+        for dy in range(int(math.ceil(min(ys))), int(max(ys)) + 1):
+            if not any((x // 2, dy // 4) in bits for x in range(0, self.d.canvas.w * 2, 2)):
+                continue
+            xs = sorted(xi + (dy - yi) * (xj - xi) / (yj - yi)
+                        for (xi, yi), (xj, yj) in edges if (yi > dy) != (yj > dy))
+            for x0, x1 in zip(xs[::2], xs[1::2]):
+                for dx in range(int(math.ceil(x0)), int(x1) + 1):
                     self.d.unplot(dx, dy)
 
 
