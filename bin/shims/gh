@@ -35,6 +35,22 @@ if [ "$is_pr_create" = 1 ] && [ -n "${GUILD_QUEST:-}" ]; then
     echo "guild: blocked. The trial ran on ${sha:0:8} but HEAD is ${head:0:8}. Run the trial again for the new commits." >&2
     exit 2
   fi
+  # the generated contract section, for this contract and this HEAD (hand-written bodies drift)
+  body_file="$(mktemp)"; prev=""
+  for arg in "$@"; do
+    case "$prev" in
+      --body|-b) printf '%s' "$arg" >> "$body_file" ;;
+      --body-file|-F) [ "$arg" != "-" ] && [ -f "$arg" ] && cat "$arg" >> "$body_file" ;;
+    esac
+    case "$arg" in --body=*) printf '%s' "${arg#--body=}" >> "$body_file" ;; --body-file=*) cat "${arg#--body-file=}" >> "$body_file" 2>/dev/null || true ;; esac
+    prev="$arg"
+  done
+  if ! why=$(python3 "$(dirname "$self")/prbody.py" verify "$GUILD_QUEST" "$body_file"); then
+    rm -f "$body_file"
+    echo "guild: blocked. $why. Pass the body with --body or --body-file (not --fill)." >&2
+    exit 2
+  fi
+  rm -f "$body_file"
   if [ "$result" = "skip" ] && ! printf '%s\0' "$@" | grep -qz "Trial: skipped"; then
     echo "guild: blocked. The trial was skipped ($note). Put a line 'Trial: skipped - $note' in the PR body." >&2
     exit 2

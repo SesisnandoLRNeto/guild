@@ -200,6 +200,9 @@ def main():
     if not a:
         raise SystemExit(__doc__)
     cmd = a[0]
+    if cmd == "count":                       # how many acceptance items a brief file holds
+        print(len(parse_brief(open(a[1]).read())))
+        return
     if cmd == "seal":
         return cmd_seal(a[1])
     if cmd == "reseal":

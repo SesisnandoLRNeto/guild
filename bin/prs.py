@@ -80,7 +80,7 @@ def token_for(owner):
 def checks(rollup):
     states = [(c.get("conclusion") or c.get("state") or "").upper() for c in rollup or []]
     if not states:
-        return ""
+        return "none"          # not one check reported: CI did not run (a conflict, a skipped workflow)
     if any(s in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED") for s in states):
         return "failing"
     if any(s in ("", "PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED") for s in states):
@@ -112,10 +112,22 @@ def refresh(force=False):
         entry = c.get(url)
         if force or not entry or time.time() - entry.get("at", 0) > TTL:
             try:
-                c[url] = fetch(url)
+                c[url] = dict(fetch(url), warned=(entry or {}).get("warned", ""))
             except (OSError, ValueError, subprocess.SubprocessError) as e:
                 c[url] = {"error": str(e)[:200], "at": time.time()}
         c[url]["slug"] = slug
+        p = c[url]
+        # an open PR where no CI ran looks quiet, not red: say so once per state
+        if p.get("state") in ("open", "draft") and p.get("checks") == "none" and p.get("warned") != "none":
+            p["warned"] = "none"
+            try:
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import notify
+                notify.send(f"guild: no CI ran on {slug}", f"PR #{p.get('number')} has no checks at all. A conflict or a skipped workflow; it is not green.", url)
+            except Exception:
+                pass
+        elif p.get("checks") not in ("none", None) and p.get("warned") == "none":
+            p["warned"] = ""
     tmp = CACHE + ".tmp"
     json.dump(c, open(tmp, "w"), indent=1)
     os.replace(tmp, CACHE)
@@ -141,7 +153,7 @@ def main():
             if p.get("error"):
                 print(f"{slug:<28} {p['url']}  (could not read: {p['error']})")
             else:
-                extra = ", ".join(x for x in (p["review"], "checks " + p["checks"] if p["checks"] else "") if x)
+                extra = ", ".join(x for x in (p["review"], ("NO CI RUN" if p["checks"] == "none" else "checks " + p["checks"]) if p["checks"] else "") if x)
                 print(f"{slug:<28} PR #{p['number']:<5} {p['state']:<7} {extra}")
     else:
         raise SystemExit(__doc__)

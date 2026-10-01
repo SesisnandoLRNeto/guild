@@ -299,7 +299,8 @@ function cardHtml(c) {
     const pc = { draft: "#8a8f98", open: "#2e86c1", merged: "#8e44ad", closed: "#7c7468" }[c.pr.state] || "#2e86c1";
     pills.push(`<span class="label" style="--lc:${pc}" title="${esc(c.pr.title || "")}">PR #${c.pr.number} · ${esc(c.pr.state)}</span>`);
     if (c.pr.review) pills.push(`<span class="label" style="--lc:${c.pr.review === "approved" ? "#27ae60" : c.pr.review === "changes requested" ? "#c0392b" : "#b7950b"}">${esc(c.pr.review)}</span>`);
-    if (c.pr.checks) pills.push(`<span class="label" style="--lc:${{ passing: "#27ae60", failing: "#c0392b", running: "#b7950b" }[c.pr.checks]}">checks ${esc(c.pr.checks)}</span>`);
+    if (c.pr.checks === "none") pills.push(`<span class="label" style="--lc:#c0392b" title="Not one CI check reported on this PR: a conflict or a skipped workflow. It is not green.">no CI run</span>`);
+    else if (c.pr.checks) pills.push(`<span class="label" style="--lc:${{ passing: "#27ae60", failing: "#c0392b", running: "#b7950b" }[c.pr.checks]}">checks ${esc(c.pr.checks)}</span>`);
   }
   const labels = pills.length ? `<div class="labels">${pills.join("")}</div>` : "";
   const tone = sc === "bad" ? "bad" : sc === "turn" ? "turn" : sc === "working" ? "working" : "";

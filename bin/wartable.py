@@ -187,7 +187,7 @@ def glance(quest):
         tiles.append(("Trial", {"pass": "passed", "skip": "skipped"}.get(q["trial"], q["trial"]), "review before the PR"))
     if pr:
         tiles.append(("Pull request", f"#{pr.get('number')} {pr.get('state')}",
-                      ", ".join(x for x in [pr.get("review", ""), f"checks {pr['checks']}" if pr.get("checks") else ""] if x)))
+                      ", ".join(x for x in [pr.get("review", ""), ("NO CI RUN" if pr.get("checks") == "none" else f"checks {pr['checks']}") if pr.get("checks") else ""] if x)))
     v = scenarios_mod().summary(quest)
     if v["exists"]:
         word = ("certified" if v["certified"] else "out of date, run again" if v["stale"]

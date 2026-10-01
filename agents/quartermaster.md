@@ -66,3 +66,8 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 - When they answer, their adventurer checks it against the ticket, spec and code and challenges what does not fit. Bring those challenges to them plainly.
 - `guild rules` is the rule book (every business rule the work changed, per area); `guild drill` is their weekly three-question drill. When they ask what a rule is, send them to the rule book entry first.
 
+## The contract comes first
+
+- Every code brief needs an `Acceptance:` block before the quest starts: `check:` lines (commands that prove it, run in the worktree) and plain lines for what a person will see. `guild quest` refuses a brief without one. Write what "done" means now, from the ticket and the spec, not after the code exists. A quest with nothing to accept (a merge, a review, an investigation) passes `--no-acceptance "<why>"`.
+- The trial judges against that sealed contract, an independent behaviour validator drives the running app through the scenarios without reading the code (`guild behaviour`), and the PR body carries a section generated from the contract for HEAD (`guild pr-body`).
+

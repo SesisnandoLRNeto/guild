@@ -112,6 +112,8 @@ guild up ~/Workspace
 | `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
 | `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
+| `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
+| `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
@@ -266,7 +268,7 @@ Once a month the war table server runs `guild tidy`: events older than 30 days m
 ## Tests
 
 ```sh
-./test/run.sh      # 350 checks, about 3 minutes, no model calls
+./test/run.sh      # 369 checks, about 3 minutes, no model calls
 ```
 
 The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table and the docket, the trial gate in both forms, checks and grades, costs and the retro, budget caps, helpers, lessons, revive and close. Fakes stand in for everything outside: a fake Jira, a fake Jev, a fake ntfy, a fake GitHub PR cache, and a fake `ssh` that runs the "remote" guild in its own home. `test/cockpit.py` drives a real tmux client in a pty to test keys and clicks. It also runs in CI on every push.
@@ -479,6 +481,14 @@ It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks su
 ## The trial
 
 A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild trial` recorded a result for the current HEAD. A new commit makes the trial stale. A skipped trial needs a reason, and the PR body must say `Trial: skipped - <reason>`.
+
+**The contract comes first.** `guild quest` refuses a brief with no `Acceptance:` block, before any worktree exists: what "done" means is written from the ticket and the spec, not described after the code. The block is sealed with a hash, the trial judges against it, and a quest with nothing to accept (a merge, a review) starts with `--no-acceptance "<why>"`, recorded.
+
+**An independent behaviour check.** The reviewer agent and the project checks both look at what the implementing agent wrote, so a test that passes against a mock, or a stub that hides a defect, gets past both. `guild behaviour` starts a separate Claude run that cannot read the code: it gets only the scenarios, its file tools are off and it starts in an empty folder, it starts the app from the quest's worktree and drives each scenario against the real local API, and anything that needs a mock is "blocked", never "pass". Afterwards guild reads that run's own session log; a run that looked at a diff or opened a source file is marked tainted and does not count. `guild trial pass` needs a clean run on the current commit with no fail (`--no-behaviour "<why>"` is the recorded way out).
+
+**A PR body that cannot drift.** `gh pr create` needs the section `guild pr-body` prints: the sealed contract, each check's result on HEAD, the behaviour check and the checklist state, stamped with the contract hash and the commit. The adventurer writes the rest; the gate refuses a body without a current section.
+
+**CI that did not run is red.** An open PR with no checks at all (a conflict, a skipped workflow) shows "no CI run" on the campaign board and the wrap-up, says NO CI RUN in `guild prs`, and sends one notification, instead of looking quiet.
 
 ## Folder trust
 

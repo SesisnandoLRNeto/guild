@@ -73,6 +73,8 @@ guild validate <slug>               the quest's end-to-end checklist (run it bef
 guild rules                         the rule book: every business rule the work changed, per area
 guild drill                         this week's three-question drill on those rules (you answer first)
 guild why <slug>                    the quest's Why card: show it, or put it on the docket again (open)
+guild pr-body [slug]                the PR's contract section (acceptance, behaviour, checklist) for HEAD; gh pr create needs it
+guild behaviour [slug]              an independent validator drives the running app through the scenarios (never reads the code)
 guild tidy [--dry-run]              move old events to monthly files, pack old closed quests (runs monthly on its own)
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
@@ -648,7 +650,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
-  local machine="" headless="" all_args=("$@")
+  local machine="" headless="" noaccept="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -664,6 +666,7 @@ cmd_quest() {
       --headless) headless=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
       --no-why) export GUILD_NO_WHY=1; shift ;;
+      --no-acceptance) noaccept="$2"; [ -n "$noaccept" ] || die "--no-acceptance needs a reason"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
       --branch) branch="$2"; shift 2 ;;
@@ -704,6 +707,21 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   [ -n "$repo" ] || die "quest needs --repo"
   local hbin; hbin=$(harness bin "$harness") || exit 1
   command -v "$hbin" >/dev/null || die "$hbin is not installed"
+
+  [ -n "$noaccept" ] || noaccept="${GUILD_NO_ACCEPTANCE:-}"
+  # The contract comes before the code: read the brief now, and refuse one with no acceptance
+  # before any worktree or folder exists (helpers inherit their parent's; a reason opts out).
+  local brief_tmp="$GUILD_HOME/.brief-$slug-$$"
+  if [ -n "$brief" ]; then cp "$brief" "$brief_tmp"; else cat > "$brief_tmp"; fi
+  [ -s "$brief_tmp" ] || { rm -f "$brief_tmp"; die "empty brief"; }
+  if [ -z "$parent" ] && [ -z "$noaccept" ] && [ "$(python3 "$GUILD_REPO/bin/checks.py" count "$brief_tmp")" = 0 ]; then
+    rm -f "$brief_tmp"
+    die "the brief has no Acceptance block, so there is no contract to judge the work against. Add one before any code:
+     Acceptance:
+     - check: <a command that proves it, run in the worktree>
+     - <what a person will see, in plain words>
+     A quest with nothing to accept (a merge, a review, an investigation)? guild quest $slug ... --no-acceptance \"<why>\""
+  fi
   # A tier names the kind of work (plan, build, deep, light); the harness maps it to a model.
   if [ -z "$model" ] && [ -n "$tier" ]; then
     model=$(harness tier "$harness" "$tier") || exit 1
@@ -756,8 +774,7 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   carry_toolchain "$repo" "$wt"
 
   mkdir -p "$q"
-  if [ -n "$brief" ]; then cp "$brief" "$q/brief.md"; else cat > "$q/brief.md"; fi
-  [ -s "$q/brief.md" ] || die "empty brief"
+  mv "$brief_tmp" "$q/brief.md"
 
   local ident name="" email="" ghu=""
   ident=$(identity_for "$repo")
@@ -768,7 +785,7 @@ import json
 json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$branch",
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
-           "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent",
+           "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -1228,7 +1245,8 @@ cmd_trial() {
   local slug; slug=$(current_quest)
   [ -n "$slug" ] || die "trial must run inside a quest (GUILD_QUEST not set)"
   need_quest "$slug"
-  local result="${1:-}" note="${2:-}" sha
+  local result="${1:-}" note="${2:-}" sha nobehaviour=""
+  if [ "${2:-}" = --no-behaviour ]; then nobehaviour="${3:-}"; [ -n "$nobehaviour" ] || die "--no-behaviour needs a reason"; note="${4:-}"; fi
   case "$result" in
     pass) ;;
     skip) [ -n "$note" ] || die "skip needs a reason, e.g. guild trial skip \"spec only, no code\"" ;;
@@ -1238,6 +1256,12 @@ cmd_trial() {
   if [ "$result" = pass ]; then
     local why
     why=$(python3 "$GUILD_REPO/bin/checks.py" status "$(qdir "$slug")" "$sha") || die "trial refused: $why"
+    if [ -z "$nobehaviour" ]; then
+      why=$(python3 "$GUILD_REPO/bin/behaviour.py" status "$slug" "$sha") || die "trial refused: $why
+     Nothing a validator can run (docs, config)? guild trial pass --no-behaviour \"<why>\""
+    else
+      note="${note:+$note; }behaviour check skipped: $nobehaviour"
+    fi
   fi
   python3 -c "import json,sys;json.dump({'sha':sys.argv[1],'result':sys.argv[2],'note':sys.argv[3],'at':sys.argv[4]},open(sys.argv[5],'w'),indent=2)" \
     "$sha" "$result" "$note" "$(now)" "$(qdir "$slug")/trial.json"
@@ -1355,6 +1379,8 @@ case "${1:-}" in
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
+  pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
+  behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
     echo "http://127.0.0.1:$port/$page"; [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/$page" 2>/dev/null || true ;;
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;

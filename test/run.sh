@@ -16,6 +16,7 @@ export GUILD_TMUX_SOCKET="guild-test"
 export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
 export GUILD_NO_WHY="1"          # the Why card has its own test below
+export GUILD_NO_ACCEPTANCE="test fixture"   # briefs here are one-liners; the refusal has its own test
 export GUILD_NO_NOTIFY="1"       # nor a notification
 export GUILD_NO_PR_SYNC="1"      # nor a call to GitHub
 export PATH="$TMP/stub:$PATH"
@@ -149,12 +150,17 @@ has "other gh commands pass through" "$(run_shim --version)" "REAL GH"
 has "a PR with no trial is blocked" "$(run_shim pr create --title x)" "blocked"
 (cd "$WT" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m work)
 (cd "$WT" && "$GUILD" trial pass "checks green" >/dev/null)
-has "a PR after a passed trial goes through" "$(run_shim pr create --title x)" "REAL GH"
+has "a PR body without the generated contract section is blocked" "$(run_shim pr create --title x --body 'my own words')" "no guild contract section"
+body=$(cd "$WT" && "$GUILD" pr-body)
+has "guild pr-body writes the contract section for HEAD" "$body" "head=$(git -C "$WT" rev-parse HEAD)"
+has "a PR after a passed trial, with the section, goes through" "$(run_shim pr create --title x --body "$body")" "REAL GH"
 (cd "$WT" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m more)
-has "a stale trial blocks the PR" "$(run_shim pr create --title x)" "HEAD is"
+has "a stale trial blocks the PR" "$(run_shim pr create --title x --body "$body")" "HEAD is"
 (cd "$WT" && "$GUILD" trial skip "docs only" >/dev/null)
-has "a skipped trial needs the note in the body" "$(run_shim pr create --body hello)" "Trial: skipped"
-has "with the note it goes through" "$(run_shim pr create --body 'Trial: skipped - docs only')" "REAL GH"
+has "an old contract section is refused after new commits" "$(run_shim pr create --body "$body")" "run \`guild pr-body\` again"
+body=$(cd "$WT" && "$GUILD" pr-body)
+has "the section carries the skipped trial's note" "$body" "Trial: skipped - docs only"
+has "with it the PR goes through" "$(run_shim pr create --body "$body")" "REAL GH"
 out=$(cd "$WT" && "$GUILD" trial skip 2>&1); has "skip without a reason is refused" "$out" "reason"
 echo '{"tool_input":{"command":"gh pr create"}}' | "$REPO/hooks/pr-gate.sh" >/dev/null 2>&1
 is "the claude hook agrees with the shim" "$?" "2"
@@ -715,6 +721,46 @@ echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | GUILD_QUEST=ef "$R
 is "and tools run again" "$?" "0"
 rm -f "$GUILD_HOME/.cost-cache.json"; "$GUILD" close ef --force >/dev/null 2>&1
 
+
+# ── the contract first, an independent behaviour check, CI that did not run ───
+section "contract and behaviour"
+out=$(echo "make it faster" | GUILD_NO_ACCEPTANCE= "$GUILD" quest noacc --repo "$REPO_A" 2>&1)
+has "a brief with no Acceptance block is refused" "$out" "no Acceptance block"
+[ -d "$GUILD_HOME/quests/noacc" ] && bad "and nothing is left behind" "quest folder exists" || ok "and nothing is left behind"
+printf 'Intent: x\nAcceptance:\n- check: true\n- the page shows it\n' | GUILD_NO_ACCEPTANCE= "$GUILD" quest beh --repo "$REPO_A" >/dev/null 2>&1
+is "with one it starts, and the contract is sealed" "$(python3 -c "import json;print(len(json.load(open('$GUILD_HOME/quests/beh/acceptance.json'))['items']))")" "2"
+QB="$GUILD_HOME/quests/beh"; WTB=$(python3 -c "import json;print(json.load(open('$QB/meta.json'))['worktree'])")
+git -C "$WTB" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
+"$GUILD" check beh >/dev/null 2>&1
+echo '{"title":"beh","groups":[{"id":"A","title":"x","scenarios":[{"id":"A1","do":"call it","cmd":"curl -s localhost:1/x","expect":"200"}]}]}' > "$QB/scenarios.json"
+out=$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" trial pass "x" 2>&1)
+has "with scenarios, the trial needs the behaviour check" "$out" "no behaviour check yet"
+# a stub stands in for the validator's Claude run: it answers, and writes a session log that read a diff
+mkdir -p "$TMP/stubclaude"; cat > "$TMP/stubclaude/claude" <<'SH'
+#!/usr/bin/env bash
+sid=""; prev=""; for a in "$@"; do [ "$prev" = --session-id ] && sid="$a"; prev="$a"; done
+d="$HOME/.claude/projects/$(pwd | sed 's#/#-#g; s#\.#-#g')"; mkdir -p "$d"
+if [ -n "${STUB_PEEK:-}" ]; then echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git diff main"}}]}}' > "$d/$sid.jsonl"
+else echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"curl -s localhost:8081/x"}}]}}' > "$d/$sid.jsonl"; fi
+printf '{"result": "Done.\\n{\\"results\\": [{\\"id\\": \\"A1\\", \\"verdict\\": \\"%s\\", \\"observed\\": \\"got 200\\"}]}"}' "${STUB_VERDICT:-pass}"
+SH
+chmod +x "$TMP/stubclaude/claude"
+(cd "$WTB" && STUB_VERDICT=fail GUILD_BEHAVIOUR_CLAUDE="$TMP/stubclaude/claude" GUILD_QUEST=beh "$GUILD" behaviour >/dev/null 2>&1)
+has "the validator's verdicts are kept for the commit" "$(cat "$QB/behaviour.json")" '"verdict": "fail"'
+has "a fail keeps the trial shut" "$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" trial pass x 2>&1)" "the behaviour check failed A1"
+(cd "$WTB" && STUB_PEEK=1 GUILD_BEHAVIOUR_CLAUDE="$TMP/stubclaude/claude" GUILD_QUEST=beh "$GUILD" behaviour >/dev/null 2>&1)
+has "a run that read the diff is caught from its own session log" "$(cat "$QB/behaviour.json")" '"git diff main"'
+has "and does not count" "$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" trial pass x 2>&1)" "not independent"
+(cd "$WTB" && GUILD_BEHAVIOUR_CLAUDE="$TMP/stubclaude/claude" GUILD_QUEST=beh "$GUILD" behaviour >/dev/null 2>&1)
+has "a clean, green run lets the trial pass" "$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" trial pass x 2>&1)" "trial pass recorded"
+has "the PR section shows the contract and the behaviour check" "$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" pr-body)" "A1: **pass**. got 200"
+git -C "$WTB" -c user.email=t@t -c user.name=t commit -q --allow-empty -m more
+"$GUILD" check beh >/dev/null 2>&1
+has "a new commit needs the behaviour check again" "$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" trial pass x 2>&1)" "run \`guild behaviour\` again"
+has "or a recorded reason to skip it" "$(cd "$WTB" && GUILD_QUEST=beh "$GUILD" trial pass --no-behaviour "config only" x 2>&1)" "trial pass recorded"
+has "and the reason is kept" "$(cat "$QB/trial.json")" "behaviour check skipped: config only"
+"$GUILD" close beh --force >/dev/null 2>&1
+is "an open PR with no checks at all reads as no CI run" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import prs;print(prs.checks([]))")" "none"
 
 # ── business rules: the Why card, the rule book, the weekly drill ─────────────
 section "why card, rule book, drill"
