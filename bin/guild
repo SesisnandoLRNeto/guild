@@ -70,6 +70,7 @@ guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the cam
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild decide <spec.json>            a decision page: options as cards, cases, flows, screens, numbers (war-table skill)
 guild rules                         the rule book: every business rule the work changed, per area
 guild drill                         this week's three-question drill on those rules (you answer first)
 guild why <slug>                    the quest's Why card: show it, or put it on the docket again (open)
@@ -1370,6 +1371,9 @@ case "${1:-}" in
   trial) shift; cmd_trial "$@" ;;
   board) shift; cmd_board "$@" ;;
   ask) shift; cmd_ask "$@" ;;
+  decide) shift; d_slug=$(current_quest); [ -n "$d_slug" ] || { d_slug=quartermaster; ensure_pseudo_quest "$d_slug" "the fleet"; }
+          [ -f "${1:-}" ] || die "usage: guild decide <spec.json>  (the war-table skill shows the format)"
+          python3 "$GUILD_REPO/bin/decide.py" open "$d_slug" "$1" ;;
   calm) shift; cmd_calm "$@" ;;
   revive) shift; cmd_revive "$@" ;;
   pool) shift; cmd_pool "$@" ;;

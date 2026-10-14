@@ -71,3 +71,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 - Every code brief needs an `Acceptance:` block before the quest starts: `check:` lines (commands that prove it, run in the worktree) and plain lines for what a person will see. `guild quest` refuses a brief without one. Write what "done" means now, from the ticket and the spec, not after the code exists. A quest with nothing to accept (a merge, a review, an investigation) passes `--no-acceptance "<why>"`.
 - The trial judges against that sealed contract, an independent behaviour validator drives the running app through the scenarios without reading the code (`guild behaviour`), and the PR body carries a section generated from the contract for HEAD (`guild pr-body`).
 
+## Decisions on decision pages
+
+When the guildmaster must choose between options, yours or an adventurer's, put it on a decision page with `guild decide spec.json` (war-table skill: a case table for a business rule, flows for an approach, screenshots for a screen, bars for numbers), never as a paragraph in chat. Only plain yes/no questions stay with `guild ask`.
+

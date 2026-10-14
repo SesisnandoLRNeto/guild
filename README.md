@@ -114,6 +114,7 @@ guild up ~/Workspace
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
+| `guild decide <spec.json>` | A decision page: options as cards, case table, flows, screens, numbers |
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
@@ -135,6 +136,8 @@ guild ask "Ship the chooser now or after the icons?" \
 The agent then blocks on `guild board wait <id>` until you answer, and picks up your choice, your notes and your screenshots.
 
 Terminal text cannot show a UI change or three variants side by side. So an adventurer can write an HTML page plus a `decisions.json` and put it on the war table: a local server (127.0.0.1 only) that wraps the page with a side panel for the options, a message and images you paste or drop. Your answer is written to the quest folder and the waiting adventurer picks it up and continues. Use it for decisions, and after a feature for the wrap-up report: before and after screens, evidence, performance, pain points, and the reasons behind each choice. Start pages from `web/board-template.html`. Click any picture on a board page to open it large: zoom with the wheel or `+`/`-`, drag to move, arrows for the next picture, `F` for full screen.
+
+**Decision pages that show what each choice leads to.** `guild decide spec.json` turns a choice into a page built for judging it: the question and why it must be decided now, the suggestion with its reason, the options as cards (effort, risk, whether it can be undone, pros and cons, what happens next, what it rules out), then the visual that fits the decision: for a business rule, a table of real cases with each option's exact outcome (required, so two readers never understand one rule two ways); for an approach, a flow per option next to today's, and a comparison with the best value per row marked; for a screen, real screenshots side by side; for speed, cost or time, a bar chart per measure. Besides the options you can answer **Explain more** (questions go back, nothing changes) or **My own answer**.
 
 **Diagrams and screenshots.** Write Mermaid inside `<pre class="mermaid">` in a board page and it renders, offline: the war table serves a pinned Mermaid that `install.sh` fetched once, so a state machine, a flow or a sequence can be the options themselves, approved before any code exists. `guild shot <url> --name before|after` takes screenshots one way every time (headless Chrome, fixed viewport, throwaway profile) so before and after pairs can be compared. Chrome starts cold on each shot, so one takes about 20 seconds.
 
