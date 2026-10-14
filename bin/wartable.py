@@ -338,8 +338,11 @@ def answer_board(quest, board, payload):
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import why
         card = why.save(quest, decision)
+        as_line = lambda c: next((str(c.get(k)) for k in ("rule", "what") if c.get(k)), "")[:100]
         with open(EVENTS, "a") as f:
-            f.write(f"{now()}\t{quest}\twhy\t{card.get('rule', '')[:100]}\n")
+            f.write(f"{now()}\t{quest}\twhy\t{'skipped' if why.skipped(card) else as_line(card)}\n")
+        if why.skipped(card):
+            return                               # nothing written: nothing for the adventurer to check
         text = ("The guildmaster wrote the Why card for this quest (also in why.json):\n" + why.as_text(card)
                 + "\nCheck it against the ticket, the spec and the code before you go on. Where something contradicts "
                   "it or is missing, raise up to three short challenges on the war table (guild ask), each quoting the "

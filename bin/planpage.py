@@ -79,8 +79,9 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
     minute = "".join(f'<div class="m {k}"><b>{label}</b><p>{md_inline(first_lines(parts.get(k, "")), auto_code=True)}</p></div>'
                      for k, label in (("pain", "The pain"), ("cause", "Why it happens"), ("expect", "What you should expect")))
     if why_card:
+        import why
         mine = "".join(f'<div class="row"><b>{esc(label)}</b><span>{esc(why_card.get(k) or "(left empty)")}</span></div>'
-                       for k, label in (("pain", "Pain"), ("rule", "Rule"), ("decision", "Decision"), ("impact", "Impact"), ("future", "Future")))
+                       for k, label, _, _ in why.fields_for(why_card))
         theirs = "".join(f'<div class="row"><b>{label}</b><span>{md_inline(first_lines(parts.get(k, ""), 400), auto_code=True)}</span></div>'
                          for k, label in (("pain", "Pain"), ("cause", "Why"), ("after", "What changes"), ("expect", "Expect"), ("scope", "Not included")))
         compare = ('<h2>Your Why card and the plan, side by side</h2><p class="lead2">Read them together. Where they '

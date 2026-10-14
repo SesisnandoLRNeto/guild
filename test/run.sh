@@ -852,6 +852,13 @@ wb=$(ls "$GUILD_HOME/quests/whyq/boards" | grep '^why-' | head -1)
 [ -n "$wb" ] && ok "a new quest puts a Why card on the docket" || bad "a new quest puts a Why card on the docket" "no why board"
 has "the card asks the five questions" "$(cat "$GUILD_HOME/quests/whyq/boards/$wb/decisions.json")" '"id": "future"'
 has "the docket lists it" "$(curl -s http://127.0.0.1:4899/docket.json)" "Why card: whyq"
+printf 'Quest type: investigation\n\nFor the guildmaster\nFour PRs move money; a bad one pays twice.\n\nContext\n- #1 the matcher\nLook hardest at: idempotency, authz on ops.\n' | GUILD_NO_WHY= "$GUILD" quest whyr --repo "$REPO_A" --no-acceptance "review" >/dev/null 2>&1
+rb=$(ls "$GUILD_HOME/quests/whyr/boards" | grep '^why-' | head -1)
+has "a review gets the review questions" "$(cat "$GUILD_HOME/quests/whyr/boards/$rb/decisions.json" 2>/dev/null)" '"id": "worry"'
+has "the short version comes first" "$(cat "$GUILD_HOME/quests/whyr/boards/$rb/content.html" 2>/dev/null)" "a bad one pays twice"
+has "the pain points get their own box" "$(cat "$GUILD_HOME/quests/whyr/boards/$rb/content.html" 2>/dev/null)" "authz on ops"
+out=$(cd "$REPO/bin" && GUILD_HOME="$GUILD_HOME" python3 -c 'import why; print(why.skipped({"type":"look","what":"na","why":"skip","worry":"","use":"-"}), why.glance_html("nosuch"))')
+has "an all-skip card counts as skipped" "$out" "True"
 is "a card does not park the quest" "$(cut -f1 "$GUILD_HOME/quests/whyq/status")" "working"
 curl -s -X POST "http://127.0.0.1:4899/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null
 has "the answer is kept with the quest" "$(cat "$GUILD_HOME/quests/whyq/why.json")" "a past start date is warned"
