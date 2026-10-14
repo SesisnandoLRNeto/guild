@@ -6,6 +6,9 @@
 # whole run takes seconds. Run it with: test/run.sh
 set -uo pipefail
 
+# a guild session leaks its quest env into this script; the suite must not act on it
+unset GUILD_QUEST GUILD_QM GUILD_ROLE GUILD_CALM GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GH_TOKEN
+
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 GUILD="$REPO/bin/guild"
 TMP="$(mktemp -d)"
@@ -410,6 +413,7 @@ Constraints: none
 EOF
 QD="$GUILD_HOME/quests/delta"
 WTD=$(python3 -c "import json;print(json.load(open('$QD/meta.json'))['worktree'])")
+[ -n "$WTD" ] || { echo "test/run.sh: no worktree for delta" >&2; exit 1; }
 is "the contract is sealed at quest start" "$(python3 -c "import json;d=json.load(open('$QD/acceptance.json'));print(sum(1 for i in d['items'] if i['kind']=='check'), sum(1 for i in d['items'] if i['kind']=='manual'))")" "2 1"
 has "with a hash in the quest" "$(cat "$QD/meta.json")" "acceptance_hash"
 
@@ -849,6 +853,7 @@ git -C "$RB" update-ref refs/remotes/origin/main HEAD
 git -C "$RB" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 echo "add a currency" | "$GUILD" quest cur --repo "$RB" --base origin/main >/dev/null 2>&1
 WB=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/cur/meta.json'))['worktree'])")
+[ -n "$WB" ] || { echo "test/run.sh: no worktree for cur" >&2; exit 1; }
 cat > "$WB/src/main/resources/db/changelog/changes/0002-currency.sql" <<'SQL'
 --liquibase formatted sql
 --changeset t:0002
@@ -1091,6 +1096,43 @@ new_sid=$(cat "$GUILD_HOME/qm-session")
 has "and starts the quartermaster fresh on it" "$(cat "$GUILD_HOME/last-claude-args")" "--session-id $new_sid"
 has "told to look at the roster and watch again" "$(cat "$GUILD_HOME/last-claude-args")" "fresh context"
 
+
+# ── side menus: one per window, never split from an empty id ─────────────────
+section "side menus"
+SB_SOCK="guild-sidebar-test"
+tmux -L "$SB_SOCK" -f /dev/null new-session -d -s guild -n qm -x 120 -y 30 "sleep 600"
+(
+  GUILD_TMUX_SOCKET="$SB_SOCK"
+  # the functions of bin/guild, without its dispatch at the bottom
+  eval "$(sed '/^case /,$d' "$GUILD")"
+  set +e
+  sbt() { tmux -L "$SB_SOCK" "$@"; }
+  panes() { sbt list-panes -t "$1" -F x | wc -l | tr -d ' '; }
+
+  qm=$(sbt display-message -p -t guild:qm '#{window_id}')
+  qm_pane=$(sbt display-message -p -t guild:qm '#{pane_id}')
+  add_sidebar "" ; is "an empty id splits no pane" "$(panes "$qm")" "1"
+
+  add_sidebar "$qm_pane"; add_sidebar "$qm_pane"
+  is "adding a side menu twice leaves one" "$(panes "$qm")" "2"
+  is "the menu is flagged" "$(sbt list-panes -t "$qm" -F '#{@guild_sidebar}' | grep -c '^1$')" "1"
+
+  # a window with two side menu panes (the old race) is healed by guild layout
+  sbt new-window -d -t guild -n dup "sleep 600"
+  dup=$(sbt display-message -p -t guild:dup '#{window_id}')
+  dup_pane=$(sbt display-message -p -t guild:dup '#{pane_id}')
+  sbt split-window -h -t "$dup_pane" "sleep 600"
+  sbt split-window -h -t "$dup_pane" "sleep 600"
+  for p in $(sbt list-panes -t "$dup" -F '#{pane_id}' | head -2); do sbt set-option -p -t "$p" @guild_sidebar 1; done
+  is "the duplicate window starts with two side menus" "$(sbt list-panes -t "$dup" -F '#{@guild_sidebar}' | grep -c '^1$')" "2"
+  cmd_layout
+  is "guild layout leaves one side menu" "$(sbt list-panes -t "$dup" -F '#{@guild_sidebar}' | grep -c '^1$')" "1"
+  is "and keeps the content pane" "$(panes "$dup")" "2"
+  exit "$fail"   # bad() counts inside this subshell only; the parent reads the count below
+)
+sb_fail=$?
+[ "$sb_fail" -eq 0 ] || bad "side menu checks failed" "$sb_fail check(s) above"
+tmux -L "$SB_SOCK" kill-server 2>/dev/null
 
 # ── the cockpit, through a real tmux client ──────────────────────────────────
 section "cockpit keys and clicks"
