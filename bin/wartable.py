@@ -107,7 +107,8 @@ GLANCE_CSS = """<style>
 .gg-path li.done::after,.gg-path li.now::after{background:var(--ok,#3f7d3a)}
 .gg-path li.now{color:var(--text,#2d2216);font-weight:700}.gg-path li.now::before{border-color:#b5651d;background:#f3d9a8;box-shadow:0 0 0 4px rgba(217,164,65,.3)}
 .gg-path li.stuck::before{border-color:var(--bad,#a8322a);background:#f2c4bb}
-.gg-path li.skip{opacity:.45}
+.gg-path li.skip{opacity:.6;font-style:italic}
+.gg-path li.skip::before{border-style:dashed;border-color:#a99470;background:#efe3c8}
 .gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
 .gg-tile{background:rgba(255,255,255,.35);border:1px solid var(--line,#cdb88e);border-radius:4px;padding:7px 10px}
 .gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
@@ -142,19 +143,28 @@ def glance(quest):
     edd = q.get("edd") or {}
     planned = os.path.exists(os.path.join(qdir, "plan.md"))
     built = bool(edd.get("runs")) or state in ("done", "trial-pass", "trial-skip") or bool(pr)
-    checks_ok = edd.get("last_green") or (not edd.get("checks") and built)
     trial_ok = q.get("trial") in ("pass", "skip")
-    steps = [("Asked", True), ("Plan", planned if meta.get("phase") or planned else None), ("Build", built),
-             ("Checks", bool(checks_ok) and built), ("Trial", trial_ok), ("PR open", bool(pr)),
-             ("Merged", pr.get("state") == "merged")]
-    now = next((i for i, (_, ok) in enumerate(steps) if ok is False), None)
+    # A step that was never run is not a step that passed. `None` means skipped, and `why` says what
+    # was skipped and on whose word, so a green line always means the step really happened.
+    plan_why = meta.get("no_plan") or ("" if meta.get("phase") or planned else "started without a plan phase")
+    checks_why = "" if edd.get("checks") else "no check: lines in the contract, so nothing was run"
+    trial_why = "the trial was skipped" if q.get("trial") == "skip" else ""
+    steps = [("Asked", True, ""),
+             ("Plan", None if plan_why else planned, plan_why),
+             ("Build", built, ""),
+             ("Checks", None if (checks_why and built) else (bool(edd.get("last_green")) and built), checks_why),
+             ("Trial", None if trial_why else trial_ok, trial_why),
+             ("PR open", bool(pr), ""),
+             ("Merged", pr.get("state") == "merged", "")]
+    now = next((i for i, (_, ok, _) in enumerate(steps) if ok is False), None)
     stuck = state in ("blocked", "failed", "stopped", "checks-red")
     items = []
-    for i, (name, ok) in enumerate(steps):
+    for i, (name, ok, why) in enumerate(steps):
         cls = "skip" if ok is None else "done" if ok and (now is None or i < now) else ""
         if i == now:
             cls = "now stuck" if stuck else "now"
-        items.append(f'<li class="{cls}">{_html.escape(name)}</li>')
+        tip = f' title="skipped: {_html.escape(why)}"' if ok is None and why else ""
+        items.append(f'<li class="{cls}"{tip}>{_html.escape(name)}</li>')
 
     ticket = meta.get("ticket", "")
     if pr.get("state") == "merged":
@@ -655,7 +665,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             import rulebook
             return self.send(200, json.dumps(rulebook.grade(str(body.get("key", "")), bool(body.get("right")), body.get("answer", ""))),
                              "application/json")
-        v = re.match(r"^/q/([A-Za-z0-9._-]+)/validate/(mark|send)$", path)
+        v = re.match(r"^/q/([A-Za-z0-9._-]+)/validate/(mark|markall|send)$", path)
         if v:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -663,6 +673,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 if v.group(2) == "mark":
                     out = sc.mark(quest, str(body.get("id", "")), str(body.get("status", "")), str(body.get("note", "")))
+                    out = dict(out, stamp=sc.stamp(out), certificate=None)
+                elif v.group(2) == "markall":
+                    out = sc.mark_all(quest)
                     out = dict(out, stamp=sc.stamp(out), certificate=None)
                 else:
                     failed = sc.failures_text(quest)

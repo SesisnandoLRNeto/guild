@@ -20,6 +20,7 @@ export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
 export GUILD_NO_WHY="1"          # the Why card has its own test below
 export GUILD_NO_ACCEPTANCE="test fixture"   # briefs here are one-liners; the refusal has its own test
+export GUILD_NO_PLAN="test fixture"         # the plan phase is default-on; its own tests clear this
 export GUILD_NO_NOTIFY="1"       # nor a notification
 export GUILD_NO_PR_SYNC="1"      # nor a call to GitHub
 export PATH="$TMP/stub:$PATH"
@@ -229,6 +230,24 @@ is "asking for changes puts the quest back to work" "$(cut -f1 "$GUILD_HOME/ques
 echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "fix the edge case"
 is "a new commit makes the certificate stale" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" summary alpha | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["stale"], d["certified"])')" "True False"
 has "and the page asks to run it again" "$(curl -s "$vurl")" "Certificate out of date"
+
+# Pass all: one click to mark everything still to run, for testing the page itself
+mkdir -p "$GUILD_HOME/quests/pall"
+echo '{"slug":"pall","repo":"/tmp/none","worktree":"/tmp/none"}' > "$GUILD_HOME/quests/pall/meta.json"
+echo '{"title":"pall","groups":[{"id":"A","title":"x","scenarios":[{"id":"A1","do":"one","expect":"ok"},{"id":"A2","do":"two","expect":"ok"},{"id":"A3","do":"three","expect":"ok"}]}]}' > "$GUILD_HOME/quests/pall/scenarios.json"
+purl="http://127.0.0.1:4899/q/pall/validate"
+has "the checklist has a Pass all button" "$(curl -s "$purl")" 'id="passall"'
+curl -s -X POST "$purl/mark" -d '{"id":"A2","status":"fail","note":"it broke"}' >/dev/null
+out=$(curl -s -X POST "$purl/markall" -d '{}')
+has "Pass all passes everything still to run" "$out" '"passed_now": ['
+has "and leaves a fail alone" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/pall/validation.json'))['A2']['status'])")" "fail"
+has "and says in the note it was not run one by one" "$(cat "$GUILD_HOME/quests/pall/validation.json")" "not run one by one"
+[ -f "$GUILD_HOME/quests/pall/certificate.json" ] && bad "a fail still blocks the certificate" "certified anyway" || ok "a fail still blocks the certificate"
+curl -s -X POST "$purl/mark" -d '{"id":"A2","status":"pass"}' >/dev/null
+has "with nothing failing, Pass all certifies" "$(cat "$GUILD_HOME/quests/pall/certificate.json")" '"passed": 3'
+is "running it again passes nothing new" "$(curl -s -X POST "$purl/markall" -d '{}' | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["passed_now"]))')" "0"
+has "the export has no Pass all button" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" export pall --out "$TMP/pall-v.html" && cat "$TMP/pall-v.html")" "Guildmaster: <b>pass</b>"
+[ -n "$(grep -c 'id=\"passall\"' "$TMP/pall-v.html" | grep '^0$')" ] && ok "and the team copy cannot bulk pass" || bad "and the team copy cannot bulk pass" "found the button"
 
 section "quartermaster guard"
 guard() { echo "$1" | GUILD_HOME="$GUILD_HOME" "$REPO/hooks/qm-guard.sh" >/dev/null 2>&1; echo $?; }
@@ -810,6 +829,24 @@ section "contract and behaviour"
 out=$(echo "make it faster" | GUILD_NO_ACCEPTANCE= "$GUILD" quest noacc --repo "$REPO_A" 2>&1)
 has "a brief with no Acceptance block is refused" "$out" "no Acceptance block"
 [ -d "$GUILD_HOME/quests/noacc" ] && bad "and nothing is left behind" "quest folder exists" || ok "and nothing is left behind"
+
+# the plan step: on by default, and a quest that skips it has to say why
+echo x | GUILD_NO_PLAN= "$GUILD" quest planq --repo "$REPO_A" >/dev/null 2>&1
+is "a quest plans before it builds" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/planq/meta.json'))['phase'])")" "plan"
+has "and the adventurer is told to plan first" "$(cat "$GUILD_HOME/quests/planq/prompt.md")" "You start in the plan phase"
+out=$(echo x | GUILD_NO_PLAN= "$GUILD" quest planq2 --repo "$REPO_A" --no-plan 2>&1)
+has "--no-plan without a reason is refused" "$out" "needs a reason"
+echo x | GUILD_NO_PLAN= "$GUILD" quest planq3 --repo "$REPO_A" --no-plan "one line fix" >/dev/null 2>&1
+is "with a reason it skips the plan" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/planq3/meta.json'))['phase'])")" ""
+has "and the reason is kept with the quest" "$(cat "$GUILD_HOME/quests/planq3/meta.json")" "one line fix"
+has "the glance says the step was skipped, and why" "$(curl -s http://127.0.0.1:4899/q/planq3/report 2>/dev/null; python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('planq3'))")" 'title="skipped: one line fix"'
+has "a step with nothing run is not painted green" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('planq3'))")" 'class="skip"'
 printf 'Intent: x\nAcceptance:\n- check: true\n- the page shows it\n' | GUILD_NO_ACCEPTANCE= "$GUILD" quest beh --repo "$REPO_A" >/dev/null 2>&1
 is "with one it starts, and the contract is sealed" "$(python3 -c "import json;print(len(json.load(open('$GUILD_HOME/quests/beh/acceptance.json'))['items']))")" "2"
 QB="$GUILD_HOME/quests/beh"; WTB=$(python3 -c "import json;print(json.load(open('$QB/meta.json'))['worktree'])")

@@ -157,6 +157,24 @@ def mark(slug, sid, status, note=""):
     return summary(slug)
 
 
+def mark_all(slug, note="passed with the Pass all button, not run one by one"):
+    """Mark every scenario still to run as passed, in one go. A fail or a skip already there is left
+    alone. The note says it was a bulk pass, so a certificate built this way never looks like a real
+    run of the list."""
+    spec, marks = load(slug), state(slug)
+    done = []
+    for s in scenario_list(spec):
+        sid = s.get("id")
+        if sid and not marks.get(sid, {}).get("status"):
+            marks[sid] = {"status": "pass", "note": note, "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            done.append(sid)
+    if done:
+        with open(os.path.join(qdir(slug), "validation.json"), "w") as f:
+            json.dump(marks, f, indent=2)
+        certify(slug)
+    return dict(summary(slug), passed_now=done, note=note)
+
+
 def certify(slug):
     """When the last scenario passes, write the certificate: when, what, and on which commit.
     Any mark that breaks the list (a fail, a cleared result) takes it away again."""
@@ -305,6 +323,8 @@ def page(slug, meta=None, export=False, image=None, prs=None):
         h.append('<button class="btn" id="reset" type="button">Clear my ticks</button>')
     else:
         h.append('<button class="btn warn" id="sendfail" type="button" hidden>Send the failures to the adventurer</button>'
+                 '<button class="btn" id="passall" type="button" title="For testing the page itself: marks every '
+                 'scenario still to run as passed, and says so in each note.">Pass all</button>'
                  '<a class="btn" href="validate/export" download>Download for the team</a>')
     h.append('</div>')
     h.append(f'<div id="cert">{stamp(summary(slug))}</div>')
@@ -500,6 +520,19 @@ cards.forEach(function(s){
   s.querySelector('.mnote').addEventListener('change',function(){if(s.dataset.st)save(s,s.dataset.st)});});
 document.getElementById('sendfail').addEventListener('click',function(){var b=this;b.disabled=true;
   fetch('validate/send',{method:'POST',body:'{}'}).then(function(r){return r.json()}).then(function(o){b.textContent=o.error||o.did;});});
+var pa=document.getElementById('passall'),armed=0;
+pa.addEventListener('click',function(){
+  var left=cards.filter(function(s){return !s.dataset.st}).length;
+  if(!left){pa.textContent='Nothing left to pass';setTimeout(function(){pa.textContent='Pass all'},1600);return}
+  if(!armed){armed=1;pa.classList.add('warn');pa.textContent='Pass '+left+' without running them? Click again';
+    setTimeout(function(){if(armed){armed=0;pa.classList.remove('warn');pa.textContent='Pass all'}},4000);return}
+  armed=0;pa.classList.remove('warn');pa.disabled=true;pa.textContent='Passing...';
+  fetch('validate/markall',{method:'POST',body:'{}'}).then(function(r){return r.json()}).then(function(o){
+    pa.disabled=false;pa.textContent='Pass all';
+    if(o.error){alert(o.error);return}
+    (o.passed_now||[]).forEach(function(id){var s=document.getElementById('s-'+id);
+      if(s){s.dataset.st='pass';s.querySelector('.mnote').value=o.note||''}});
+    tally();document.getElementById('cert').innerHTML=o.stamp||'';});});
 tally();
 """
 

@@ -25,7 +25,8 @@ current_quest() { echo "${1:-${GUILD_QUEST:-}}"; }
 usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
-guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light] [--plan]
+guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light]
+                    [--no-plan "<why>"]   a quest plans first unless you say why it should not
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
@@ -666,7 +667,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
-  local machine="" headless="" noaccept="" all_args=("$@")
+  local machine="" headless="" noaccept="" noplan="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -675,6 +676,7 @@ cmd_quest() {
       --model) model="$2"; shift 2 ;;
       --tier) tier="$2"; shift 2 ;;
       --plan) plan=1; shift ;;
+      --no-plan) noplan="${2:-}"; [ -n "$noplan" ] || die "--no-plan needs a reason"; shift 2 ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
       --parent) parent="$2"; shift 2 ;;
@@ -682,7 +684,7 @@ cmd_quest() {
       --headless) headless=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
       --no-why) export GUILD_NO_WHY=1; shift ;;
-      --no-acceptance) noaccept="$2"; [ -n "$noaccept" ] || die "--no-acceptance needs a reason"; shift 2 ;;
+      --no-acceptance) noaccept="${2:-}"; [ -n "$noaccept" ] || die "--no-acceptance needs a reason"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
       --branch) branch="$2"; shift 2 ;;
@@ -743,6 +745,11 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
     model=$(harness tier "$harness" "$tier") || exit 1
     [ -n "$effort" ] || effort=$(harness tier "$harness" "$tier" --effort)
   fi
+  # The plan phase is the step before the code, so it is on by default: a quest that skips it has
+  # to say why, the same as the acceptance contract. A helper inherits its parent's plan.
+  [ -n "$noplan" ] || noplan="${GUILD_NO_PLAN:-}"
+  [ -n "$parent" ] && [ -z "$noplan" ] && noplan="a helper builds what its parent already planned"
+  if [ -n "$plan" ]; then noplan=""; elif [ -z "$noplan" ]; then plan=1; fi
   # --plan: think on the plan tier first, then build on the chosen model (or the build tier).
   local build_model="" build_effort=""
   if [ -n "$plan" ]; then
@@ -802,6 +809,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
+           "no_plan": """$noplan""",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -1027,7 +1035,7 @@ handoff() { # slug note
   local phase build
   phase=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('phase',''))")
   build=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_model',''))")
-  [ "$phase" = plan ] || die "quest $1 is not in a plan phase (start it with --plan)"
+  [ "$phase" = plan ] || die "quest $1 is not in a plan phase (it was started with --no-plan)"
   printf '%s\n' "$build" > "$q/model"
   python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_effort',''))" > "$q/effort"
   python3 - "$q/meta.json" <<'PY2'
