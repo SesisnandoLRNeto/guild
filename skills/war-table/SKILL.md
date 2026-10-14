@@ -27,6 +27,21 @@ guild board wait <id> --timeout 3600
 
 Guild builds the page, opens it and waits. Use the long way below when the decision needs pictures: variants, before and after, a diagram, numbers.
 
+## Decision pages: show what each choice leads to (`guild decide`)
+
+When the guildmaster must choose between options, do not describe the choice in prose: put it on a decision page built from a spec, so they judge the consequences, not your summary of them. `guild decide spec.json` builds the page and opens it; wait with `guild board wait <id>`. The answer is an option id, `explain` (their questions are in the message: answer them on a new page, nothing changes) or `own` (their own answer is in the message).
+
+Pick the visual by what is being decided. Use as many as help; skip the ones that do not:
+
+| What is being decided | Use | Why |
+|---|---|---|
+| How the system should behave (a business rule) | `"kind": "rule"` and `"cases"`: real situations as rows, each option's exact outcome per cell | Two people never read one rule two ways when they see the same cases; required for a rule decision |
+| Which approach to build | `"flow"` per option (mermaid), and `"today"` with its flow; `"criteria"` rows with the `"best"` marked | The shape of each approach at a glance, then the trade-off in one table |
+| How a screen should look | `"image"` per option and for `"today"`, same size, real screenshots (`guild shot`) | A screen is judged by seeing it |
+| Speed, cost, size, time | `"numbers"`: one bar chart per measure, `"lower_is_better"` set | Magnitudes are compared by length, not by reading digits |
+
+Always: `"question"` in one line, `"why_now"`, each option's `"summary"`, `"effort"` (S/M/L), `"risk"` (low/medium/high), `"reversible"`, `"pros"`, `"cons"`, `"after"` (what happens next if picked) and `"blocks"` (what it rules out), a `"recommend"` with its `"why"`, `"if_no_answer"`, and `"sources"` (tickets, spec sections). Real values in cases (dates, amounts, roles), never "some user" or "an amount". `bin/decide.py` has the full format; `guild decide` refuses a spec that is not ready and says why.
+
 ## How to run one
 
 ```bash

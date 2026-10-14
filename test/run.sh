@@ -724,6 +724,36 @@ has "and it says what approving leads to" "$page" "restarts on <b>sonnet</b>"
 has "you can ask it to explain more" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"id": "explain"'
 "$GUILD" close pl --force >/dev/null 2>&1
 
+# decision pages: options as cards, cases, flows, numbers; refused when not ready
+cat > "$TMP/dspec.json" <<'J'
+{"question": "Warn or block a past start date?", "kind": "rule", "why_now": "the save screen depends on it",
+ "options": [{"id": "warn", "label": "Save and warn", "summary": "saved, warned", "effort": "S", "risk": "low", "reversible": true,
+              "pros": ["finance can fix last month"], "cons": ["can be ignored"], "flow": "flowchart LR\n A-->B"},
+             {"id": "block", "label": "Refuse it", "summary": "400", "effort": "S", "risk": "high", "reversible": true, "blocks": "corrections"}],
+ "criteria": [{"name": "Follows the spec", "values": {"warn": "yes", "block": "no"}, "best": "warn"}],
+ "numbers": [{"name": "Days", "unit": "days", "values": {"warn": 1, "block": 3}, "lower_is_better": true}],
+ "recommend": "warn", "why": "the spec says warn"}
+J
+out=$(GUILD_QUEST=alpha "$GUILD" decide "$TMP/dspec.json" 2>&1)
+has "a rule decision without cases is refused" "$out" 'needs "cases"'
+python3 - "$TMP/dspec.json" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+d["cases"] = [{"given": "finance saves a rate for last month", "outcomes": {"warn": "201 + BACKDATED", "block": "400"}}]
+json.dump(d, open(p, "w"))
+PY
+out=$(GUILD_QUEST=alpha "$GUILD" decide "$TMP/dspec.json" 2>&1)
+db=$(echo "$out" | awk '/board id:/ {print $3}')
+dp=$(cat "$GUILD_HOME/quests/alpha/boards/$db/content.html")
+has "a decision page opens on the war table" "$out" "board id:"
+has "it shows each option's outcome case by case" "$dp" "finance saves a rate for last month</td><td class=\"sug\">201 + BACKDATED"
+has "the options as cards with effort, risk and reversibility" "$dp" '<span class="chip risk-high">risk high</span>'
+has "what an option rules out" "$dp" "It rules out:</b> corrections"
+has "a flow per option" "$dp" '<pre class="mermaid">flowchart LR'
+has "the best value per criterion is marked" "$dp" 'class="best">yes &#10003;'
+has "a bar chart per measure" "$dp" 'class="bf best"'
+has "the answers include explain more and my own answer" "$(cat "$GUILD_HOME/quests/alpha/boards/$db/decisions.json")" '"id": "own"'
+
 # ── the docket: every open decision on one page ──────────────────────────────
 section "docket"
 dq="$GUILD_HOME/quests/dk"; mkdir -p "$dq/boards/200001" "$dq/boards/200002"
