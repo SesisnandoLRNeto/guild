@@ -662,17 +662,66 @@ python3 "$REPO/bin/wartable.py" sweep
 has "and the history says why" "$(tail -2 "$GUILD_HOME/events.log")" "closed on its own"
 rm -f "$GUILD_HOME/.pr-cache.json"
 
-# the plan approval page renders plan.md and says what each answer leads to
+# the plan approval page is an explainer: it needs its sections, and it shows them where they help
 echo x | "$GUILD" quest pl --repo "$REPO_A" --plan >/dev/null 2>&1
-printf '# Plan\n\n## Goal\nParse `equationText` on save.\nStore the tree.\n\n## Steps\n\n1. **Merge `#161`.** first\n\n2. Add `GRAMMAR_VERSION`.\n   - a sub point\n\n3. Tests.\n\n| Node | JSON |\n|---|---|\n| Constant | `{"type":"constant"}` |\n' > "$GUILD_HOME/quests/pl/plan.md"
+printf '# Plan\n\n## Goal\nParse on save.\n\n## Steps\n1. a\n' > "$GUILD_HOME/quests/pl/plan.md"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "x" 2>&1)
+has "a plan without the explainer sections is refused" "$out" "plan.md lacks: The pain, Why it happens, Today"
+has "and the refusal shows the sections to write" "$out" "## What you should expect"
+echo '{"pain":"finance edits rates by hand","rule":"parse on save","decision":"Kim","impact":"rate configs","future":"approvals"}' > "$GUILD_HOME/quests/pl/why.json"
+cat > "$GUILD_HOME/quests/pl/plan.md" <<'MD'
+# Plan
+
+## The pain
+Finance saves a broken equation and only finds out at pay time. SARA-847: "we lost a week".
+
+## Why it happens
+Equations are stored as text and never parsed (`RateConfigService.java:88`).
+
+## Today
+Text is saved as sent.
+
+```mermaid
+flowchart LR
+  A[save] --> B[(text)]
+```
+
+## After this plan
+Text is parsed on save; a broken one is refused with its position.
+
+## How it will be built
+1. **Merge `#161`.** first
+
+2. Add `GRAMMAR_VERSION`.
+   - a sub point
+
+3. Tests.
+
+| Node | JSON |
+|---|---|
+| Constant | `{"type":"constant"}` |
+
+## What you should expect
+A broken equation gets a 400 with its position; a good one saves as before.
+
+## Not included
+The builder UI.
+
+## Risks
+Old rows that do not parse: they stay as they are.
+MD
 out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save")
 pb=$(echo "$out" | awk '/board id:/ {print $3}')
 page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
-has "the plan's steps are one numbered list" "$page" "</li><li>"
-is "not one list per step (1 for the steps, 2 in what happens next)" "$(printf '%s' "$page" | grep -o '<ol>' | wc -l | tr -d ' ')" "3"
+has "the page opens with the pain, the cause and the expectation in one minute" "$page" '<div class="m pain"><b>The pain</b><p>Finance saves a broken equation'
+has "today and after this plan sit side by side" "$page" '<div class="after"><h3>After this plan</h3>'
+has "a mermaid block draws a diagram" "$page" '<pre class="mermaid">flowchart LR'
+has "your Why card sits next to the plan's understanding" "$page" "finance edits rates by hand"
+has "the steps are one numbered list" "$page" "</li><li>"
 has "bold that holds code stays bold" "$page" "<b>Merge <code>#161</code>.</b>"
 has "tables render" "$page" "<th>Node</th>"
 has "and it says what approving leads to" "$page" "restarts on <b>sonnet</b>"
+has "you can ask it to explain more" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"id": "explain"'
 "$GUILD" close pl --force >/dev/null 2>&1
 
 # ── the docket: every open decision on one page ──────────────────────────────
@@ -1102,6 +1151,7 @@ section "side menus"
 SB_SOCK="guild-sidebar-test"
 tmux -L "$SB_SOCK" -f /dev/null new-session -d -s guild -n qm -x 120 -y 30 "sleep 600"
 (
+  fail=0   # count only this block's checks; the parent's count would be reported twice
   GUILD_TMUX_SOCKET="$SB_SOCK"
   # the functions of bin/guild, without its dispatch at the bottom
   eval "$(sed '/^case /,$d' "$GUILD")"

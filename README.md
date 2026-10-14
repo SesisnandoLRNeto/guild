@@ -268,7 +268,7 @@ Once a month the war table server runs `guild tidy`: events older than 30 days m
 ## Tests
 
 ```sh
-./test/run.sh      # 369 checks, about 3 minutes, no model calls
+./test/run.sh      # 375 checks, about 3 minutes, no model calls
 ```
 
 The suite runs against a throwaway `HOME`, a throwaway repo, its own tmux socket and a stub `claude`, so it never touches your real setup and never spends a token. It covers the quest lifecycle, identities, the war table and the docket, the trial gate in both forms, checks and grades, costs and the retro, budget caps, helpers, lessons, revive and close. Fakes stand in for everything outside: a fake Jira, a fake Jev, a fake ntfy, a fake GitHub PR cache, and a fake `ssh` that runs the "remote" guild in its own home. `test/cockpit.py` drives a real tmux client in a pty to test keys and clicks. It also runs in CI on every push.
@@ -372,6 +372,8 @@ Tiers name the kind of work. Each harness maps a tier to its own model, so a rul
 | `build` | Normal implementation | `sonnet` | `deepseek/deepseek-chat` |
 | `deep` | High complexity | `claude-fable-5-1` | `moonshotai/kimi-k2-thinking` |
 | `light` | Easy, well defined | `haiku` | `deepseek/deepseek-chat` |
+
+**Understand the plan before you approve it.** A plan is written in fixed sections and shown as an explainer: the pain, why it happens and what you should expect in one minute at the top; how it works today and after this plan side by side (a ```` ```mermaid ```` block draws a diagram); your Why card next to the plan's understanding, so a misunderstanding shows before any code; the sealed acceptance contract (what "done" means); then how it will be built, what is not included, the risks, the words to know and the questions for you. `guild plan ready` refuses a plan missing a required section. Besides Approve and Change it, you can answer **Explain more**: your questions go back, the adventurer answers them in the plan and asks again, and nothing is built yet.
 
 **Plan, then build.** `--plan` splits a quest in two. The adventurer starts on the `plan` tier, writes `plan.md`, and puts it on the war table for you. When you approve, it runs `guild status <slug> planned`, and guild restarts it in the same conversation on the build model (`--tier`, `--model`, or the `build` tier). So Opus thinks, you approve, and Sonnet types.
 

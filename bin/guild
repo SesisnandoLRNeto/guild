@@ -849,9 +849,17 @@ HELPERS
 ## You start in the plan phase
 
 You run on a planning model now. Do not change code yet.
-1. Read the brief and the code, then write the plan to \`$q/plan.md\` in Markdown: \`## Goal\` (two lines at most), \`## Steps\` (numbered, one idea each, names in backticks), \`## Files\`, \`## Risks\`, \`## How it will be proven\`. The guildmaster reads it on a page: short steps beat long paragraphs.
+1. Read the brief and the code, then write the plan to \`$q/plan.md\`. The guildmaster reads it as an explainer before approving: the goal is that they understand why, what and how, with no misunderstanding left. Use these \`## \` sections, short and in plain words, each opening with its point:
+   \`## The pain\` (who suffers today, where, one real example with its evidence: a ticket quote, a log line, a screenshot path),
+   \`## Why it happens\` (the root cause in plain words, and where it lives, \`file:line\`),
+   \`## Today\` (how it works now) and \`## After this plan\` (how it will work: what is added, changed, removed; a \`\`\`mermaid flow on each side when the point has arrows),
+   \`## How it will be built\` (numbered steps, one idea each, names in backticks),
+   \`## What you should expect\` (what they will see when it works, and how the acceptance checks prove it),
+   \`## Not included\`, \`## Risks\` (each with what you do about it),
+   and when they help \`## Words to know\`, \`## Questions for you\` (each with options), \`## Files\`.
+   If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs from theirs, say so in the plan instead of hiding it. \`guild plan ready\` refuses a plan without the required sections.
 2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. Guild renders plan.md as the approval page and says what each answer leads to. Then wait with \`guild board wait <id>\`.
-3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If a change is asked, update the plan and ask again.
+3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If they ask to explain more, answer their questions inside plan.md (in the section each one is about, plainly) and ask again; if they ask for a change, update the plan and ask again.
 PLAN
 
   { echo "#!/usr/bin/env bash"

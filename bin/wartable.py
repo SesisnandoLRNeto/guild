@@ -1013,9 +1013,11 @@ def md_to_html(md):
         if line.strip().startswith("```"):
             close_lists()
             code, i = [], i + 1
+            lang = line.strip()[3:].strip().lower()
             while i < len(lines) and not lines[i].strip().startswith("```"):
                 code.append(lines[i]); i += 1
-            out.append(f"<pre><code>{_esc(chr(10).join(code))}</code></pre>")
+            out.append(f'<pre class="mermaid">{_esc(chr(10).join(code))}</pre>' if lang == "mermaid"
+                       else f"<pre><code>{_esc(chr(10).join(code))}</code></pre>")
             i += 1
             continue
         if line.strip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|[\s:|-]+\|\s*$", lines[i + 1]):
@@ -1136,22 +1138,34 @@ def cmd_plan(args):
     meta = json.load(open(os.path.join(qdir, "meta.json")))
     md = open(path).read()
     md = re.sub(r"^#\s+.*\n+", "", md, count=1)          # its title is the page's
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import planpage
+    import why
+    gaps = planpage.missing(md)
+    if gaps:
+        raise SystemExit("guild plan: the guildmaster reads the plan as an explainer, and plan.md lacks: "
+                         + ", ".join(planpage.TITLES[g] for g in gaps)
+                         + ".\nWrite it in these sections (short, plain words; a ```mermaid block draws a diagram):\n\n"
+                         + planpage.template())
     build = meta.get("build_model") or meta.get("model") or "the build model"
     effort = meta.get("build_effort") or ""
     budget = meta.get("budget")
     go = [f"The adventurer restarts on <b>{_esc(build)}</b>{' (' + _esc(effort) + ' effort)' if effort else ''}, in the same conversation.",
           "It builds these steps and runs the acceptance checks.",
-          "It runs the trial (an adversarial review and the project's checks), then opens the PR.",
+          "It runs the trial (an adversarial review, the project's checks and the behaviour check), then opens the PR.",
           "You get a wrap-up page to grade."]
     if budget:
         go.append(f"It stops and asks you if it passes its ${float(budget):g} budget.")
-    page = (PLAN_PAGE.replace("__QUEST__", _esc(quest))
-            .replace("__SUMMARY__", md_inline(args.get("summary") or "", auto_code=True))
-            .replace("__PLAN__", md_to_html(md))
-            .replace("__IF_GO__", "".join(f"<li>{x}</li>" for x in go))
-            .replace("__PATH__", _esc(path)))
-    decisions = {"questions": [{"id": "choice", "title": "Approve the plan?", "type": "single", "recommended": "go",
-                                "options": [{"id": "go", "label": "Approve", "why": "build it as planned"},
+    contract = None
+    try:
+        contract = json.load(open(os.path.join(qdir, "acceptance.json")))
+    except (OSError, ValueError):
+        pass
+    page = planpage.render(quest, args.get("summary") or "", md, meta, why.load(quest), contract, go,
+                           md_to_html, md_inline, path)
+    decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
+                                "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
+                                            {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},
                                             {"id": "change", "label": "Change it", "why": "your notes go back; it replans"}]}]}
     if args.get("board"):                               # redo an open board in place (same id, same question)
         d = board_dir(quest, args["board"])
