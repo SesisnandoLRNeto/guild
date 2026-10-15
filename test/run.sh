@@ -847,6 +847,27 @@ has "a step with nothing run is not painted green" "$(python3 -c "
 import sys; sys.path.insert(0,'$REPO/bin')
 import os; os.environ['GUILD_HOME']='$GUILD_HOME'
 import wartable; print(wartable.glance('planq3'))")" 'class="skip"'
+# --quick: one flag for all the gates, and the board still says what was skipped
+echo x | GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= GUILD_NO_WHY= "$GUILD" quest quickq --repo "$REPO_A" --quick "small fix, no time" >/dev/null 2>&1
+QM=$(cat "$GUILD_HOME/quests/quickq/meta.json" 2>/dev/null)
+has "--quick keeps the reason" "$QM" "small fix, no time"
+is "--quick skips the plan phase" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq/meta.json'))['phase'])")" ""
+has "--quick drops the acceptance contract" "$QM" '"no_acceptance": "small fix, no time"'
+has "--quick tells the adventurer the gates are off" "$(cat "$GUILD_HOME/quests/quickq/prompt.md")" "This is a quick quest"
+echo y | GUILD_NO_ACCEPTANCE= "$GUILD" quest quickq2 --repo "$REPO_A" --quick >/dev/null 2>&1
+has "--quick with no reason still records one" "$(cat "$GUILD_HOME/quests/quickq2/meta.json" 2>/dev/null)" "asked for a quick quest"
+echo z | GUILD_NO_PLAN= "$GUILD" quest quickq3 --repo "$REPO_A" --quick "fast" --plan >/dev/null 2>&1
+is "an explicit --plan beats --quick" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq3/meta.json'))['phase'])")" "plan"
+out=$("$GUILD" status quickq done "did it" 2>&1)
+has "a quick quest owes no validation checklist" "$out$(cat "$GUILD_HOME/quests/quickq/status" 2>/dev/null)" "no validation scenarios"
+has "the glance says the plan was skipped, and why" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('quickq'))")" 'title="skipped: small fix, no time"'
+WTQ=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq/meta.json'))['worktree'])")
+git -C "$WTQ" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
+has "a quick quest's trial does not wait for a behaviour check" "$(cd "$WTQ" && GUILD_QUEST=quickq "$GUILD" trial pass "did it" 2>&1)" "trial pass recorded"
+
 printf 'Intent: x\nAcceptance:\n- check: true\n- the page shows it\n' | GUILD_NO_ACCEPTANCE= "$GUILD" quest beh --repo "$REPO_A" >/dev/null 2>&1
 is "with one it starts, and the contract is sealed" "$(python3 -c "import json;print(len(json.load(open('$GUILD_HOME/quests/beh/acceptance.json'))['items']))")" "2"
 QB="$GUILD_HOME/quests/beh"; WTB=$(python3 -c "import json;print(json.load(open('$QB/meta.json'))['worktree'])")

@@ -27,6 +27,8 @@ usage() {
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
 guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light]
                     [--no-plan "<why>"]   a quest plans first unless you say why it should not
+                   [--quick ["<why>"]]   small work, no gates: no plan, no acceptance contract,
+                                    no Why card, no validation checklist, and the trial is skipped
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
@@ -667,7 +669,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
-  local machine="" headless="" noaccept="" noplan="" all_args=("$@")
+  local machine="" headless="" noaccept="" noplan="" quick="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -677,6 +679,9 @@ cmd_quest() {
       --tier) tier="$2"; shift 2 ;;
       --plan) plan=1; shift ;;
       --no-plan) noplan="${2:-}"; [ -n "$noplan" ] || die "--no-plan needs a reason"; shift 2 ;;
+      --quick)
+        if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then quick="$2"; shift 2
+        else quick="the guildmaster asked for a quick quest"; shift; fi ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
       --parent) parent="$2"; shift 2 ;;
@@ -726,6 +731,14 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   local hbin; hbin=$(harness bin "$harness") || exit 1
   command -v "$hbin" >/dev/null || die "$hbin is not installed"
 
+  # --quick is one flag for all the gates: no plan, no acceptance contract, no Why card, no
+  # validation checklist, and the trial is skipped. Nothing is faked: every step it drops shows on
+  # the board as skipped, with this reason, so a quick quest never looks like a checked one.
+  if [ -n "$quick" ]; then
+    [ -n "$noplan" ] || noplan="$quick"
+    [ -n "$noaccept" ] || noaccept="$quick"
+    export GUILD_NO_WHY=1
+  fi
   [ -n "$noaccept" ] || noaccept="${GUILD_NO_ACCEPTANCE:-}"
   # The contract comes before the code: read the brief now, and refuse one with no acceptance
   # before any worktree or folder exists (helpers inherit their parent's; a reason opts out).
@@ -809,7 +822,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
-           "no_plan": """$noplan""",
+           "no_plan": """$noplan""", "quick": """$quick""",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -853,6 +866,17 @@ guild wait --for <short-name> --timeout 3600      # in the background; you are w
 Each helper works in its own worktree on a branch from yours. When one reports done, merge its branch into yours (\`git merge $branch--<short-name>\`), run your checks, and carry on. Its work is yours to review.
 HELPERS
   fi
+  [ -n "$quick" ] && cat >> "$q/prompt.md" <<QUICK
+
+## This is a quick quest
+
+The guildmaster asked for speed on this one: "$quick". The gates are off.
+- No plan phase, no acceptance contract, no Why card, no validation checklist.
+- Build it, commit it, then \`guild trial skip "$quick"\` and report done.
+- The board shows every skipped step as skipped, with that reason. Never write a note that says a step passed when it did not run.
+- Still owed: a wrap-up page, and a PR if the brief asks for one.
+QUICK
+
   [ -n "$plan" ] && cat >> "$q/prompt.md" <<PLAN
 
 ## You start in the plan phase
@@ -925,6 +949,10 @@ PY
 }
 
 # Has this quest actually committed code? A report is only owed when something changed.
+quest_quick() { # slug: the reason a quest was started with --quick, or empty
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('quick',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+
 quest_committed() { # slug
   local q wt base
   q="$(qdir "$1")"
@@ -979,6 +1007,7 @@ cmd_status() {
     esac
   done
   need_quest "$slug"
+  [ -n "$(quest_quick "$slug")" ] && export GUILD_NO_SCENARIOS=1
   case "$state" in working|blocked|needs-decision|done|failed|stopped|planned) ;; *) die "bad state $state" ;; esac
   [ "$state" = planned ] && { handoff "$slug" "$note"; return; }
   # Every decision reaches the guildmaster as a page on the war table, never as a line of
@@ -1277,7 +1306,8 @@ cmd_trial() {
   local slug; slug=$(current_quest)
   [ -n "$slug" ] || die "trial must run inside a quest (GUILD_QUEST not set)"
   need_quest "$slug"
-  local result="${1:-}" note="${2:-}" sha nobehaviour=""
+  local result="${1:-}" note="${2:-}" sha nobehaviour="" quick
+  quick=$(quest_quick "$slug")
   if [ "${2:-}" = --no-behaviour ]; then nobehaviour="${3:-}"; [ -n "$nobehaviour" ] || die "--no-behaviour needs a reason"; note="${4:-}"; fi
   case "$result" in
     pass) ;;
@@ -1285,6 +1315,7 @@ cmd_trial() {
     *) die "usage: guild trial pass [note] | skip <reason>" ;;
   esac
   sha=$(git rev-parse HEAD)
+  [ -n "$quick" ] && [ -z "$nobehaviour" ] && nobehaviour="quick quest: $quick"
   if [ "$result" = pass ]; then
     local why
     why=$(python3 "$GUILD_REPO/bin/checks.py" status "$(qdir "$slug")" "$sha") || die "trial refused: $why"
