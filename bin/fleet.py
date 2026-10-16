@@ -627,6 +627,10 @@ def board():
             column, state, what = "waiting", "asks you", s["question"] or (links and "a board is open on the war table") or ""
         else:
             column, state, what = "todo", "idle", (s["title"] if s["title"] and s["title"] != s["name"] else "") or prompt[:140]
+        # The quartermaster is always there; sitting idle is its normal state, not a to-do of
+        # yours. It comes back on the board the moment it works or asks you something.
+        if is_qm and column == "todo" and key not in pinned:
+            continue
         cards.append(card(
             id=key, kind="session", column=column, title=name, what=what,
             last=prompt[:140] if column != "road" and prompt[:140] != what else "",

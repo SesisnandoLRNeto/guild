@@ -1236,6 +1236,19 @@ has "told to look at the roster and watch again" "$(cat "$GUILD_HOME/last-claude
 
 # ── side menus: one per window, never split from an empty id ─────────────────
 section "side menus"
+# a merged quest keeps a whole agent in memory for nothing: its tab closes by itself
+MT=$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import watch
+qs = [{'slug':'m1','state':'done'}, {'slug':'m2','state':'working'}, {'slug':'m3','state':'trial-pass'}, {'slug':'qm','state':'done'}]
+pr = {'m1':{'state':'merged'}, 'm2':{'state':'merged'}, 'm3':{'state':'open'}, 'qm':{'state':'merged'}}
+print('[' + ','.join(watch.merged_tabs(qs, pr, {'m1','m2','m3','qm'})) + ']')
+print('[' + ','.join(watch.merged_tabs(qs, pr, {'m2'})) + ']')
+")
+is "a merged, finished quest's tab is closed" "$(echo "$MT" | head -1)" "[m1]"
+is "and a tab with no window left is not touched" "$(echo "$MT" | tail -1)" "[]"
+
 SB_SOCK="guild-sidebar-test"
 tmux -L "$SB_SOCK" -f /dev/null new-session -d -s guild -n qm -x 120 -y 30 "sleep 600"
 (
