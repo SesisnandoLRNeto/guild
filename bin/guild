@@ -79,7 +79,9 @@ guild drill                         this week's three-question drill on those ru
 guild why <slug>                    the quest's Why card: show it, or put it on the docket again (open)
 guild pr-body [slug]                the PR's contract section (acceptance, behaviour, checklist) for HEAD; gh pr create needs it
 guild behaviour [slug]              an independent validator drives the running app through the scenarios (never reads the code)
-guild tidy [--dry-run]              move old events to monthly files, pack old closed quests (runs monthly on its own)
+guild tidy [--dry-run]              move old events to monthly files, delete the dead pages and pictures of
+                                    closed quests (runs monthly on its own, and at every guild close)
+guild lore                          the bestiary: which class each model is, what each state looks like
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
@@ -1394,7 +1396,11 @@ if os.path.exists(path):
         os.replace(tmp, path)
 PY
   mkdir -p "$QUESTS/_archive"
-  mv "$q" "$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
+  local dest="$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
+  mv "$q" "$dest"
+  # Its board links 404 from here on, so the pages and pictures are dead weight: drop them now.
+  # The json stays (meta, ledger, grade, each board's title and your answer), so history holds.
+  python3 "$GUILD_REPO/bin/tidy.py" purge "$dest" >/dev/null 2>&1 || true
   event "$slug" closed ""
   echo "closed $slug (branch $branch kept in $repo)"
 }
@@ -1445,6 +1451,7 @@ case "${1:-}" in
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
+  lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
   behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")

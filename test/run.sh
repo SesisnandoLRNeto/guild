@@ -643,7 +643,7 @@ tj=$(curl -s "${url%/campaign}/treasury.json")
 has "with daily spend by scope" "$tj" '"by_scope"'
 has "and every quest's cost" "$tj" '"quests"'
 has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
-has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '>PR open</li>'
+has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '<small>pr open</small></li>'
 
 
 
@@ -791,6 +791,22 @@ dj=$(curl -s "$base/docket.json")
 has "the docket lists every open decision" "$dj" "Pick a name"
 has "with its options" "$dj" '"recommended": "a"'
 has "the docket is the war table's front page" "$(curl -s "$base/")" "The Docket"
+# the lore: classes by model, creatures by state, places by column, one story on every page
+LO=$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin'); import lore
+print(lore.klass('claude-opus-5')['name'], lore.klass('claude-sonnet-5-5')['name'], lore.klass('haiku')['name'], lore.klass('claude-fable-5-1')['name'], lore.klass('', 'plan')['name'])
+print(lore.lore('failed')['line'], '|', lore.lore('blocked')['icon'], '|', lore.lore('done', 'trial', {'state':'open'})['line'], '|', lore.lore('done', '', {'state':'merged'})['line'])")
+is "models have classes: Archmage, Knight, Scout, Oracle, and a Sage for the plan tier" "$(echo "$LO" | head -1)" "Archmage Knight Scout Oracle Sage"
+is "states have creatures and places, with the PR and the merge read from GitHub" "$(echo "$LO" | tail -1)" "Slain by an orc | troll | At the castle gate | Loot in the treasury"
+CJ=$(curl -s "$base/campaign.json")
+has "the campaign's columns are the lore's places" "$CJ" '"title": "The Tavern"'
+has "and keep the plain meaning as the hint" "$CJ" '"hint": "to do: not started, idle, or stopped"'
+has "a card carries its class" "$CJ" '"klass": {"name": "'
+has "the strip's steps are places, with the plain step under each" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('dk'))")" '<span class="gg-place">The forge</span><small>build</small>'
+
 curl -s -X POST "$base/docket/rule" -d '{"quest":"dk","board":"200001","answers":{"c":"b"},"message":"B reads better"}' >/dev/null
 is "a ruling from the docket answers the board" "$(python3 -c "import json;print(json.load(open('$dq/boards/200001/decision.json'))['answers']['c'])")" "b"
 curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"2999-01-01","note":"after the release"}' >/dev/null
@@ -942,13 +958,16 @@ has "old events move to a monthly file" "$(cat "$GUILD_HOME/events/2000-01.log")
 hasnt "and leave events.log" "$(cat "$GUILD_HOME/events.log")" "ancient"
 is "a reader's cursor still points at the end" "$(cat "$GUILD_HOME/.wait-cursor-test")" "$(wc -c < "$GUILD_HOME/events.log" | tr -d ' ')"
 has "history still sees the old events" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import eventlog;print(len(eventlog.lines()))")" "$(($(wc -l < "$TMP/events.before") + 1))"
-mkdir -p "$GUILD_HOME/quests/_archive/oldq-20000101120000/boards/1" "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots"
-echo '{"slug":"oldq"}' > "$GUILD_HOME/quests/_archive/oldq-20000101120000/meta.json"
-echo x > "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots/a.png"
-"$GUILD" tidy >/dev/null
-[ -f "$GUILD_HOME/quests/_archive/oldq-20000101120000/files.tar.gz" ] && [ ! -d "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots" ] && ok "an old closed quest gets its boards and shots packed" || bad "an old closed quest gets its boards and shots packed"
-[ -f "$GUILD_HOME/quests/_archive/oldq-20000101120000/meta.json" ] && ok "and keeps its meta for history" || bad "and keeps its meta for history"
-rm -rf "$GUILD_HOME/quests/_archive/oldq-20000101120000" "$GUILD_HOME/.wait-cursor-test"
+OQ="$GUILD_HOME/quests/_archive/oldq-20000101120000"
+mkdir -p "$OQ/boards/1/shots" "$OQ/shots" "$OQ/design-v2"
+echo '{"slug":"oldq"}' > "$OQ/meta.json"
+echo '{"title":"Pick one"}' > "$OQ/boards/1/board.json"; echo '{"answers":{"c":"a"}}' > "$OQ/boards/1/decision.json"
+echo '<h1>dead</h1>' > "$OQ/boards/1/content.html"; echo x > "$OQ/boards/1/shots/a.png"; echo x > "$OQ/shots/a.png"; echo x > "$OQ/design-v2/a.png"
+out=$("$GUILD" tidy)
+[ ! -f "$OQ/boards/1/content.html" ] && [ ! -d "$OQ/boards/1/shots" ] && [ ! -d "$OQ/shots" ] && [ ! -d "$OQ/design-v2" ] && ok "a closed quest loses its dead pages and pictures" || bad "a closed quest loses its dead pages and pictures"
+[ -f "$OQ/meta.json" ] && [ -f "$OQ/boards/1/board.json" ] && [ -f "$OQ/boards/1/decision.json" ] && ok "and keeps its meta and each board's answer for history" || bad "and keeps its meta and each board's answer for history"
+has "tidy says how much it freed" "$out" "MB of dead pages"
+rm -rf "$OQ" "$GUILD_HOME/.wait-cursor-test"
 
 # ── backend impact: data model, impact, business rules ───────────────────────
 section "backend impact"
