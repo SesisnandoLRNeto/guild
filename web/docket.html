@@ -37,6 +37,8 @@
   .chip { font-size: 11px; border-radius: 3px; padding: 0 6px; background: rgba(90, 60, 30, .12); }
   .chip.review { background: var(--gold); color: #2a1d14; font-weight: 700; }
   .chip.qm { background: #5b3e28; color: var(--sign-text); }
+  .chip.klass { background: rgba(142, 91, 209, .18); }
+  .chip .gi-icon { width: 12px; height: 12px; margin-right: 3px; vertical-align: -2px; }
   .item a { color: #8a4b12; font-size: 12px; }
   .ruling .qt { font-size: 12px; color: var(--ink-dim); margin: 0 0 4px; font-variant: small-caps; letter-spacing: .03em; }
   .ruling .q + .q { margin-top: 10px; }
@@ -93,7 +95,7 @@
 <header>
   <div>
     <h1><span class="gi-icon gi-scroll" aria-hidden="true"></span>The Docket</h1>
-    <p class="sub">The adventurers await your word, guildmaster. One ruling per row: pick, add a note, or hold it until a date. Then send them all.</p>
+    <p class="sub">The oracle's hall. Archmages, knights and scouts wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
   </div>
   <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a></nav>
 </header>
@@ -134,10 +136,10 @@ const picks = {}, notes = {};          // survive the refresh: what you chose bu
 function rowHtml(i, n) {
   const k = key(i);
   const chips = [
-    i.wrapup ? `<span class="chip review">review</span>` : "",
-    i.pseudo ? `<span class="chip qm">quartermaster</span>` : `<span class="chip">${esc(i.quest)}</span>`,
+    i.wrapup ? `<span class="chip review"><i class="gi-icon gi-chest" aria-hidden="true"></i>the bard's tale: grade it</span>` : "",
+    i.pseudo ? `<span class="chip qm"><i class="gi-icon gi-horn" aria-hidden="true"></i>quartermaster</span>` : `<span class="chip">${esc(i.quest)}</span>`,
     i.ticket ? `<span class="chip">${esc(i.ticket)}</span>` : "",
-    i.model ? `<span class="chip">${esc(i.model)}</span>` : "",
+    i.klass ? `<span class="chip klass" title="${esc(i.model || "")}"><i class="gi-icon gi-${esc(i.klass.icon)}" aria-hidden="true"></i>${esc(i.klass.name)}</span>` : i.model ? `<span class="chip">${esc(i.model)}</span>` : "",
   ].join("");
   const qs = (i.questions || []).map((q) => {
     const chosen = (picks[k] || {})[q.id];

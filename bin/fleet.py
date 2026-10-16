@@ -39,13 +39,10 @@ SUBAGENT_SECONDS = 120     # a subagent log touched in the last 2 minutes is sti
 SESSION_HOURS = 12         # idle sessions older than this leave the board
 DONE_DAYS = 7
 
-COLUMNS = [
-    ("todo", "Quest board", "Open and idle, stopped, or posted"),
-    ("road", "On the road", "Agents at work"),
-    ("waiting", "Awaiting orders", "A decision only you can make"),
-    ("trial", "In review", "PR open: waiting for review or merge"),
-    ("done", "Returned", "Merged, or closed, in the last week"),
-]
+# The five places a card can be, named by the lore (bin/lore.py); the hint keeps the plain meaning.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+COLUMNS = [(key, place, hint) for key, place, hint, _icon in __import__("lore").COLUMNS]
+COLUMN_ICON = {key: icon for key, _p, _h, icon in __import__("lore").COLUMNS}
 QUEST_COLUMN = {
     "working": "road", "checks-baseline": "road", "checks-green": "road", "checks-red": "road",
     "acceptance": "road", "message": "road", "planned": "road",
@@ -527,9 +524,14 @@ def set_pin(target, on):
 # ── the board ─────────────────────────────────────────────────────────────────
 
 def card(**kw):
+    import lore
     kw.setdefault("agents", [])
     kw.setdefault("links", [])
     kw.setdefault("rank", rank(kw.get("model")))
+    # who is on it (an Archmage, a Knight, a Scout) and what its state looks like (an orc, a troll,
+    # the castle gate), with the plain meaning beside each, so the board reads as one story
+    kw["klass"] = lore.klass(kw.get("model"), kw.get("tier", ""))
+    kw["lore"] = lore.lore(kw.get("state", ""), kw.get("column", ""), kw.get("pr"))
     kw["model"] = short_model(kw.get("model"))
     return kw
 
@@ -674,7 +676,7 @@ def board():
         by_col[k].sort(key=lambda c: (0 if c.get("pinned") else 1, _neg(c.get("since", ""))))
     agents_live = sum(1 for c in cards if c["column"] == "road") + sum(
         len([a for a in c["agents"] if a["type"] not in {q["slug"] for q in qs}]) for c in cards)
-    return {"columns": [{"key": k, "title": t, "hint": h, "cards": by_col[k]} for k, t, h in COLUMNS],
+    return {"columns": [{"key": k, "title": t, "hint": h, "icon": COLUMN_ICON[k], "cards": by_col[k]} for k, t, h in COLUMNS],
             "counts": {"agents": agents_live, "waiting": len(by_col["waiting"]), "todo": len(by_col["todo"])},
             "threads": threads, "edges": edges, "lanes": lanes(cards, threads, parents),
             "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}

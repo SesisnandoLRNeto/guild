@@ -99,7 +99,7 @@ def render(spec, md_inline):
     labels = {o["id"]: o.get("label", o["id"]) for o in opts}
     rec = spec.get("recommend")
     inl = lambda t: md_inline(str(t or ""), auto_code=True)
-    parts = [f'<div class="kicker">decision for you</div><h1>{inl(spec["question"])}</h1>']
+    parts = [f'<div class="kicker">a fork in the road: your call</div><h1>{inl(spec["question"])}</h1>']
     if spec.get("why_now"):
         parts.append(f'<p class="lead">{inl(spec["why_now"])}</p>')
     if rec:

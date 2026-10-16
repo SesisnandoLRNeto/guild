@@ -165,6 +165,22 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 **Grading the result.** Every wrap-up page asks you for a grade (1 to 5) and a verdict: ready to merge, needs changes, or split a follow-up. "Needs changes" sends your notes straight back to the adventurer, which carries on. The grade stays with the quest (`grade.json`), the campaign board shows it (or a red "grade it" until you do), and `guild retro` compares grades by model, tier and harness, so routing in `dispatch.json` follows your judgment, not only whether checks passed.
 
+## The lore
+
+The war table is a guild hall, and its pages speak like one. `guild lore` prints the whole bestiary (`bin/lore.py`); the plain meaning always sits next to the flavour, so nothing has to be decoded.
+
+| On the page | What it means |
+|---|---|
+| Guildmaster, Quartermaster | You; the agent that sends parties out and reads their reports |
+| Oracle, Archmage, Knight, Scout, Artificer | The adventurer's class, from its model: Fable, Opus, Sonnet, Haiku, Codex. A tier names it when the model is not known (plan is a Sage) |
+| Squire, Inquisitor, Inspector | A helper quest; the behaviour validator; the code reviewer |
+| The Tavern, On the Road, The Oracle, The Castle Gate, The Treasury | The campaign's columns: to do, in progress, needs you, PR in review, merged or closed |
+| The call, the map, the forge, the gauntlet, the trial, the gate, the treasury | A quest's steps on the At-a-glance strip: asked, plan, build, checks, trial, PR open, merged |
+| An orc, a troll, goblins, a skull | Failed; blocked; checks failing; stopped without a report |
+| The bard's tale | A wrap-up waiting for your grade |
+
+Pages people outside the guild receive (the validation export for the team) stay plain.
+
 ## Costs and history
 
 Claude Code writes a session log per working directory. A quest owns its worktree, so those are its logs: guild reads the token usage from them and prices it.

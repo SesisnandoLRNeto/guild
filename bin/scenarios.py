@@ -201,15 +201,16 @@ def certify(slug):
     return cert
 
 
-def stamp(s):
-    """The certificate as a line of HTML for the page."""
+def stamp(s, lore=False):
+    """The certificate as a line of HTML for the page. `lore` adds the guild's words on the live page;
+    the team's export stays plain."""
     c = s.get("certificate")
     if s.get("stale"):
-        return (f'<p class="cert stale"><b>Certificate out of date.</b> Validated on {esc(c["at"][:16].replace("T", " "))} at '
+        return (f'<p class="cert stale"><b>{"The gauntlet moved. " if lore else ""}Certificate out of date.</b> Validated on {esc(c["at"][:16].replace("T", " "))} at '
                 f'<code>{esc(c["commit"][:8])}</code>, but the branch has new commits since. Run the list again.</p>')
     if s.get("certified"):
         skipped = f', {len(c["skipped"])} skipped with a reason' if c.get("skipped") else ""
-        return (f'<p class="cert"><b>Validated.</b> {c["passed"]} of {c["total"]} passed{skipped}, on '
+        return (f'<p class="cert"><b>{"Gauntlet cleared. " if lore else ""}Validated.</b> {c["passed"]} of {c["total"]} passed{skipped}, on '
                 f'{esc(c["at"][:16].replace("T", " "))} at commit <code>{esc(c["commit"][:8])}</code>. Ready for the merge decision.</p>')
     return ""
 
@@ -310,8 +311,8 @@ def page(slug, meta=None, export=False, image=None, prs=None):
         if s.get("screen"):
             by_screen.setdefault(s["screen"], []).append(s["id"])
     pr_label = f"PR #{prs['number']}" if prs and prs.get("number") else ""
-    eyebrow = " · ".join(x for x in [os.path.basename(meta.get("repo", "")), meta.get("ticket", ""), pr_label,
-                                      "updated " + time.strftime("%d %b %Y")] if x)
+    eyebrow = " · ".join(x for x in [("" if export else "the gauntlet"), os.path.basename(meta.get("repo", "")),
+                                      meta.get("ticket", ""), pr_label, "updated " + time.strftime("%d %b %Y")] if x)
     back = "" if export else (f'<a class="btn back" href="{esc(report_url(slug) or "/campaign")}" id="back">'
                               f'&larr; Back to the {"report" if report_url(slug) else "campaign board"}</a>')
     h = [f'<header>{back}<div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
@@ -327,7 +328,7 @@ def page(slug, meta=None, export=False, image=None, prs=None):
                  'scenario still to run as passed, and says so in each note.">Pass all</button>'
                  '<a class="btn" href="validate/export" download>Download for the team</a>')
     h.append('</div>')
-    h.append(f'<div id="cert">{stamp(summary(slug))}</div>')
+    h.append(f'<div id="cert">{stamp(summary(slug), lore=not export)}</div>')
     if export:
         done = summary(slug)
         h.append(f'<p class="note">The guildmaster ran this list: {done["pass"]} passed, {done["fail"]} failed, '

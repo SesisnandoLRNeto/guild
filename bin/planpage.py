@@ -146,7 +146,7 @@ PAGE = """<!doctype html>
  .hint { color: var(--dim); font-size: 13px; margin-top: 18px; }
  @media (max-width: 760px) { .minute, .ta, .cmp, .next { grid-template-columns: 1fr; } }
 </style></head><body>
-<div class="kicker">__QUEST__ · understand it, then approve</div>
+<div class="kicker">__QUEST__ · read the map, then give the order</div>
 <h1>Understand the plan</h1>
 <p class="summary">__SUMMARY__</p>
 <h2>In one minute</h2>

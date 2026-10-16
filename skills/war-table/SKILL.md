@@ -87,11 +87,11 @@ Write `decisions.json` beside the page and pass `--decisions`:
 Write it so someone who does not read code knows what happened in one minute. The war table already puts an "At a glance" strip on top (where the quest stands as a path of steps, cost, time, checks, trial, PR, grade), so do not repeat those numbers. Follow the template's order:
 
 1. **In plain words**: two to four sentences a product person can read. What people can do now that they could not before, who it is for, and a short yes/no list of what is and is not included. No file names, class names or code words here.
-2. **What it looks like**: real screenshots in before and after pairs, same viewport and same data (`guild shot`). Each caption says what changed for the user.
-3. **How it works**: one diagram (Mermaid flow, state machine or sequence) with one line under it saying what to notice. Prefer a picture to a paragraph whenever the point has arrows.
-4. **How we know it works**: a table of proofs in plain words ("a rate typed the old way still opens"), each with its result as `class="pass"` or `class="fail"`. Say what was checked, not the command.
-5. **Your decision**: merge as is, change something, or split a follow-up, and what happens after each. Point to the validation checklist (below): "ready to merge" waits for it.
-6. **For developers**, folded in `<details class="dev">`: the file list with one line each, performance numbers and how you measured them, pain points, the design choices you made alone with their reasons, what you ruled out, the quests this touches (`guild roster`), and the backend section below.
+2. **Through the spyglass** (what it looks like): real screenshots in before and after pairs, same viewport and same data (`guild shot`). Each caption says what changed for the user.
+3. **How the gears turn** (how it works): one diagram (Mermaid flow, state machine or sequence) with one line under it saying what to notice. Prefer a picture to a paragraph whenever the point has arrows.
+4. **Proof by trial** (how we know it works): a table of proofs in plain words ("a rate typed the old way still opens"), each with its result as `class="pass"` or `class="fail"`. Say what was checked, not the command.
+5. **Your ruling** (your decision): merge as is, change something, or split a follow-up, and what happens after each. Point to the validation checklist (below): "ready to merge" waits for it.
+6. **For the engineers' guild**, folded in `<details class="dev">`: the file list with one line each, performance numbers and how you measured them, the monsters you met (pain points), the design choices you made alone with their reasons, what you ruled out, the quests this touches (`guild roster`), and the backend section below.
 
 - **Backend: data model, impact and business rules.** When the change touches migrations, entities, services or validation, the report gets a drawn section. Guild builds it; you explain it:
   1. `guild impact --out /tmp/impact.html` gives a first look. Read what it found: the schema diff (every migration replayed on the base and on your branch), changed entities and fields, every module that uses what changed (the files you did *not* touch are the ones to double check), changed endpoints, and the code lines that look like rules.
@@ -151,6 +151,12 @@ How to write it (the guildmaster's model is a run sheet a colleague could follow
 - **Frontend: the screen map.** One entry per screen a person must look at, with its route and `next` actions (the map draws the path through the app). Take the pair with `guild shot`: `before` on the base branch, `after` on your branch, same URL, same data, same flags; store them under the quest folder (`shots/`). A new screen has no `before`. Every UI scenario names its `screen`.
 - **Known gaps** are what the guildmaster should not report as bugs, each with why and where it is tracked.
 - Plain B1 English, no emojis, no em dashes.
+
+## The guild's voice
+
+The war table is a guild hall, and every page speaks like one. The vocabulary (`bin/lore.py`, `guild lore`): the guildmaster rules; the quartermaster sends parties out; the adventurers are classes by model (an Oracle on Fable, an Archmage on Opus, a Knight on Sonnet, a Scout on Haiku); helpers are squires; the behaviour validator is the Inquisitor. Trouble has a face: an orc for a failure, a troll for a block, goblins for red tests, a skull for a quest that stopped without a tale. Places are stages: the tavern (to do), the road (working), the oracle (your call), the castle gate (PR in review), the treasury (merged).
+
+Use it in headings and asides, never instead of the facts. A heading may say "Proof by trial"; the rows under it still say exactly what was checked and what came back. When a lore word could be misread, put the plain word next to it in brackets, as the template does. The "In plain words" block and the validation checklist's rows stay plain: they are for people who did not sign up for the game.
 
 ## Diagrams and screenshots
 

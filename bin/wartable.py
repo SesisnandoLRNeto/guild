@@ -109,6 +109,7 @@ GLANCE_CSS = """<style>
 .gg-path li.stuck::before{border-color:var(--bad,#a8322a);background:#f2c4bb}
 .gg-path li.skip{opacity:.6;font-style:italic}
 .gg-path li.skip::before{border-style:dashed;border-color:#a99470;background:#efe3c8}
+.gg-path li .gg-place{display:block}.gg-path li small{display:block;font-size:10px;opacity:.7;letter-spacing:.04em}
 .gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
 .gg-tile{background:rgba(255,255,255,.35);border:1px solid var(--line,#cdb88e);border-radius:4px;padding:7px 10px}
 .gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
@@ -159,29 +160,32 @@ def glance(quest):
     now = next((i for i, (_, ok, _) in enumerate(steps) if ok is False), None)
     stuck = state in ("blocked", "failed", "stopped", "checks-red")
     items = []
+    import lore
     for i, (name, ok, why) in enumerate(steps):
         cls = "skip" if ok is None else "done" if ok and (now is None or i < now) else ""
         if i == now:
             cls = "now stuck" if stuck else "now"
         tip = f' title="skipped: {_html.escape(why)}"' if ok is None and why else ""
-        items.append(f'<li class="{cls}"{tip}>{_html.escape(name)}</li>')
+        place = lore.STEP.get(name, (name, ""))[0]
+        items.append(f'<li class="{cls}"{tip}><span class="gg-place">{_html.escape(place)}</span>'
+                     f'<small>{_html.escape(name.lower())}</small></li>')
 
     ticket = meta.get("ticket", "")
     if pr.get("state") == "merged":
-        say, tone = "Merged. This work is in the main branch.", "ok"
+        say, tone = "Loot in the treasury: this work is in the main branch.", "ok"
     elif stuck:
-        say, tone = {"blocked": "Blocked", "failed": "Failed", "stopped": "Stopped without a report",
-                     "checks-red": "Checks are failing"}[state] + (f": {note}" if note else "."), "bad"
+        L = lore.lore(state)
+        say, tone = f"{L['line']} ({L['plain']})" + (f": {note}" if note else "."), "bad"
     elif state == "needs-decision":
-        say, tone = "Waiting for your decision on the war table.", "turn"
+        say, tone = "The oracle awaits your word on the war table.", "turn"
     elif state in ("done", "trial-pass", "trial-skip") and pr.get("state") in ("open", "draft"):
-        say, tone = f"Finished. PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn"
+        say, tone = f"At the castle gate: PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn"
     elif state in ("done", "trial-pass", "trial-skip"):
-        say, tone = "Finished." + ("" if grade else " Grade it on the right."), "ok"
+        say, tone = "Back with the loot." + ("" if grade else " Grade it on the right."), "ok"
     elif state == "held":
-        say, tone = "On hold until a date you set.", ""
+        say, tone = "Camped until the day you set.", ""
     else:
-        say, tone = "An agent is working on it now.", ""
+        say, tone = "On the road: an agent is working on it now.", ""
 
     tiles = []
     cost = q.get("cost") or 0
@@ -431,7 +435,8 @@ def docket_items():
                 continue
             base = {"quest": quest, "board": board, "title": meta.get("title", board), "subtitle": meta.get("subtitle", ""),
                     "created": meta.get("created", ""), "url": f"/b/{quest}/{board}/", "wrapup": bool(meta.get("wrapup")),
-                    "ticket": qmeta.get("ticket", ""), "model": qmeta.get("model", ""), "pseudo": bool(qmeta.get("pseudo"))}
+                    "ticket": qmeta.get("ticket", ""), "model": qmeta.get("model", ""), "pseudo": bool(qmeta.get("pseudo")),
+                    "klass": __import__("lore").klass(qmeta.get("model", ""), qmeta.get("tier", ""))}
             dec = os.path.join(d, "decision.json")
             if meta.get("kind") == "budget" and not qmeta.get("budget") and not os.path.exists(dec):
                 continue                                 # its cap was removed: nothing to raise any more
@@ -673,10 +678,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 if v.group(2) == "mark":
                     out = sc.mark(quest, str(body.get("id", "")), str(body.get("status", "")), str(body.get("note", "")))
-                    out = dict(out, stamp=sc.stamp(out), certificate=None)
+                    out = dict(out, stamp=sc.stamp(out, lore=True), certificate=None)
                 elif v.group(2) == "markall":
                     out = sc.mark_all(quest)
-                    out = dict(out, stamp=sc.stamp(out), certificate=None)
+                    out = dict(out, stamp=sc.stamp(out, lore=True), certificate=None)
                 else:
                     failed = sc.failures_text(quest)
                     if not failed:
@@ -1124,7 +1129,7 @@ PLAN_PAGE = """<!doctype html>
  .hint { color: var(--dim); font-size: 13px; margin-top: 22px; }
  @media (max-width: 700px) { .next { grid-template-columns: 1fr; } }
 </style></head><body>
-<div class="kicker">__QUEST__ · plan for your approval</div>
+<div class="kicker">__QUEST__ · the scout's map, for your approval</div>
 <h1>Approve the plan?</h1>
 <p class="summary">__SUMMARY__</p>
 <div class="plan">__PLAN__</div>
