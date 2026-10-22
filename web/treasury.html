@@ -59,15 +59,27 @@
 
 <h2>Where the money went</h2>
 <div class="bar-head">
-  <span class="seg" id="group-by"><button data-v="story" aria-pressed="true">Story</button><button data-v="ticket" aria-pressed="false">Ticket</button><button data-v="slug" aria-pressed="false">Quest</button><button data-v="model" aria-pressed="false">Model</button><button data-v="repo" aria-pressed="false">Repo</button></span>
+  <span class="seg" id="group-by"><button data-v="story" aria-pressed="true">Story</button><button data-v="ticket" aria-pressed="false">Ticket</button><button data-v="slug" aria-pressed="false">Quest</button><button data-v="model" aria-pressed="false">Model</button><button data-v="repo" aria-pressed="false">Repo</button><button data-v="kind" aria-pressed="false">Kind</button><button data-v="mode" aria-pressed="false">Mode</button></span>
+  <span class="muted" style="font-size:12.5px">period, for this and the next two sections:</span>
   <span class="seg" id="period"><button data-v="7" aria-pressed="false">7 days</button><button data-v="30" aria-pressed="true">30 days</button><button data-v="0" aria-pressed="false">All</button></span>
 </div>
 <div class="hbars" id="where"></div>
 <p class="hint" id="where-hint"></p>
 
+<h2>Tokens by model</h2>
+<div id="mix"></div>
+<p class="hint" id="mix-hint">Cache reads are most of the tokens but cost a tenth of fresh input. Output is few tokens and the most expensive kind.</p>
+
+<h2>What kind of work took the time and the money</h2>
+<div class="two">
+  <div><h3>Dollars</h3><div class="hbars" id="kind-cost"></div></div>
+  <div><h3>Hours open</h3><div class="hbars" id="kind-time"></div></div>
+</div>
+<p class="hint" id="kind-hint"></p>
+
 <h2>Was it worth it?</h2>
 <div class="bar-head">
-  <span class="seg" id="worth-by"><button data-v="model" aria-pressed="true">By model</button><button data-v="tier" aria-pressed="false">By tier</button><button data-v="harness" aria-pressed="false">By harness</button></span>
+  <span class="seg" id="worth-by"><button data-v="model" aria-pressed="true">By model</button><button data-v="tier" aria-pressed="false">By tier</button><button data-v="harness" aria-pressed="false">By harness</button><button data-v="kind" aria-pressed="false">By kind</button><button data-v="mode" aria-pressed="false">By mode</button></span>
 </div>
 <table class="num" id="worth"></table>
 <p class="hint">Your grade is the 1 to 5 you gave on each wrap-up. First pass: the quest met its own acceptance checks on its first real run. Overruled: you picked another option than the agent recommended. Stalls: it stopped without a report.</p>
@@ -76,11 +88,6 @@
     <h3>Cost against your grade</h3>
     <svg class="chart" id="scatter" viewBox="0 0 440 260" role="img" aria-label="Cost against grade, one dot per quest"></svg>
     <p class="hint">One dot per graded quest. Up and to the left is good value: a high grade for little money.</p>
-  </div>
-  <div>
-    <h3>What the tokens were</h3>
-    <div id="mix"></div>
-    <p class="hint">Cache reads are most of the tokens but cost a tenth of fresh input. Output is few tokens and the most expensive kind.</p>
   </div>
 </div>
 
@@ -219,22 +226,41 @@ function scatter() {
 }
 
 function mix() {
-  const per = {};
-  for (const q of D.quests) for (const [m, c] of Object.entries(q.models)) {
+  const per = {}, qs = D.quests.filter(inPeriod);
+  for (const q of qs) for (const [m, c] of Object.entries(q.models)) {
     const k = short(m); per[k] = per[k] || { cost: 0, t: { input: 0, output: 0, cache_write: 0, cache_read: 0 } }; per[k].cost += c;
   }
   // tokens per kind are per quest, not per model; share them by each model's cost in the quest
-  for (const q of D.quests) {
+  for (const q of qs) {
     const total = Object.values(q.models).reduce((a, b) => a + b, 0) || 1;
     for (const [m, c] of Object.entries(q.models)) for (const kind in q.tokens) per[short(m)].t[kind] += q.tokens[kind] * c / total;
   }
+  const allTokens = Object.values(per).reduce((s, v) => s + Object.values(v.t).reduce((a, b) => a + b, 0), 0);
+  $("#mix-hint").textContent = `${tok(allTokens)} tokens over ${qs.length} quests in the period. Cache reads are most of the tokens but cost a tenth of fresh input. Output is few tokens and the most expensive kind.`;
   const kinds = [["cache_read", "cache read", "#b9a06c"], ["cache_write", "cache write", "#b5651d"], ["input", "input", "#3f7fc4"], ["output", "output", "#8a4b12"]];
   $("#mix").innerHTML = `<div class="legend" style="margin-bottom:8px">${kinds.map(([, n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("")}</div>`
     + Object.entries(per).sort((a, b) => b[1].cost - a[1].cost).map(([m, v]) => {
       const all = Object.values(v.t).reduce((a, b) => a + b, 0) || 1;
       return `<div style="margin:0 0 10px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(m)}</span><span>${tok(all)} tokens · ${money(v.cost)}</span></div>
         <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(90,60,30,.1)">${kinds.map(([k, n, c]) => `<span title="${n}: ${tok(v.t[k])}" style="width:${(100 * v.t[k] / all).toFixed(2)}%;background:${c}"></span>`).join("")}</div></div>`;
-    }).join("");
+    }).join("") || `<span class="muted">No quests in this period.</span>`;
+}
+
+// ── two single-hue bar sets: dollars and hours per kind of task, each sorted on its own ──
+function kinds() {
+  const qs = D.quests.filter(inPeriod), per = {};
+  for (const q of qs) { const k = q.kind || "other"; per[k] = per[k] || { cost: 0, min: 0, n: 0 }; per[k].cost += q.cost; per[k].min += q.minutes; per[k].n += 1; }
+  const bars = (id, key, fmt, color) => {
+    const rows = Object.entries(per).sort((a, b) => b[1][key] - a[1][key]);
+    const total = rows.reduce((s, r) => s + r[1][key], 0) || 1, max = rows[0] ? rows[0][1][key] : 1;
+    $(id).innerHTML = rows.map(([k, v]) => `<span class="name" title="${esc(k)}">${esc(k)}</span>
+      <span class="track"><span class="fill" style="width:${(100 * v[key] / max).toFixed(1)}%;background:${color}"></span></span>
+      <span class="val">${fmt(v[key])}<small>${Math.round(100 * v[key] / total)}% · ${v.n} quest${v.n === 1 ? "" : "s"} · ${fmt(v[key] / v.n)} each</small></span>`).join("")
+      || `<span class="muted">No quests in this period.</span>`;
+  };
+  bars("#kind-cost", "cost", money, "#8a4b12");
+  bars("#kind-time", "min", (m) => hours(Math.round(m)), "#3f7fc4");
+  $("#kind-hint").textContent = `${qs.length} quests in the period. Time open runs from the first reply to the last, so a quest that waited for you counts the wait. The kind is read from each brief: merge, PR review fix, investigation, docs, bug fix, feature; chore is the rest with no ticket.`;
 }
 
 function folders() {
@@ -265,7 +291,7 @@ function questsTable() {
       <td class="n">${q.grade ? q.grade + "/5" : "-"}</td><td class="n">${esc(q.pr || "-")}</td><td class="n">${esc((q.created || "").slice(5, 10))}</td></tr>`).join("");
 }
 
-function render() { tiles(); daily(); where(); worth(); scatter(); mix(); folders(); jev(); questsTable();
+function render() { tiles(); daily(); where(); mix(); kinds(); worth(); scatter(); folders(); jev(); questsTable();
   $("#at").textContent = `Updated ${D.at}. * priced with the default model because its own price is not set.`;
   for (const [id, v] of [["#daily-by", dailyBy], ["#group-by", groupBy], ["#period", String(period)], ["#worth-by", worthBy]])
     document.querySelectorAll(id + " button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));

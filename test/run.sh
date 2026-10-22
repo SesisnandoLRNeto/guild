@@ -640,6 +640,9 @@ has "board pages get the picture lightbox" "$(curl -s "${url%/campaign}/b/$bq/$b
 has "and the lightbox is served" "$(curl -s "${url%/campaign}/lightbox.js")" "requestFullscreen"
 has "the treasury page is served" "$(curl -s "${url%/campaign}/treasury")" "The Treasury"
 tj=$(curl -s "${url%/campaign}/treasury.json")
+has "every quest in the treasury carries the kind of task it was" "$tj" '"kind": "'
+has "and how it was run" "$tj" '"mode": "'
+has "the treasury page reads tokens by model and the kinds of work on the period" "$(curl -s "${url%/campaign}/treasury")" 'id="kind-cost"'
 has "with daily spend by scope" "$tj" '"by_scope"'
 has "and every quest's cost" "$tj" '"quests"'
 has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
