@@ -116,12 +116,12 @@ def render(spec, md_inline):
         if "reversible" in o:
             chips.append(f'<span class="chip {"ok" if o["reversible"] else "warn"}">{"can be undone" if o["reversible"] else "hard to undo"}</span>')
         pc = "".join(f"<li class=\"pro\">{inl(p)}</li>" for p in o.get("pros", [])) + "".join(f"<li class=\"con\">{inl(c)}</li>" for c in o.get("cons", []))
-        cards.append(f'<div class="opt{" suggested" if o["id"] == rec else ""}"><div class="oid">{esc(o["id"])}{" · suggested" if o["id"] == rec else ""}</div>'
+        cards.append(f'<div class="opt{" suggested" if o["id"] == rec else ""}"><div class="oid">Path {esc(o["id"])}{" · suggested" if o["id"] == rec else ""}</div>'
                      f'<h3>{esc(o.get("label", ""))}</h3><p>{inl(o.get("summary", ""))}</p><div class="chips">{"".join(chips)}</div>'
                      + (f"<ul class=\"pc\">{pc}</ul>" if pc else "")
                      + (f'<p class="after"><b>If you pick it:</b> {inl(o["after"])}</p>' if o.get("after") else "")
                      + (f'<p class="blocks"><b>It rules out:</b> {inl(o["blocks"])}</p>' if o.get("blocks") else "") + "</div>")
-    parts.append(f'<h2>The options</h2><div class="opts n{min(len(opts), 3)}">{"".join(cards)}</div>')
+    parts.append(f'<h2>The paths <small class="plain">(the options)</small></h2><div class="opts n{min(len(opts), 3)}">{"".join(cards)}</div>')
 
     # what each option does with real situations: the table that prevents two readings of one rule
     if spec.get("cases"):
@@ -163,8 +163,12 @@ def render(spec, md_inline):
         tail.append(f'<p><b>If nobody answers:</b> {inl(spec["if_no_answer"])}</p>')
     if spec.get("sources"):
         tail.append("<p><b>Sources:</b> " + ", ".join(inl(s) for s in spec["sources"]) + "</p>")
-    tail.append('<p class="hint2">Pick an option on the right, or <b>Explain more</b> with your questions in the notes '
+    tail.append('<p class="hint2">Pick a path on the right, or <b>Explain more</b> with your questions in the notes '
                 '(nothing changes until you decide), or <b>My own answer</b> with your words in the notes.</p>')
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import lore
+    tail.append(f'<p class="bard"><span class="gi-icon gi-scroll" aria-hidden="true"></span>{esc(lore.quip(spec["question"]))}'
+                '<small>the bard</small></p>')
     parts.append('<div class="foot">' + "".join(tail) + "</div>")
     return PAGE.replace("__TITLE__", esc(spec["question"])[:80]).replace("__BODY__", "".join(parts))
 
@@ -174,6 +178,9 @@ PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <style>
  body { max-width: 1060px; }
  .kicker { font-variant: small-caps; letter-spacing: .08em; color: var(--dim); font-size: 13px; }
+ h2 .plain { font-size: 13px; font-weight: 400; color: var(--dim); }
+ .bard { margin-top: 14px; font-style: italic; color: var(--dim); } .bard .gi-icon { margin-right: 7px; color: #8a4b12; }
+ .bard small { margin-left: 8px; font-style: normal; font-variant: small-caps; letter-spacing: .06em; }
  .rec { border: 1px solid var(--ok); background: rgba(63,125,58,.12); border-radius: 5px; padding: 10px 14px; margin: 10px 0 4px; }
  .rec b { color: var(--ok); }
  .opts { display: grid; gap: 12px; } .opts.n2 { grid-template-columns: 1fr 1fr; } .opts.n3 { grid-template-columns: repeat(3, 1fr); }

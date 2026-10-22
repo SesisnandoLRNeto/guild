@@ -90,13 +90,16 @@ THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock
 # A report is written for whoever reads the code; this strip is for anyone: where the work
 # stands, in words and as a path of steps, and the few numbers that matter.
 
-GLANCE_CSS = """<style>
+GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><style>
 .gg{font:14px/1.5 inherit;margin:0 0 26px;padding:16px 18px 14px;border:1px solid var(--line,#cdb88e);border-radius:6px;
   background:rgba(255,250,235,.55)}
 .gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 12px;padding-right:48px}
 .gg-top b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41)}
 .gg-say{font-size:16px;font-weight:600}
 .gg-say.bad{color:var(--bad,#a8322a)}.gg-say.turn{color:#9a5a0c}.gg-say.ok{color:var(--ok,#3f7d3a)}
+.gg-say .gi-icon{width:18px;height:18px;margin-right:7px;vertical-align:-3px}
+.gg-seal{display:inline-flex;align-items:center;gap:5px;color:#5b3e28;font-weight:600}
+.gg-seal .gi-icon{width:16px;height:16px}.gg-seal small{font-weight:400;color:var(--dim,#6e5a41)}
 .gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0;counter-reset:s}
 .gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:var(--dim,#6e5a41);padding-top:26px;min-width:0}
 .gg-path li::before{content:"";position:absolute;top:4px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;
@@ -172,20 +175,20 @@ def glance(quest):
 
     ticket = meta.get("ticket", "")
     if pr.get("state") == "merged":
-        say, tone = "Loot in the treasury: this work is in the main branch.", "ok"
+        say, tone, icon = "Loot in the treasury: this work is in the main branch.", "ok", "chest"
     elif stuck:
         L = lore.lore(state)
-        say, tone = f"{L['line']} ({L['plain']})" + (f": {note}" if note else "."), "bad"
+        say, tone, icon = f"{L['line']} ({L['plain']})" + (f": {note}" if note else "."), "bad", L["icon"]
     elif state == "needs-decision":
-        say, tone = "The oracle awaits your word on the war table.", "turn"
+        say, tone, icon = "The oracle awaits your word on the war table.", "turn", "crystal"
     elif state in ("done", "trial-pass", "trial-skip") and pr.get("state") in ("open", "draft"):
-        say, tone = f"At the castle gate: PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn"
+        say, tone, icon = f"At the castle gate: PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn", "gate"
     elif state in ("done", "trial-pass", "trial-skip"):
-        say, tone = "Back with the loot." + ("" if grade else " Grade it on the right."), "ok"
+        say, tone, icon = "Back with the loot." + ("" if grade else " Grade it on the right."), "ok", "chest"
     elif state == "held":
-        say, tone = "Camped until the day you set.", ""
+        say, tone, icon = "Camped until the day you set.", "", "tent"
     else:
-        say, tone = "On the road: an agent is working on it now.", ""
+        say, tone, icon = "On the road: an agent is working on it now.", "", "map"
 
     tiles = []
     cost = q.get("cost") or 0
@@ -195,15 +198,25 @@ def glance(quest):
     if dur:
         tiles.append(("Time open", dur, f"first to last reply, {q.get('messages', 0)} replies"))
     if edd.get("checks"):
-        tiles.append(("Checks", "passing" if edd.get("last_green") else "failing" if edd.get("runs") else "not run",
-                      f"{edd['checks']} automatic, {edd.get('manual', 0)} by review"))
+        counts = f"{edd['checks']} automatic, {edd.get('manual', 0)} by review"
+        if edd.get("last_green"):
+            tiles.append(("Checks", "passing", counts))
+        elif edd.get("runs"):
+            tiles.append(("Checks", "Goblins in the tests", f"failing: {counts}"))
+        else:
+            tiles.append(("Checks", "not run", counts))
     if q.get("trial"):
-        tiles.append(("Trial", {"pass": "passed", "skip": "skipped"}.get(q["trial"], q["trial"]), "review before the PR"))
+        tiles.append(("Trial", {"pass": "passed", "skip": "skipped"}.get(q["trial"], q["trial"]),
+                      "the elves read the diff before the gate"))
     if pr:
         tiles.append(("Pull request", f"#{pr.get('number')} {pr.get('state')}",
                       ", ".join(x for x in [pr.get("review", ""), ("NO CI RUN" if pr.get("checks") == "none" else f"checks {pr['checks']}") if pr.get("checks") else ""] if x)))
     v = scenarios_mod().summary(quest)
-    if v["exists"]:
+    # The gauntlet comes after the forge and the checks: until they pass, the checklist is not a
+    # thing to open, only a thing that waits.
+    if v["exists"] and steps[3][1] is False:
+        tiles.append(("Validation", "not yet", "the gauntlet opens once the checks pass"))
+    elif v["exists"]:
         word = ("certified" if v["certified"] else "out of date, run again" if v["stale"]
                 else f"{v['fail']} failed" if v["fail"] else f"{v['open']} to run")
         tiles.append(("Validation", f"{v['pass']}/{v['total']} passed", word + ": open the checklist",
@@ -211,12 +224,15 @@ def glance(quest):
     tiles.append(("Your grade", f"{grade['grade']}/5" if grade and grade.get("grade") else "not yet",
                   (grade or {}).get("verdict", "") or "on the right side"))
     model = meta.get("model") or ""
-    head = " · ".join(_html.escape(x) for x in [ticket, model, os.path.basename(meta.get("repo", ""))] if x)
+    k = lore.klass(model, meta.get("tier", ""))
+    seal = (f'<span class="gg-seal"><i class="gi-icon gi-{k["icon"]}" aria-hidden="true"></i>{_html.escape(k["name"])}'
+            + (f'<small>({_html.escape(model)})</small>' if model else "") + "</span>") if k else _html.escape(model)
+    head = " · ".join(x for x in [_html.escape(ticket), seal, _html.escape(os.path.basename(meta.get("repo", "")))] if x)
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import why
     card = why.glance_html(quest)
     return (GLANCE_CSS + '<section class="gg" aria-label="At a glance">'
-            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{_html.escape(say)}</span>'
+            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}"><i class="gi-icon gi-{icon}" aria-hidden="true"></i>{_html.escape(say)}</span>'
             f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
             f'<ol class="gg-path">{"".join(items)}</ol><div class="gg-tiles">'
             + "".join((f'<a class="gg-tile gg-go" href="{t[3]}" target="_top">' if len(t) > 3 else '<div class="gg-tile">')
@@ -761,11 +777,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         rows = []
         for m in list_boards():
             mark = "answered" if m["answered"] else "waiting"
+            title = m.get("title", m["id"])
+            # what kind of notice it is, in the guild's words: a why card, a bard's tale (wrap-up) or a question
+            icon, kind = (("scroll", "why card") if str(title).startswith("Why card") else
+                          ("chest", "the bard's tale") if m.get("wrapup") else ("crystal", "the oracle's question"))
+            word = "ruled" if m["answered"] else "awaits your word"
             rows.append(
-                f'<li class="{mark}"><a href="/b/{m["quest"]}/{m["id"]}/">{m.get("title", m["id"])}</a>'
-                f'<span class="meta">{m["quest"]} · {mark} · {m.get("created", "")}</span></li>'
+                f'<li class="{mark}"><span class="gi-icon gi-{icon}" aria-hidden="true"></span><div>'
+                f'<a href="/b/{m["quest"]}/{m["id"]}/">{_html.escape(str(title))}</a>'
+                f'<span class="meta">{_html.escape(m["quest"])} · {kind} · <b>{word}</b> · {_html.escape(str(m.get("created", "")))}</span></div></li>'
             )
-        body = "<ul class='boards'>" + ("".join(rows) or "<li class='empty'>No boards yet.</li>") + "</ul>"
+        body = "<ul class='boards'>" + ("".join(rows) or "<li class='empty'>No boards yet. The wall is clean.</li>") + "</ul>"
         return open(os.path.join(WEB, "index.html")).read().replace("<!--BOARDS-->", body)
 
     def render_shell(self, quest, board, d):

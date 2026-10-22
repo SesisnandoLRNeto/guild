@@ -32,7 +32,23 @@ ROLES = {"quartermaster": ("Quartermaster", "horn", "sends the parties out and r
          "guildmaster": ("Guildmaster", "crown", "you: the one who rules"),
          "helper": ("Squire", "sword", "carries one part of a bigger quest"),
          "validator": ("Inquisitor", "shield", "checks the work without reading the diff"),
-         "reviewer": ("Inspector", "scroll", "reads the diff and finds what the adventurer missed")}
+         "reviewer": ("Elf", "elf", "reads every diff before the gate; nothing gets past those ears")}
+
+# ── the bard: one dry line under a decision, picked by the board so it does not change on reload ──
+BARD = [
+    "Choose well. The bard writes down everything.",
+    "A fork in the road is still a road. Pick one.",
+    "The oracle has seen both paths. It still wants your word.",
+    "No path is free. Ask what each one costs tomorrow.",
+    "Knights wait. Orcs do not. Decide before the next one shows up.",
+    "The map is not the road. Read the cases before you rule.",
+    "Elves read the diff. Only you read the business.",
+]
+
+
+def quip(seed=""):
+    """One line from the bard, the same one for the same seed."""
+    return BARD[sum(ord(c) for c in str(seed)) % len(BARD)]
 
 
 def klass(model="", tier=""):
@@ -105,7 +121,7 @@ STEPS = [  # (plain step, place, icon): the path on the At-a-glance strip
     ("Plan", "The map", "map"),
     ("Build", "The forge", "anvil"),
     ("Checks", "The gauntlet", "shield"),
-    ("Trial", "The trial", "swords"),
+    ("Trial", "The elves' court", "elf"),
     ("PR open", "The gate", "gate"),
     ("Merged", "The treasury", "chest"),
 ]
@@ -123,6 +139,9 @@ if __name__ == "__main__":
     print("states")
     for k, (line, icon, plain, quip) in STATES.items():
         print(f"  {k:<15} {line:<36} {plain}")
+    print("roles")
+    for key, (name, icon, blurb) in ROLES.items():
+        print(f"  {key:<13} {name:<12} {blurb}")
     print("places")
     for key, place, hint, icon in COLUMNS:
         print(f"  {key:<8} {place:<16} {hint}")

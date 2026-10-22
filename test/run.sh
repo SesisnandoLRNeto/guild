@@ -772,6 +772,8 @@ has "a flow per option" "$dp" '<pre class="mermaid">flowchart LR'
 has "the best value per criterion is marked" "$dp" 'class="best">yes &#10003;'
 has "a bar chart per measure" "$dp" 'class="bf best"'
 has "the answers include explain more and my own answer" "$(cat "$GUILD_HOME/quests/alpha/boards/$db/decisions.json")" '"id": "own"'
+has "the options are paths" "$dp" '<div class="oid">Path warn · suggested</div>'
+has "and the bard has a line under them" "$dp" 'class="bard"'
 
 # ── the docket: every open decision on one page ──────────────────────────────
 section "docket"
@@ -797,6 +799,11 @@ import sys; sys.path.insert(0,'$REPO/bin'); import lore
 print(lore.klass('claude-opus-5')['name'], lore.klass('claude-sonnet-5-5')['name'], lore.klass('haiku')['name'], lore.klass('claude-fable-5-1')['name'], lore.klass('', 'plan')['name'])
 print(lore.lore('failed')['line'], '|', lore.lore('blocked')['icon'], '|', lore.lore('done', 'trial', {'state':'open'})['line'], '|', lore.lore('done', '', {'state':'merged'})['line'])")
 is "models have classes: Archmage, Knight, Scout, Oracle, and a Sage for the plan tier" "$(echo "$LO" | head -1)" "Archmage Knight Scout Oracle Sage"
+is "the reviewer is an Elf and the trial step is the elves' court" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin'); import lore
+print(lore.ROLES['reviewer'][0], lore.STEP['Trial'][0], lore.quip('x') == lore.quip('x'))")" "Elf The elves' court True"
+has "the notice wall lists every board with its kind and an icon that can render" "$(curl -s "$base/boards")" 'icons.css'
+has "and says in words which ones wait" "$(curl -s "$base/boards")" '<b>awaits your word</b>'
 is "states have creatures and places, with the PR and the merge read from GitHub" "$(echo "$LO" | tail -1)" "Slain by an orc | troll | At the castle gate | Loot in the treasury"
 CJ=$(curl -s "$base/campaign.json")
 has "the campaign's columns are the lore's places" "$CJ" '"title": "The Tavern"'
@@ -806,6 +813,12 @@ has "the strip's steps are places, with the plain step under each" "$(python3 -c
 import sys; sys.path.insert(0,'$REPO/bin')
 import os; os.environ['GUILD_HOME']='$GUILD_HOME'
 import wartable; print(wartable.glance('dk'))")" '<span class="gg-place">The forge</span><small>build</small>'
+echo '{"title":"dk","groups":[{"id":"A","title":"x","scenarios":[{"id":"A1","do":"one","expect":"ok"}]}]}' > "$dq/scenarios.json"
+has "the validation tile waits while the checks have not passed" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('dk'))")" 'the gauntlet opens once the checks pass'
+rm -f "$dq/scenarios.json"
 
 curl -s -X POST "$base/docket/rule" -d '{"quest":"dk","board":"200001","answers":{"c":"b"},"message":"B reads better"}' >/dev/null
 is "a ruling from the docket answers the board" "$(python3 -c "import json;print(json.load(open('$dq/boards/200001/decision.json'))['answers']['c'])")" "b"

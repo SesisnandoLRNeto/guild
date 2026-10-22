@@ -173,9 +173,11 @@ The war table is a guild hall, and its pages speak like one. `guild lore` prints
 |---|---|
 | Guildmaster, Quartermaster | You; the agent that sends parties out and reads their reports |
 | Oracle, Archmage, Knight, Scout, Artificer | The adventurer's class, from its model: Fable, Opus, Sonnet, Haiku, Codex. A tier names it when the model is not known (plan is a Sage) |
-| Squire, Inquisitor, Inspector | A helper quest; the behaviour validator; the code reviewer |
+| Squire, Inquisitor, Elf | A helper quest; the behaviour validator; the code reviewer (the elves read every diff at the trial) |
 | The Tavern, On the Road, The Oracle, The Castle Gate, The Treasury | The campaign's columns: to do, in progress, needs you, PR in review, merged or closed |
-| The call, the map, the forge, the gauntlet, the trial, the gate, the treasury | A quest's steps on the At-a-glance strip: asked, plan, build, checks, trial, PR open, merged |
+| The call, the map, the forge, the gauntlet, the elves' court, the gate, the treasury | A quest's steps on the At-a-glance strip: asked, plan, build, checks, trial, PR open, merged |
+| Path A, Path B; the bard | The options on a decision board; the one dry line under them |
+| The notice wall | The list of every board (`/boards`) |
 | An orc, a troll, goblins, a skull | Failed; blocked; checks failing; stopped without a report |
 | The bard's tale | A wrap-up waiting for your grade |
 
