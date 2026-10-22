@@ -1,6 +1,6 @@
-// The party for guild calm mode: the sessions that are running right now, drawn as adventurers
-// walking right through a night forest and fighting what comes at them, packed as Claude Code
-// Raster cells.
+// The party for guild calm mode: the sessions that are running right now, drawn as tiny
+// adventurers walking right through a night forest and fighting what comes at them, packed as
+// Claude Code Raster cells.
 //
 // Each running session is one hero, chosen by its model: Sonnet is an archer, Opus a mage, Fable
 // a paladin, Haiku a warrior, Codex an artificer, and a model the guild does not know walks as a
@@ -13,10 +13,6 @@
 // mage melts the slime, the artificer throws a flask at the goblin, the paladin's light drops the
 // troll, and the warrior cuts down whatever reaches the front. The scene is a pure function of
 // the tick and the party, so a fight always plays out the same way.
-//
-// The figures are nine rows tall and drawn in profile, like the reference picture: the archer
-// with a drawn bow, the mage in a pointed hat with a staff, the warrior with a cape and a raised
-// sword. Change the art in SPRITES; every line is raw text, so backslashes are typed as they show.
 //
 // A Raster's `cells` prop is base64 of columns * rows little-endian u32 triplets
 // [codePoint, foreground, background]. Colors are 0x00RRGGBB, and bit 24 alone
@@ -31,20 +27,14 @@ export const PARTY_KEY = "guild-calm-party";
 /** How often the scene moves. The party steps every other tick, the forest slower still. */
 export const PARTY_TICK_MS = 140;
 
-/** Twelve rows: two of sky, nine of forest and figures, and the grass under their feet. */
-export const PARTY_ROWS = 12;
+/** Five rows: the sky, tall treetops, then heads, bodies and legs on the ground. */
+export const PARTY_ROWS = 5;
 
 const MAX_COLUMNS = 512;
 const MARGIN = 2;
 const DEFAULT_COLOR = 0x01000000;
 const SPACE = 32;
-const FEET = PARTY_ROWS - 2;                 // the row the figures and trees stand on
-const GROUND = PARTY_ROWS - 1;               // the grass
-const FIGURE_ROWS = 9;
-const TOP = FEET - FIGURE_ROWS + 1;          // the first row of a figure
-const WIDTH = 18;                            // every sprite is this wide, the arrow included
-const GAP = 1;
-const STEP = WIDTH + GAP;
+const HEAD = 2, BODY = 3, FEET = 4;          // the rows the figures stand on
 
 // ── who walks and what comes at them ──────────────────────────────────────────
 export type Hero = "archer" | "mage" | "paladin" | "warrior" | "artificer" | "wanderer";
@@ -115,157 +105,49 @@ export function partyFamily(theme: unknown): PartyFamily {
 
 /** Scene width for a viewport: the working row minus its margin, inside the Raster limit. */
 export function partyColumns(viewportColumns: number | undefined): number {
-  return Math.max(40, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
+  return Math.max(16, Math.min(MAX_COLUMNS, (viewportColumns ?? 80) - MARGIN));
 }
 
-// ── the heroes: nine rows in profile, walking right; the last two rows are the legs ──
-// Each sprite is WIDTH columns. Special cells: the mage's `*` turns and flares, the wanderer's
-// `(` and `)(` flicker, the paladin's `+` is the light. The legs sit in columns 5-9 of every
-// sprite, so one set of walking frames fits them all.
-const R = String.raw;
+// ── the heroes: three columns by three rows each, two leg frames make the walk ──
+type Figure = { top: string; body: string; shot?: Shot };
 type Shot = { speed: number; row: number; glyph: string; color: keyof PartyPalette };
-type Sprite = { rows: string[]; swing?: string[]; shot?: Shot };
-const SPRITES: Record<Hero, Sprite> = {
-  archer: {                                               // hood, cape, a drawn bow and the arrow on the string
-    rows: [
-      R`      __          `,
-      R`     (o >     /   `,
-      R`   |\ |\ ____/|   `,
-      R`   | \| |   (  |->`,
-      R`   |  | |    \ |  `,
-      R`    \ | |     \|  `,
-      R`     \| |      \  `,
-    ],
-    shot: { speed: 2, row: 3, glyph: "-->", color: "archer" },
-  },
-  mage: {                                                 // pointed hat, beard, a long robe, the staff with its star
-    rows: [
-      R`       /\       * `,
-      R`      /  \      | `,
-      R`    _/____\_    | `,
-      R`      (o >~~    | `,
-      R`     /|  |\__   | `,
-      R`    / |  |   \__| `,
-      R`   /  |  |    \ | `,
-    ],
-    shot: { speed: 1.5, row: 0, glyph: "~*~", color: "spell" },
-  },
-  warrior: {                                              // helmet, a cape in the wind, the sword held high
-    rows: [
-      R`              /   `,
-      R`       _     /    `,
-      R`      [o>   /     `,
-      R`  \   /|\__/      `,
-      R`   \ / | |        `,
-      R`    \  | |        `,
-      R`     \ | |        `,
-    ],
-    swing: [                                              // the sword comes down in front
-      R`                  `,
-      R`       _          `,
-      R`      [o>         `,
-      R`  \   /|\__+====> `,
-      R`   \ / | |        `,
-      R`    \  | |        `,
-      R`     \ | |        `,
-    ],
-  },
-  paladin: {                                              // a shield with a cross, the mace raised
-    rows: [
-      R`       _     _|_  `,
-      R`      (o>     |   `,
-      R`   __ /|\_____|   `,
-      R`  [  ] | |        `,
-      R`  [ +] | |        `,
-      R`  [  ] | |        `,
-      R`   --  | |        `,
-    ],
-    shot: { speed: 1.5, row: 1, glyph: "+)", color: "light" },
-  },
-  artificer: {                                            // a toolbox at the hip, a flask held out
-    rows: [
-      R`       _          `,
-      R`      (o>   _     `,
-      R`    _ /|\__( )    `,
-      R`   | | | |  |     `,
-      R`   |_| | |        `,
-      R`       | |        `,
-      R`       | |        `,
-    ],
-    shot: { speed: 1.5, row: 2, glyph: "(o)", color: "flask" },
-  },
-  wanderer: {                                             // a cloak and a torch
-    rows: [
-      R`            (     `,
-      R`       _    )(    `,
-      R`      (o>   ||    `,
-      R`   |\ /|\___||    `,
-      R`   | \ | |  ||    `,
-      R`   |  | |  ||     `,
-      R`    \ | |         `,
-    ],
-  },
+const FIGURES: Record<Hero, Figure> = {
+  archer: { top: " o)", body: "/|)", shot: { speed: 2, row: HEAD, glyph: "->", color: "archer" } },       // bow
+  mage: { top: " o*", body: "/||", shot: { speed: 1.5, row: BODY, glyph: "~*", color: "spell" } },        // staff with a star
+  paladin: { top: " o+", body: "/|]", shot: { speed: 1.5, row: HEAD, glyph: "+)", color: "light" } },     // mace raised, shield
+  artificer: { top: " o%", body: "/|[", shot: { speed: 1.5, row: BODY, glyph: "o%", color: "flask" } },  // a flask, a toolbox
+  wanderer: { top: " o'", body: "/|!" },                                                                  // a torch
+  warrior: { top: " o/", body: "/| " },                                                                   // sword held up, fights up close
 };
-const LEGS: string[][] = [                               // four walking frames, the boots point right
-  [R`       / \        `, R`      /   \       `],
-  [R`       | \        `, R`       |   \      `],
-  [R`       | |        `, R`      _| |_       `],
-  [R`       / |        `, R`      /  _|       `],
-];
+const LEGS = ["/ \\", " | "];                                        // stride, then together
+const STEP = 4;                                                      // three columns, one apart
 
 // ── the forest ────────────────────────────────────────────────────────────────
 // Near trees drift faster than far ones, so the forest has depth. Each entry: offset along a
-// repeating strip, and what stands there, drawn standing on the FEET row.
-const TALL = [R`    ^    `, R`   /|\   `, R`  //|\\  `, R`   /|\   `, R`  //|\\  `, R` ///|\\\ `, R`    |    `, R`    |    `];
-const MID = [R`   ^   `, R`  /|\  `, R` //|\\ `, R`///|\\\ `, R`   |    `];
-const SMALL = [R`  ^  `, R` /|\ `, R`//|\\ `, R`  |   `];
-const BUSH = [R` .^^. `, R`(    )`];
-const NEAR: Array<[number, string[]]> = [[0, TALL], [16, BUSH], [27, MID], [44, TALL], [59, BUSH], [68, SMALL]];
-const FAR: Array<[number, string[]]> = [[9, SMALL], [36, MID], [55, SMALL], [74, MID]];
-const NEAR_LEN = 84, FAR_LEN = 93;
-const GRASS = R`  \v/    ,    .   \v/      ,  .     \v/   ,   .  `;
+// repeating strip, and what stands there, drawn standing on the ground row.
+const TALL = ["  ^  ", " /|\\ ", "//|\\\\", "  |  "];      // rows 1-4
+const SMALL = [" ^ ", "/|\\", " | "];                      // rows 2-4
+const BUSH = [".^^.", "(  )"];                               // rows 3-4
+const NEAR: Array<[number, string[]]> = [[0, TALL], [15, BUSH], [24, SMALL], [40, TALL], [53, BUSH]];
+const FAR: Array<[number, string[]]> = [[8, SMALL], [31, SMALL], [47, SMALL]];
+const NEAR_LEN = 64, FAR_LEN = 57;
+const GRASS = "  \\v/    ,    .   \\v/      ,  .     \\v/   ";
 
 // ── the enemies and the fights ─────────────────────────────────────────────────
-// One fight every FIGHT ticks. An enemy starts START columns ahead of the front and closes one
-// column a tick (it walks left while the party walks right). The hero who answers it shoots from
-// where they walk; a foe nobody shoots down reaches the warrior's blade.
-const FIGHT = 90, START = 46, BURST = 4;
-type Foe = { rows: string[]; color: keyof PartyPalette; answer: Hero; top: number };
-const FOE_ART: Record<FoeKind, { color: keyof PartyPalette; answer: Hero; frames: string[][] }> = {
-  bat: { color: "bat", answer: "archer", frames: [                      // flies at head height, flapping
-    [R`\    _    /`, R` \__(oo)__/`, R`     \/    `],
-    [R`     _     `, R` /''(oo)''\ `, R`/    \/   \ `],
-  ] },
-  slime: { color: "slime", answer: "mage", frames: [                    // crawls low
-    [R`   ____   `, R`  / o o \  `, R` (________)`],
-    [R`   ____   `, R`  /o   o\  `, R`(_________)`],
-  ] },
-  skeleton: { color: "bones", answer: "warrior", frames: [
-    [R`  ___  `, R` (x x) `, R`  \_/  `, R` \-|-/ `, R`  -|-  `, R`  -|-  `, R`  / \  `, R` /   \ `],
-    [R`  ___  `, R` (x x) `, R`  \_/  `, R` \-|-/ `, R`  -|-  `, R`  -|-  `, R`  | |  `, R` _| |_ `],
-  ] },
-  goblin: { color: "goblin", answer: "artificer", frames: [            // small, a dagger out front
-    [R`   _    `, R`<-<(o<  `, R`   /|\  `, R`    |   `, R`   / \  `, R`  /   \ `],
-    [R`   _    `, R`<-<(o<  `, R`   /|\  `, R`    |   `, R`   | |  `, R`  _| |_ `],
-  ] },
-  orc: { color: "orc", answer: "warrior", frames: [                    // big, a club raised
-    [R` \        `, R`  \   __  `, R`   \ <oo] `, R`    \_/|\ `, R`     [###]`, R`     [###]`, R`      | | `, R`      / \ `, R`     /   \ `],
-    [R` \        `, R`  \   __  `, R`   \ <oo] `, R`    \_/|\ `, R`     [###]`, R`     [###]`, R`      | | `, R`      | | `, R`     _| |_`],
-  ] },
-  troll: { color: "troll", answer: "paladin", frames: [                // tall and wide, arms down
-    [R`    ___    `, R`   ( o )   `, R` __|___|__ `, R`|  |   |  |`, R`|  |   |  |`, R`|__|   |__|`, R`   |   |   `, R`   /   \   `, R`  /     \  `],
-    [R`    ___    `, R`   ( o )   `, R` __|___|__ `, R`|  |   |  |`, R`|  |   |  |`, R`|__|   |__|`, R`   |   |   `, R`   |   |   `, R`  _|   |_  `],
-  ] },
+// One fight every FIGHT ticks. An enemy starts START columns ahead of the front and closes
+// one column a tick (it walks left while the party walks right). The hero who answers it
+// shoots from where they walk; a foe nobody shoots down reaches the warrior's blade.
+const FIGHT = 70, START = 34, BURST = 4;
+type Foe = { rows: Array<[number, string]>; color: keyof PartyPalette; answer: Hero };
+const FOES: Record<FoeKind, (t: number) => Foe> = {
+  bat: (t) => ({ rows: [[HEAD, t % 4 < 2 ? "^o^" : "vov"]], color: "bat", answer: "archer" }),           // flaps its wings
+  slime: (t) => ({ rows: [[BODY, t % 4 < 2 ? " __ " : " _  "], [FEET, "(oo)"]], color: "slime", answer: "mage" }),
+  skeleton: (t) => ({ rows: [[HEAD, " o "], [BODY, "<|\\"], [FEET, t % 4 < 2 ? "/ \\" : " | "]], color: "bones", answer: "warrior" }),
+  goblin: (t) => ({ rows: [[BODY, t % 4 < 2 ? ">o<" : ">o-"], [FEET, t % 4 < 2 ? "/ \\" : " | "]], color: "goblin", answer: "artificer" }),
+  orc: (t) => ({ rows: [[HEAD, "[o]"], [BODY, "<#\\"], [FEET, t % 4 < 2 ? "/ \\" : " | "]], color: "orc", answer: "warrior" }),
+  troll: (t) => ({ rows: [[HEAD, " 0 "], [BODY, "<##>"], [FEET, t % 4 < 2 ? "/  \\" : " || "]], color: "troll", answer: "paladin" }),
 };
 const QUIET_ROAD: FoeKind[] = ["bat", "slime", "skeleton"];
-function foeOf(kind: FoeKind, t: number): Foe {
-  const art = FOE_ART[kind];
-  const rows = art.frames[Math.floor(t / 3) % art.frames.length]!;
-  // the bat flies: its rows sit at head height, everything else stands on the FEET row
-  const top = kind === "bat" ? TOP + 1 : FEET - rows.length + 1;
-  return { rows, color: art.color, answer: art.answer, top };
-}
-const foeWidth = (kind: FoeKind) => Math.max(...FOE_ART[kind].frames[0]!.map((r) => r.length));
 
 /** One frame: stars and a moon, two layers of forest, the party walking right, a fight. */
 export function partyFrame(columns: number, tick: number, palette: PartyPalette, party: Party = DEFAULT_PARTY): string {
@@ -280,7 +162,6 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
     fg[at] = color;
   };
   const clear = (row: number, c0: number, c1: number) => {
-    if (row < 0 || row >= PARTY_ROWS) return;
     for (let c = Math.max(0, c0); c <= Math.min(columns - 1, c1); c++) { cp[row * columns + c] = SPACE; fg[row * columns + c] = DEFAULT_COLOR; }
   };
   const text = (row: number, col: number, s: string, color: number) => [...s].forEach((ch, i) => put(row, col + i, ch, color));
@@ -296,12 +177,10 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
     put(k === 0 ? 1 : 0, c, twinkle ? "*" : k === 3 ? "*" : ".", palette.star);
   }
   text(0, columns - 7, "(", palette.star);
-  text(1, columns - 7, " )", palette.star);
 
-  // the party: as many heroes as the road is wide for, one step every other tick
-  const fit = Math.max(1, Math.floor((columns - START - 4) / STEP));
-  const heroes = marchingOrder(party.heroes).slice(-fit);
-  const width = heroes.length * STEP - GAP;
+  // the party: one step every other tick, legs swapping as it goes
+  const heroes = marchingOrder(party.heroes);
+  const width = heroes.length * 3 + (heroes.length - 1);
   const span = columns + width + 2;
   const left = (Math.floor(tick / 2) % span) - width;
   const front = left + width;                                // the column just ahead of the warrior
@@ -312,38 +191,37 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
   const round = Math.floor(tick / FIGHT);
   const road = party.foes.length > 0 ? party.foes : QUIET_ROAD;
   const kind = road[round % road.length]!;
+  const foeOf = FOES[kind];
   const foeX = (s: number) => front + START - s;
   // who answers: the hero this foe belongs to if they walk with us, else the warrior up close
-  const answerer = heroes.lastIndexOf(FOE_ART[kind].answer);
+  const answerer = heroes.lastIndexOf(foeOf(0).answer);
   const shooter = answerer >= 0 ? answerer : heroes.length - 1;
-  const shot = SPRITES[heroes[shooter]!]!.shot;
-  const shotAt = 6 + (heroes.length - 1 - shooter);          // the back of the line takes a beat longer to see it
-  const melee = START - 4;                                   // the foe reaches the warrior's blade
+  const shot = FIGURES[heroes[shooter]!]!.shot;
+  const shotAt = 4 + (heroes.length - 1 - shooter);          // the back of the line takes a beat longer to see it
+  const melee = START - 3;                                   // the foe reaches the warrior's blade
   let hit = melee;
   if (shot) {
     for (let s = shotAt; s < melee; s++) {
-      if (front + 1 + Math.floor((s - shotAt) * shot.speed) + shot.glyph.length >= foeX(s)) { hit = s; break; }
+      if (heroX(shooter) + 3 + Math.floor((s - shotAt) * shot.speed) + shot.glyph.length >= foeX(s)) { hit = s; break; }
     }
   }
   const shotLands = shot !== undefined && hit < melee;
-  const swinging = !shotLands && t >= hit - 3 && t <= hit + 1;
-  const casting = shotLands && t >= shotAt - 3 && t <= shotAt + 2;
+  const swinging = !shotLands && t >= hit - 2 && t <= hit + 1;
+  const casting = shotLands && t >= shotAt - 2 && t <= shotAt + 1;
 
   // what stands in the way of the forest: the party, and the foe or its burst
-  const fw = foeWidth(kind);
   const boxes: Array<[number, number]> = [[left - 1, left + width + 1]];
-  if (t < hit + BURST) boxes.push([foeX(Math.min(t, hit)) - 2, foeX(Math.min(t, hit)) + fw + 1]);
+  if (t < hit + BURST) boxes.push([foeX(Math.min(t, hit)) - 2, foeX(Math.min(t, hit)) + 4]);
   const blocked = (x: number, w: number) => boxes.some(([b0, b1]) => x + w > b0 && x <= b1);
 
   // the forest: near pines and bushes first, then far pines only where nothing near stands
-  // (they drift slower, so the forest has depth), then grass on the ground row
+  // (they drift slower, so the forest has depth), then grass on the ground that is still bare
   const far = Math.floor(tick / 10), near = Math.floor(tick / 5);
   const taken = new Uint8Array(size);                      // cells the near forest covers, gaps included
   for (let base = -NEAR_LEN; base < columns + NEAR_LEN; base += NEAR_LEN) {
     for (const [off, art] of NEAR) {
       const x = base + wrap(off - near, NEAR_LEN);
-      const w = Math.max(...art.map((r) => r.length));
-      if (blocked(x, w)) continue;                           // behind the party or a foe: hidden whole
+      if (blocked(x, art[art.length - 2]!.length)) continue;       // behind the party or a foe: hidden whole
       art.forEach((line, i) => {
         const row = FEET - art.length + 1 + i, first = line.search(/\S/), last = line.trimEnd().length - 1;
         for (let c = x + first - 1; c <= x + last + 1 && first >= 0; c++) if (c >= 0 && c < columns) taken[row * columns + c] = 1;
@@ -354,7 +232,7 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
   for (let base = -FAR_LEN; base < columns + FAR_LEN; base += FAR_LEN) {
     for (const [off, art] of FAR) {
       const x = base + wrap(off - far, FAR_LEN);
-      if (blocked(x, Math.max(...art.map((r) => r.length)))) continue;
+      if (blocked(x, art[1]!.length)) continue;
       art.forEach((line, i) => [...line].forEach((ch, j) => {
         const row = FEET - art.length + 1 + i, c = x + j;
         if (ch !== " " && c >= 0 && c < columns && !taken[row * columns + c]) put(row, c, ch, palette.treeFar);
@@ -363,46 +241,43 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
   }
   for (let c = 0; c < columns; c++) {
     const g = GRASS[wrap(c + near, GRASS.length)]!;
-    if (g !== " ") put(GROUND, c, g, palette.grass);
+    if (g !== " " && cp[FEET * columns + c] === SPACE && !taken[FEET * columns + c] && !blocked(c, 1)) put(FEET, c, g, palette.grass);
   }
 
-  const stride = Math.floor(tick / 2);
+  const stride = Math.floor(tick / 2) % 2;
   const sparkle = ["*", ".", "x", "'"][Math.floor(tick / 3) % 4]!;   // no "+": that is the paladin's mark
-  const flame = [R`(`, R`)`, R`(`, R`'`][Math.floor(tick / 2) % 4]!;
+  const flicker = ["'", "`", "'", "\""][Math.floor(tick / 2) % 4]!;
   heroes.forEach((hero, n) => {
-    const sprite = SPRITES[hero]!;
+    const fig = FIGURES[hero]!;
     const x = heroX(n);
     const color = palette[hero];
-    const isFront = n === heroes.length - 1;
-    const body = hero === "warrior" && isFront && swinging && sprite.swing ? sprite.swing : sprite.rows;
-    const legs = LEGS[(stride + n) % LEGS.length]!;          // not in lockstep
-    [...body, ...legs].forEach((line, i) => {
-      const row = TOP + i;
-      [...line].forEach((ch, j) => {
-        if (ch === " ") return;
-        if (hero === "mage" && ch === "*") return put(row, x + j, casting && n === shooter ? "@" : sparkle, palette.star);
-        if (hero === "paladin" && ch === "+" && i === 4) return put(row, x + j, casting && n === shooter ? "*" : "+", palette.light);
-        if (hero === "wanderer" && i === 0 && ch === "(") return put(row, x + j, flame, palette.flame);
-        put(row, x + j, ch, color);
-      });
+    let top = fig.top, body = fig.body;
+    if (hero === "warrior" && n === heroes.length - 1 && swinging) { top = " o "; body = "/|-"; put(BODY, x + 3, "-", color); }
+    [...top].forEach((ch, i) => {
+      // the mage's star turns while they walk and flares when they cast; the torch flickers
+      if (hero === "mage" && ch === "*") return put(HEAD, x + i, casting && n === shooter ? "@" : sparkle, palette.star);
+      if (hero === "wanderer" && ch === "'") return put(HEAD, x + i, flicker, palette.flame);
+      if (hero === "paladin" && ch === "+") return put(HEAD, x + i, casting && n === shooter ? "*" : "+", palette.light);
+      put(HEAD, x + i, ch, color);
     });
+    [...body].forEach((ch, i) => put(BODY, x + i, ch, color));
+    const own = LEGS[(stride + n) % 2]!;                    // not in lockstep
+    [...own].forEach((ch, i) => put(FEET, x + i, ch, color));
   });
 
   // the foe walks in, and falls in a little burst
   if (t < hit) {
-    const foe = foeOf(kind, t), x = foeX(t);
-    foe.rows.forEach((line, i) => text(foe.top + i, x, line, palette[foe.color]));
+    const foe = foeOf(t), x = foeX(t);
+    for (const [row, s] of foe.rows) text(row, x, s, palette[foe.color]);
   } else if (t < hit + BURST) {
-    const x = foeX(hit), mid = kind === "bat" ? TOP + 2 : FEET - Math.floor(foeOf(kind, 0).rows.length / 2);
-    for (let r = mid - 1; r <= mid + 1; r++) clear(r, x - 1, x + fw + 1);
-    const puff = t < hit + 2 ? [R` \ | / `, R`- * -`, R` / | \ `] : [R`  .    `, R`.   .`, R`   .   `];
-    puff.forEach((line, i) => text(mid - 1 + i, x + Math.floor(fw / 2) - 3, line, palette.star));
+    const x = foeX(hit), row = kind === "bat" ? HEAD : BODY;
+    clear(row, x - 1, x + 3);
+    text(row, x - 1, t < hit + 2 ? "\\*/" : " . ", palette.star);
   }
-  // the arrow, the spell, the flask or the light in flight: it shows up ahead of the party
-  // (it flew over the heads in front) and crosses to the foe
+  // the arrow, the spell, the flask or the light in flight
   if (shotLands && shot && t >= shotAt && t < hit) {
-    const x = front + 1 + Math.floor((t - shotAt) * shot.speed);
-    text(TOP + shot.row, x, shot.glyph, palette[shot.color]);
+    const x = heroX(shooter) + 3 + Math.floor((t - shotAt) * shot.speed);
+    text(shot.row, x, shot.glyph, palette[shot.color]);
   }
 
   const bytes = new Uint8Array(size * 12);
