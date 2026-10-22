@@ -1,4 +1,5 @@
-// guild calm: the working row becomes a party walking through a forest, and tool rows stop drawing.
+// guild calm: the working row becomes the running sessions walking as a party through a forest,
+// and tool rows stop drawing.
 //
 // Why: while an adventurer works, the tool calls scrolling by are noise. Hiding them
 // keeps your attention for the question that matters. Nothing here changes the stored
@@ -8,9 +9,11 @@
 // CLAUDE_CODE_ENABLE_FUNCTION_HOOKS and GUILD_CALM are exactly "1", so it can never
 // touch a normal session. `guild up` and `guild quest` set both when calm is on.
 import type { EngineInterface, Register, RenderElement, RenderInput } from "claude-code";
-import { PARTY_KEY, PARTY_PALETTES, PARTY_ROWS, PARTY_TICK_MS, partyColumns, partyFamily, partyFrame, type PartyPalette } from "../lib/party.ts";
+import { DEFAULT_PARTY, PARTY_KEY, PARTY_PALETTES, PARTY_ROWS, PARTY_TICK_MS, foeFor, heroFor, partyColumns, partyFamily, partyFrame, type Party, type PartyPalette } from "../lib/party.ts";
 
 const COMMAND = "calm";
+/** How often the road is read again: which quests run, on which model, and which are in trouble. */
+const ROSTER_MS = 5000;
 
 let calm = true;
 let palette: PartyPalette = PARTY_PALETTES.light;
@@ -18,7 +21,11 @@ let preferencePath = "";
 let activation: Promise<boolean> | undefined;
 let loading: Promise<void> | undefined;
 let ticker: { cancel(): void } | undefined;
+let roster: { cancel(): void } | undefined;
 let tick = 0;
+let questsDir = "";
+/** The sessions on the road right now, and the creatures the troubled quests send. */
+let party: Party = DEFAULT_PARTY;
 /** Every working row currently drawing the party, with the size a repaint must repeat. */
 const sites = new Map<string, { columns: number }>();
 
@@ -34,9 +41,12 @@ function activated($: EngineInterface): Promise<boolean> {
 async function load($: EngineInterface): Promise<void> {
   const home = (await $.env.get("GUILD_HOME").catch(() => undefined)) || `${await $.env.get("HOME")}/.guild`;
   preferencePath = `${home}/calm`;
+  questsDir = `${home}/quests`;
   calm = (await $.fs.read(preferencePath).catch(() => "on")).trim() !== "off";
   palette = PARTY_PALETTES[partyFamily(await readTheme($))];
+  await readRoster($);
   ticker ??= $.clock.every(PARTY_TICK_MS, () => void repaint($));
+  roster ??= $.clock.every(ROSTER_MS, () => void readRoster($));
   $.ui.invalidate("ui.render");
 }
 
@@ -46,6 +56,34 @@ async function readTheme($: EngineInterface): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The party from the quests folder: every quest whose status is `working` walks as the hero of
+ * its model (the quartermaster included), and every blocked, failed or checks-red quest sends its
+ * creature down the road. A quest that cannot be read is simply not on the road.
+ */
+async function readRoster($: EngineInterface): Promise<void> {
+  const next: Party = { heroes: [], foes: [] };
+  const entries = await $.fs.list(questsDir).catch(() => []);
+  for (const entry of entries) {
+    if (entry.kind !== "dir" || entry.name.startsWith("_") || entry.name.startsWith(".")) continue;
+    const dir = `${questsDir}/${entry.name}`;
+    const status = await $.fs.read(`${dir}/status`).catch(() => "");
+    const state = status.split("\n")[0]?.split("\t")[0]?.trim() ?? "";
+    if (state === "working") {
+      const meta = await $.fs.read(`${dir}/meta.json`).catch(() => "{}");
+      let model = "";
+      try {
+        const m = JSON.parse(meta) as { model?: string; build_model?: string };
+        model = m.model || m.build_model || "";
+      } catch { /* a quest without readable meta walks as a wanderer */ }
+      next.heroes.push(heroFor(model));
+    }
+    const foe = foeFor(state);
+    if (foe) next.foes.push(foe);
+  }
+  party = next;
 }
 
 function ensureLoaded($: EngineInterface): Promise<void> {
@@ -60,7 +98,7 @@ async function repaint($: EngineInterface): Promise<void> {
     const result = await $.ui.blit({
       requestId,
       key: PARTY_KEY,
-      cells: partyFrame(site.columns, tick, palette),
+      cells: partyFrame(site.columns, tick, palette, party),
       columns: site.columns,
       rows: PARTY_ROWS,
     });
@@ -128,12 +166,15 @@ export const register: Register = (on) => {
     const { Box, Raster } = $.ui.resolve(e);
     return Box({
       flexDirection: "column",
-      children: Raster({ key: PARTY_KEY, columns, rows: PARTY_ROWS, cells: partyFrame(columns, tick, palette) }),
+      children: Raster({ key: PARTY_KEY, columns, rows: PARTY_ROWS, cells: partyFrame(columns, tick, palette, party) }),
     });
   });
 
-  for (const component of ["ToolUse", "ToolResult", "ToolGroup"] as const) {
-    on("ui.render", { component }, async ($, e, next) => {
+  // One hook per tool row. The matcher's type takes one literal, not the union a loop gives,
+  // so each name is passed as the first one's type; at run time each call sees its own name.
+  const toolRows = ["ToolUse", "ToolResult", "ToolGroup"] as const;
+  for (const component of toolRows) {
+    on("ui.render", { component: component as (typeof toolRows)[0] }, async ($, e, next) => {
       if (!(await activated($))) return next(e);
       await ensureLoaded($);
       return calm ? hidden($, e) : next(e);
