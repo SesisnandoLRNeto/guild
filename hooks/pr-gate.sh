@@ -6,14 +6,21 @@ case "$cmd" in *"gh pr create"*) ;; *) exit 0 ;; esac
 
 slug="${GUILD_QUEST:-}"
 [ -n "$slug" ] || exit 0
-trial="${GUILD_HOME:-$HOME/.guild}/quests/$slug/trial.json"
+qdir="${GUILD_HOME:-$HOME/.guild}/quests/$slug"
+trial="$qdir/trial.json"
 head=$(git rev-parse HEAD 2>/dev/null)
+# An epic dagger (guild quest --epic-dagger) has no trial by design: it passes as a skipped trial,
+# and the PR body still has to say so.
+dagger=$(python3 -c "import json;print(json.load(open('$qdir/meta.json')).get('dagger',''))" 2>/dev/null)
 
-if [ ! -f "$trial" ]; then
+if [ ! -f "$trial" ] && [ -n "$dagger" ]; then
+  sha="$head"; result="skip"; note="epic dagger: $dagger"
+elif [ ! -f "$trial" ]; then
   echo "Blocked: no trial for this quest. Run the trial skill first, or if the guildmaster allowed it: guild trial skip \"<reason>\"." >&2
   exit 2
+else
+  read -r sha result note < <(python3 -c "import json;t=json.load(open('$trial'));print(t['sha'],t['result'],t['note'])")
 fi
-read -r sha result note < <(python3 -c "import json;t=json.load(open('$trial'));print(t['sha'],t['result'],t['note'])")
 if [ "$sha" != "$head" ]; then
   echo "Blocked: the trial ran on $sha but HEAD is now $head. Run the trial again for the new commits." >&2
   exit 2

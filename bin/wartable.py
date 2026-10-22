@@ -151,8 +151,10 @@ def glance(quest):
     # A step that was never run is not a step that passed. `None` means skipped, and `why` says what
     # was skipped and on whose word, so a green line always means the step really happened.
     plan_why = meta.get("no_plan") or ("" if meta.get("phase") or planned else "started without a plan phase")
-    checks_why = "" if edd.get("checks") else "no check: lines in the contract, so nothing was run"
-    trial_why = "the trial was skipped" if q.get("trial") == "skip" else ""
+    dagger = meta.get("dagger") or ""
+    checks_why = "" if edd.get("checks") else f"epic dagger: {dagger}" if dagger else "no check: lines in the contract, so nothing was run"
+    trial_why = ("the trial was skipped" if q.get("trial") == "skip"
+                 else f"epic dagger: {dagger}" if dagger and not q.get("trial") else "")
     steps = [("Asked", True, ""),
              ("Plan", None if plan_why else planned, plan_why),
              ("Build", built, ""),

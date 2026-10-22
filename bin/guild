@@ -29,6 +29,8 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                     [--no-plan "<why>"]   a quest plans first unless you say why it should not
                    [--quick ["<why>"]]   small work, no gates: no plan, no acceptance contract,
                                     no Why card, no validation checklist, and the trial is skipped
+                   [--epic-dagger ["<why>"]]  everything --quick drops, and no interaction at all:
+                                    no questions, no boards, no wrap-up; build it and open the PR
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
@@ -671,7 +673,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
-  local machine="" headless="" noaccept="" noplan="" quick="" all_args=("$@")
+  local machine="" headless="" noaccept="" noplan="" quick="" dagger="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -684,6 +686,9 @@ cmd_quest() {
       --quick)
         if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then quick="$2"; shift 2
         else quick="the guildmaster asked for a quick quest"; shift; fi ;;
+      --epic-dagger)
+        if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then dagger="$2"; shift 2
+        else dagger="the guildmaster marked it epic-dagger"; shift; fi ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
       --parent) parent="$2"; shift 2 ;;
@@ -736,6 +741,12 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   # --quick is one flag for all the gates: no plan, no acceptance contract, no Why card, no
   # validation checklist, and the trial is skipped. Nothing is faked: every step it drops shows on
   # the board as skipped, with this reason, so a quick quest never looks like a checked one.
+  # --epic-dagger is --quick and then some: the adventurer never turns to the guildmaster. No
+  # question, no board, no wrap-up; it decides alone, writes the choices in the PR body, opens
+  # the PR and reports done. The guildmaster meets the work as a PR, nowhere else.
+  if [ -n "$dagger" ]; then
+    [ -n "$quick" ] || quick="$dagger"
+  fi
   if [ -n "$quick" ]; then
     [ -n "$noplan" ] || noplan="$quick"
     [ -n "$noaccept" ] || noaccept="$quick"
@@ -824,7 +835,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
-           "no_plan": """$noplan""", "quick": """$quick""",
+           "no_plan": """$noplan""", "quick": """$quick""", "dagger": """$dagger""",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -868,7 +879,17 @@ guild wait --for <short-name> --timeout 3600      # in the background; you are w
 Each helper works in its own worktree on a branch from yours. When one reports done, merge its branch into yours (\`git merge $branch--<short-name>\`), run your checks, and carry on. Its work is yours to review.
 HELPERS
   fi
-  [ -n "$quick" ] && cat >> "$q/prompt.md" <<QUICK
+  if [ -n "$dagger" ]; then cat >> "$q/prompt.md" <<DAGGER
+
+## This is an epic dagger
+
+The guildmaster marked this one epic-dagger: "$dagger". You work alone, start to finish, and they meet the result as a PR.
+- No plan phase, no acceptance contract, no Why card, no validation checklist, no wrap-up page.
+- Never turn to the guildmaster: no \`guild ask\`, no \`guild decide\`, no board, no needs-decision. Guild refuses them on this quest. When a choice comes up, make it, and write it under **Decisions taken alone** in the PR body, one line each with the option you did not take.
+- Build it, run the project's own tests, commit, push, then open the PR: \`guild pr-body\` for the contract section, plus the line \`Trial: skipped - epic dagger: $dagger\` so the reviewer sees it. Then \`guild status $slug done "<PR url>"\`.
+- Blocked by something only a person can give (an access, a secret, a product answer you cannot find)? \`guild status $slug blocked "<what>"\` and stop. That is the one exception.
+DAGGER
+  elif [ -n "$quick" ]; then cat >> "$q/prompt.md" <<QUICK
 
 ## This is a quick quest
 
@@ -878,6 +899,7 @@ The guildmaster asked for speed on this one: "$quick". The gates are off.
 - The board shows every skipped step as skipped, with that reason. Never write a note that says a step passed when it did not run.
 - Still owed: a wrap-up page, and a PR if the brief asks for one.
 QUICK
+  fi
 
   [ -n "$plan" ] && cat >> "$q/prompt.md" <<PLAN
 
@@ -954,6 +976,16 @@ PY
 quest_quick() { # slug: the reason a quest was started with --quick, or empty
   python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('quick',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
 }
+quest_dagger() { # slug: the reason a quest was started with --epic-dagger, or empty
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('dagger',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+# An epic dagger never turns to the guildmaster: every way of asking is refused inside one.
+dagger_guard() { # [slug]
+  local s="${1:-$(current_quest)}"
+  [ -n "$s" ] || return 0
+  local why; why=$(quest_dagger "$s")
+  [ -z "$why" ] || die "epic dagger ($why): this quest decides alone. Make the call, write it under 'Decisions taken alone' in the PR body, and go on. Only 'guild status $s blocked' may stop it."
+}
 
 quest_committed() { # slug
   local q wt base
@@ -1010,6 +1042,10 @@ cmd_status() {
   done
   need_quest "$slug"
   [ -n "$(quest_quick "$slug")" ] && export GUILD_NO_SCENARIOS=1
+  if [ -n "$(quest_dagger "$slug")" ]; then
+    export GUILD_NO_WRAPUP=1 GUILD_NO_SCENARIOS=1
+    [ "$state" = needs-decision ] && dagger_guard "$slug"
+  fi
   case "$state" in working|blocked|needs-decision|done|failed|stopped|planned) ;; *) die "bad state $state" ;; esac
   [ "$state" = planned ] && { handoff "$slug" "$note"; return; }
   # Every decision reaches the guildmaster as a page on the war table, never as a line of
@@ -1186,6 +1222,7 @@ cmd_ask() {
     ensure_pseudo_quest "$slug" "the fleet"
   fi
   need_quest "$slug"
+  dagger_guard "$slug"
   [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]'
   local question="$1"; shift
   python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$question" "$@"
@@ -1353,6 +1390,7 @@ cmd_board() {
       fi
       [ -n "$slug" ] || die "guild board $sub needs a quest: run it inside one, or pass --quest <name>"
       need_quest "$slug"
+      [ "$sub" = open ] && dagger_guard "$slug"
       python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$slug" ${rest[@]+"${rest[@]}"} ;;
     list|url) python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$@" ;;
     *) die "usage: guild board open|wait|list|url" ;;
@@ -1418,6 +1456,7 @@ case "${1:-}" in
   ask) shift; cmd_ask "$@" ;;
   decide) shift; d_slug=$(current_quest); [ -n "$d_slug" ] || { d_slug=quartermaster; ensure_pseudo_quest "$d_slug" "the fleet"; }
           [ -f "${1:-}" ] || die "usage: guild decide <spec.json>  (the war-table skill shows the format)"
+          dagger_guard "$d_slug"
           python3 "$GUILD_REPO/bin/decide.py" open "$d_slug" "$1" ;;
   calm) shift; cmd_calm "$@" ;;
   revive) shift; cmd_revive "$@" ;;
@@ -1438,6 +1477,7 @@ case "${1:-}" in
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
   plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\"  (inside a quest, after writing plan.md)"
         me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
+        dagger_guard "$me"
         python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" ;;
   jev) shift
        if [ "${1:-}" = risk ] && [ -z "${2:-}" ]; then set -- risk "$(current_quest)"; fi

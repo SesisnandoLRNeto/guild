@@ -897,6 +897,26 @@ WTQ=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq/me
 git -C "$WTQ" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
 has "a quick quest's trial does not wait for a behaviour check" "$(cd "$WTQ" && GUILD_QUEST=quickq "$GUILD" trial pass "did it" 2>&1)" "trial pass recorded"
 
+# --epic-dagger: quick, and no interaction at all: it decides alone, opens the PR, reports done
+echo d | GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= GUILD_NO_WHY= "$GUILD" quest dag --repo "$REPO_A" --epic-dagger >/dev/null 2>&1
+DM=$(cat "$GUILD_HOME/quests/dag/meta.json" 2>/dev/null)
+has "--epic-dagger records its mark" "$DM" '"dagger": "the guildmaster marked it epic-dagger"'
+has "and runs as a quick quest underneath" "$DM" '"quick": "the guildmaster marked it epic-dagger"'
+has "the adventurer is told to decide alone and open the PR" "$(cat "$GUILD_HOME/quests/dag/prompt.md")" "This is an epic dagger"
+has "an epic dagger never asks the guildmaster" "$("$GUILD" status dag needs-decision "which color?" 2>&1)" "decides alone"
+has "nor opens a board" "$(GUILD_QUEST=dag "$GUILD" ask "which color?" 2>&1)" "decides alone"
+hasnt "and the question never reached the war table" "$(ls "$GUILD_HOME/quests/dag/boards" 2>/dev/null)" "20"
+WTD=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/dag/meta.json'))['worktree'])")
+git -C "$WTD" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
+has "the PR gate opens for an epic dagger with the honest line" "$(cd "$WTD" && echo '{"tool_input":{"command":"gh pr create --body \"Trial: skipped - epic dagger\""}}' | GUILD_QUEST=dag "$REPO/hooks/pr-gate.sh" 2>&1; echo "exit $?")" "exit 0"
+has "and still wants that line in the body" "$(cd "$WTD" && echo '{"tool_input":{"command":"gh pr create --body x"}}' | GUILD_QUEST=dag "$REPO/hooks/pr-gate.sh" 2>&1)" "Trial: skipped"
+"$GUILD" status dag done "PR #1" >/dev/null 2>&1
+has "done owes no wrap-up and no checklist" "$(cat "$GUILD_HOME/quests/dag/status" 2>/dev/null)" "(no wrap-up)"
+has "the strip shows the trial as skipped by the dagger, not missing" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('dag'))")" 'title="skipped: epic dagger: the guildmaster marked it epic-dagger"'
+
 printf 'Intent: x\nAcceptance:\n- check: true\n- the page shows it\n' | GUILD_NO_ACCEPTANCE= "$GUILD" quest beh --repo "$REPO_A" >/dev/null 2>&1
 is "with one it starts, and the contract is sealed" "$(python3 -c "import json;print(len(json.load(open('$GUILD_HOME/quests/beh/acceptance.json'))['items']))")" "2"
 QB="$GUILD_HOME/quests/beh"; WTB=$(python3 -c "import json;print(json.load(open('$QB/meta.json'))['worktree'])")
