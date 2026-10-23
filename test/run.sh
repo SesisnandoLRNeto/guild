@@ -186,6 +186,9 @@ HTML
 out=$(GUILD_QUEST=alpha "$GUILD" board open --html "$TMP/wrap.html" --wrapup --title "alpha shipped" --no-open 2>&1)
 has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
 is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
+wb0=$(ls "$GUILD_HOME/quests/alpha/boards" | tail -1)
+has "before done, the wrap-up has no grading panel" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/")" "has not reported done yet"
+case "$(curl -s "http://127.0.0.1:4899/docket.json")" in *"alpha shipped"*) bad "and it is not on the docket" "listed" ;; *) ok "and it is not on the docket" ;; esac
 out=$("$GUILD" status alpha done "shipped it" 2>&1)
 has "a code quest needs its validation scenarios before done" "$out" "there is no scenarios.json"
 cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
@@ -196,6 +199,7 @@ cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
 JSON
 "$GUILD" status alpha done "shipped it" >/dev/null 2>&1
 is "with a wrap-up and scenarios, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+has "done announces the wrap-up" "$(tail -3 "$GUILD_HOME/events.log")" "wrap-up ready"
 vurl="http://127.0.0.1:4899/q/alpha/validate"
 has "the war table shows the checklist" "$(curl -s "$vurl")" "Call the endpoint."
 has "with the command to copy and what to expect" "$(curl -s "$vurl")" '<p class="expect"><b>Expect</b> 200 and <code>ok</code></p>'
@@ -1095,6 +1099,13 @@ has "the rule is in plain words" "$(cat "$TMP/wrap-b.html")" "A rate needs a cur
 GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
 "$GUILD" status cur done "PR" --no-scenarios "backend fixture, covered by alpha" >/dev/null 2>&1
 is "with the section and the rules explained, done goes through" "$(cut -f1 "$GUILD_HOME/quests/cur/status")" "done"
+has "a close without scenarios is recorded as a waiver" "$(cat "$GUILD_HOME/quests/cur/scenarios.waived" 2>/dev/null)" "backend fixture"
+cat > "$GUILD_HOME/quests/cur/scenarios.json" <<'JSON'
+{"title": "draft", "groups": [{"id": "A", "title": "x", "scenarios": [{"id": "A1", "do": "x", "expect": "y"}]}]}
+JSON
+wbc=$(ls "$GUILD_HOME/quests/cur/boards" | tail -1)
+out=$(curl -s -X POST "http://127.0.0.1:4899/b/cur/$wbc/reply" -d '{"answers":{"grade":"4","verdict":"merge"}}')
+case "$out" in *"Not ready to merge"*) bad "a waived checklist does not block the merge" "$out" ;; *) ok "a waived checklist does not block the merge" ;; esac
 "$GUILD" close cur --force >/dev/null 2>&1
 
 # the war table from a phone: a second listener that needs the key; pushes carry no details

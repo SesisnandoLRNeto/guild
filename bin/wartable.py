@@ -214,10 +214,14 @@ def glance(quest):
         tiles.append(("Pull request", f"#{pr.get('number')} {pr.get('state')}",
                       ", ".join(x for x in [pr.get("review", ""), ("NO CI RUN" if pr.get("checks") == "none" else f"checks {pr['checks']}") if pr.get("checks") else ""] if x)))
     v = scenarios_mod().summary(quest)
-    # The gauntlet comes after the forge and the checks: until they pass, the checklist is not a
-    # thing to open, only a thing that waits.
-    if v["exists"] and steps[3][1] is False:
+    # The gauntlet is the last step before the treasury: until the checks pass and the adventurer
+    # reports done, the checklist is not a thing to open, only a thing that waits.
+    if v.get("waived"):
+        tiles.append(("Validation", "not needed", v["waived"][:90]))
+    elif v["exists"] and steps[3][1] is False:
         tiles.append(("Validation", "not yet", "the gauntlet opens once the checks pass"))
+    elif v["exists"] and state not in ("done", "failed") and not v["certified"]:
+        tiles.append(("Validation", "not yet", "the gauntlet opens when the adventurer reports done"))
     elif v["exists"]:
         word = ("certified" if v["certified"] else "out of date, run again" if v["stale"]
                 else f"{v['fail']} failed" if v["fail"] else f"{v['open']} to run")
@@ -410,6 +414,13 @@ def nudge(quest, text):
 
 
 # ── the docket: every open decision on one page, one ruling per row ───────────
+def quest_state(quest):
+    try:
+        return open(os.path.join(QUESTS, quest, "status")).read().split("\t")[0].strip()
+    except OSError:
+        return ""
+
+
 def board_questions(bdir, meta):
     qpath = os.path.join(bdir, "decisions.json")
     questions = json.load(open(qpath)).get("questions", []) if os.path.exists(qpath) else []
@@ -464,6 +475,8 @@ def docket_items():
                 continue
             if qstate in ("done", "failed") and not meta.get("wrapup"):
                 continue                     # the quest moved on: an old unanswered question is not a decision
+            if meta.get("wrapup") and qstate not in ("done", "failed"):
+                continue                     # the wrap-up waits for the end of the quest
             item = dict(base, questions=board_questions(d, meta), held_until=meta.get("held_until", ""),
                         held_note=meta.get("held_note", ""))
             items.append(item)
@@ -798,15 +811,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qpath = os.path.join(d, "decisions.json")
         if os.path.exists(qpath):
             questions = json.load(open(qpath)).get("questions", [])
+        waiting = ""
         if meta.get("wrapup"):                  # a finished piece of work: you grade it first
             questions = GRADE_QUESTIONS + questions
+            if quest_state(quest) not in ("done", "failed"):
+                questions, waiting = [], ("The adventurer has not reported done yet. Grading and the next "
+                                          "step open here when the quest ends.")
         shell = open(os.path.join(WEB, "shell.html")).read()
         return (shell
                 .replace("{{TITLE}}", meta.get("title", board))
                 .replace("{{QUEST}}", quest)
                 .replace("{{BOARD}}", board)
                 .replace("{{SUBTITLE}}", meta.get("subtitle", ""))
-                .replace("{{QUESTIONS}}", json.dumps(questions)))
+                .replace("{{QUESTIONS}}", json.dumps(questions))
+                .replace("{{WAITING}}", json.dumps(waiting)))
 
 
 class RemoteHandler(Handler):
@@ -1007,11 +1025,13 @@ def finish_open(quest, board, args):
     port = ensure_server()
     url = f"http://127.0.0.1:{port}/b/{quest}/{board}/"
     if args.get("wrapup"):
-        record(quest, "working", f"wrap-up ready: {args.get('title') or board} -> {url}")
+        # The wrap-up is the end of the road: it stays hidden (no grading, not on the docket, no
+        # browser tab) until the quest reports done, so it never shows beside an open question.
+        record(quest, "working", f"wrap-up posted, shown when the quest reports done: {args.get('title') or board} -> {url}")
     else:
         record(quest, "needs-decision", f"war table ready: {args.get('title') or board} -> {url}")
     # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
-    if not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
+    if not args.get("wrapup") and not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
         subprocess.run(["open", url], check=False)
     print(url)
     print(f"board id: {board}")

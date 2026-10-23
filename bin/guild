@@ -1091,8 +1091,20 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   [ "$state" = done ] && [ -n "${GUILD_NO_WRAPUP:-}" ] && note="$note (no wrap-up)"
   [ "$state" = done ] && [ -n "${GUILD_NO_IMPACT:-}" ] && note="$note (no impact section)"
   [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ] && note="$note (no validation scenarios)"
+  if [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ]; then
+    printf '%s\n' "${note% (no*}" > "$(qdir "$slug")/scenarios.waived"
+  fi
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
+  # The wrap-up waits hidden until the end: it opens now, when the quest really is done.
+  if [ "$state" = done ] && [ -z "${GUILD_NO_WRAPUP:-}" ]; then
+    local w; w=$(wrapup_of "$slug")
+    if [ -n "$w" ]; then
+      local url; url="$(python3 "$GUILD_REPO/bin/wartable.py" url)b/$slug/$w/"
+      event "$slug" "wrapup" "wrap-up ready: $url"
+      case "$url" in http*) [ "${GUILD_BOARD_NO_OPEN:-}" = 1 ] || open "$url" >/dev/null 2>&1 || true ;; esac
+    fi
+  fi
 }
 
 # The end of a quest's plan phase: same conversation, build model. The restart runs from

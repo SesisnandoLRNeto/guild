@@ -53,6 +53,15 @@ def load(slug):
         return None
 
 
+def waiver(slug):
+    """Why the quest closed without a checklist (guild status done --no-scenarios), or "".
+    A waived checklist is not shown and does not hold back a merge, even if a draft of it exists."""
+    try:
+        return open(os.path.join(qdir(slug), "scenarios.waived")).read().strip() or "closed without a checklist"
+    except OSError:
+        return ""
+
+
 def state(slug):
     try:
         return json.load(open(os.path.join(qdir(slug), "validation.json")))
@@ -123,9 +132,10 @@ def summary(slug):
     """Counts, and whether the work is certified: every scenario passed (or skipped with a reason)
     on the commit the worktree is on now. A new commit after that makes the certificate stale."""
     spec = load(slug)
-    if not spec:
+    waived = waiver(slug)
+    if not spec or waived:
         return {"total": 0, "pass": 0, "fail": 0, "skip": 0, "open": 0, "complete": False, "exists": False,
-                "certified": False, "stale": False}
+                "certified": False, "stale": False, "waived": waived}
     marks = state(slug)
     ids = [s["id"] for s in scenario_list(spec) if s.get("id")]
     count = {k: sum(1 for i in ids if marks.get(i, {}).get("status") == k) for k in STATUSES}

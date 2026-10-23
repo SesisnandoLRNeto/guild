@@ -111,6 +111,7 @@
 addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); });   // Back shows fresh state
 
 const QUESTIONS = {{QUESTIONS}};
+const WAITING = {{WAITING}};   // a wrap-up before the quest is done: nothing to grade yet
 const answers = {}, attachments = [];
 const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
 
@@ -200,6 +201,11 @@ fetch("state.json").then(r => r.json()).then(s => {
   document.getElementById("state").innerHTML = '<span class="sent">already answered at ' + s.decision.at + '</span>';
 });
 draw();
+if (WAITING) {
+  const p = el("p", "hint"); p.textContent = WAITING;
+  document.getElementById("questions").appendChild(p);
+  document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = true;
+}
 </script>
 </body>
 </html>
