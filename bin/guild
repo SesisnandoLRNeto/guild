@@ -31,6 +31,8 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                                     no Why card, no validation checklist, and the trial is skipped
                    [--epic-dagger ["<why>"]]  everything --quick drops, and no interaction at all:
                                     no questions, no boards, no wrap-up; build it and open the PR
+                   [--why | --no-why]    the Why card comes with a feature or an implementation only;
+                                    a PR review fix, a merge or a CI chore gets none unless you pass --why
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
@@ -710,6 +712,7 @@ cmd_quest() {
       --headless) headless=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
       --no-why) export GUILD_NO_WHY=1; shift ;;
+      --why) export GUILD_WHY=1; shift ;;
       --no-acceptance) noaccept="${2:-}"; [ -n "$noaccept" ] || die "--no-acceptance needs a reason"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
@@ -959,9 +962,15 @@ PLAN
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
   # headless: another machine's guild asked for this quest; its tab lives over there
   [ -n "$headless" ] || open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
-  # the guildmaster writes why this quest exists, in their own words (helpers and remote copies skip it)
+  # the guildmaster writes why this quest exists, in their own words (helpers and remote copies skip it).
+  # Only a feature or an implementation deserves the card; a PR review fix, a merge or a CI chore has
+  # no pain or rule of its own (why.py wanted decides; --why forces the card, --no-why drops it).
   if [ -z "${GUILD_NO_WHY:-}" ] && [ -z "$parent" ] && [ -z "$headless" ]; then
-    python3 "$GUILD_REPO/bin/why.py" open "$slug" >/dev/null 2>&1 && echo "why card: on the docket for the guildmaster" || true
+    if [ -n "${GUILD_WHY:-}" ] || why_word=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$q/brief.md" 2>/dev/null); then
+      python3 "$GUILD_REPO/bin/why.py" open "$slug" >/dev/null 2>&1 && echo "why card: on the docket for the guildmaster" || true
+    else
+      echo "${why_word:-why card: skipped}"
+    fi
   fi
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }

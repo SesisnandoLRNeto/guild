@@ -993,6 +993,15 @@ echo x | GUILD_NO_WHY= "$GUILD" quest whyq --repo "$REPO_A" >/dev/null 2>&1
 wb=$(ls "$GUILD_HOME/quests/whyq/boards" | grep '^why-' | head -1)
 [ -n "$wb" ] && ok "a new quest puts a Why card on the docket" || bad "a new quest puts a Why card on the docket" "no why board"
 has "the card asks the five questions" "$(cat "$GUILD_HOME/quests/whyq/boards/$wb/decisions.json")" '"id": "future"'
+# housekeeping gets no card: a PR review fix, a merge, a CI chore have no pain or rule of their own
+out=$(echo "Fix the Required review items on PR 12" | GUILD_NO_WHY= "$GUILD" quest pr12-review-fix --repo "$REPO_A" 2>&1)
+has "a PR review fix quest says it skipped the card" "$out" "why card: skipped"
+[ -z "$(ls "$GUILD_HOME/quests/pr12-review-fix/boards" 2>/dev/null | grep '^why-')" ] && ok "and puts no Why card on the docket" || bad "and puts no Why card on the docket"
+out=$(echo "Bring the branch up to date with main; resolve the conflicts in releases.json" | GUILD_NO_WHY= "$GUILD" quest abc-7-sync --repo "$REPO_A" 2>&1)
+has "a merge brief skips the card too" "$out" "the brief says housekeeping"
+out=$(echo "Bring the branch up to date with main" | GUILD_NO_WHY= "$GUILD" quest abc-8-sync --repo "$REPO_A" --why 2>&1)
+has "--why forces the card" "$out" "why card: on the docket"
+"$GUILD" close pr12-review-fix --force >/dev/null 2>&1; "$GUILD" close abc-7-sync --force >/dev/null 2>&1; "$GUILD" close abc-8-sync --force >/dev/null 2>&1
 has "the docket lists it" "$(curl -s http://127.0.0.1:4899/docket.json)" "Why card: whyq"
 is "a card does not park the quest" "$(cut -f1 "$GUILD_HOME/quests/whyq/status")" "working"
 curl -s -X POST "http://127.0.0.1:4899/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null

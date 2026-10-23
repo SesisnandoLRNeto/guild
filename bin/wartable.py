@@ -864,12 +864,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def render_index(self):
         rows = []
         for m in list_boards():
-            mark = "answered" if m["answered"] else "waiting"
             title = m.get("title", m["id"])
             # what kind of notice it is, in the guild's words: a why card, a bard's tale (wrap-up) or a question
-            icon, kind = (("scroll", "why card") if str(title).startswith("Why card") else
+            why = str(title).startswith("Why card")
+            icon, kind = (("scroll", "why card") if why else
                           ("chest", "the bard's tale") if m.get("wrapup") else ("crystal", "the oracle's question"))
-            word = "ruled" if m["answered"] else "awaits your word"
+            # a why card is a note you fill when you like, never a decision the quest waits on: no gold edge
+            mark = "answered" if m["answered"] else "note" if why else "waiting"
+            word = ("written" if why else "ruled") if m["answered"] else ("open, fill it when you like" if why else "awaits your word")
             rows.append(
                 f'<li class="{mark}"><span class="gi-icon gi-{icon}" aria-hidden="true"></span><div>'
                 f'<a href="/b/{m["quest"]}/{m["id"]}/">{_html.escape(str(title))}</a>'

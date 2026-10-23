@@ -12,13 +12,6 @@
   html:root body { max-width: 900px; background: none; box-shadow: none; padding: 0 16px 40px; color: var(--rm-text); }
   html:root body::before { display: none; }
   html:root h1 { display: none; }
-  ul.boards li { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; color: var(--rm-text); }
-  ul.boards li.waiting { border-left: 4px solid var(--rm-gold); }
-  ul.boards .gi-icon { color: var(--rm-gold); }
-  ul.boards a { color: var(--rm-text); }
-  ul.boards a:hover { color: var(--rm-gold-2); }
-  .meta { color: var(--rm-dim); }
-  .meta b { color: var(--rm-gold); }
   p.sub { color: var(--dim); margin: 0 0 22px; font-style: italic; }
   ul.boards { list-style: none; padding: 0; margin: 0; }
   ul.boards li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start;
@@ -35,6 +28,17 @@
   li.empty { color: var(--dim); display: block; }
   .nav { display: flex; gap: 8px; margin: 0 0 18px; }
   .nav a { font-size: 13px; text-decoration: none; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; background: rgba(255,250,235,.6); }
+  /* the realm: these come last so they win over the parchment values above */
+  ul.boards li { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; color: var(--rm-text); }
+  ul.boards li.waiting { border-left: 4px solid var(--rm-gold); }
+  ul.boards .gi-icon { color: var(--rm-gold); }
+  ul.boards a { color: var(--rm-text); }
+  ul.boards a:hover { color: var(--rm-gold-2); }
+  .meta { color: var(--rm-dim); }
+  .meta b { color: var(--rm-gold); }
+  .nav a { color: var(--rm-text); background: rgba(0, 0, 0, .35); border-color: var(--rm-line); }
+  .nav a:hover { color: var(--rm-gold-2); border-color: var(--rm-gold); }
+  ul.boards li.answered .gi-icon { color: var(--rm-dim); }
 </style>
 </head>
 <body>
