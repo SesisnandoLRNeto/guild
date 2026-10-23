@@ -81,7 +81,7 @@ guild up ~/Workspace
 |---|---|
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
 | `guild quest <slug> --repo PATH [--ticket KEY] [--harness NAME] [--tier T \| --model M] [--plan] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>`. See [Routing](#routing-which-model-does-which-work) |
-| `guild quest ... --quick ["<why>"]` / `--epic-dagger ["<why>"]` | Quick: no plan, no acceptance contract, no Why card, no validation checklist, trial skipped; a wrap-up is still owed. Epic dagger: all of that and no interaction at all. The adventurer never asks or opens a board, decides alone (choices listed in the PR body under "Decisions taken alone"), opens the PR and reports done. A Jira label `epic-dagger`, or a PR review-fix quest, means this flag |
+| `guild quest ... --quick ["<why>"]` / `--epic-dagger ["<why>"]` | Quick: no plan, no acceptance contract, no Why card, no validation checklist, trial skipped; a wrap-up is still owed. Epic dagger: all of that and no interaction at all. The adventurer never asks or opens a board, decides alone (choices listed in the PR body under "Decisions taken alone"), opens the PR and reports done. Only the guildmaster's own `--epic-dagger` (or the Jira label `epic-dagger`) means this flag; the quartermaster never skips a step on its own, and a PR review-fix quest keeps every step |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |

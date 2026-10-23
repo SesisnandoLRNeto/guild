@@ -1,13 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm rm-dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guild Rule Drill</title>
 <link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 <style>
   /* The weekly drill: three rules, your answer first, then the truth. You are the judge. */
+  html.realm .q { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; box-shadow: inset 0 0 0 1px #000; }
+  html.realm .q h3 { color: #f3cf6c; }
+  html.realm .score { color: var(--dim); }
+  html.realm button { background: rgba(0, 0, 0, .35); color: var(--text); }
+  html.realm button.go { background: var(--rm-gold); color: #2a1d14; border-color: var(--rm-gold); }
   html:root body { max-width: 900px; }
   .score { font-size: 14px; color: var(--dim); margin: 0 0 18px; }
   .q { background: rgba(255,250,235,.62); border: 1px solid var(--line); border-radius: 5px; padding: 14px 16px; margin: 0 0 14px; }
@@ -30,6 +37,21 @@
 </style>
 </head>
 <body>
+<section class="rm-hero rm-frame" aria-label="The drill">
+  <div>
+    <p class="rm-kicker">The war table</p>
+    <h1 class="rm-title" style="display:block">This Week's Rule Drill</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub" style="display:block">Three business rules from the work. Answer each in your own words first, then check the truth and mark yourself. A miss comes back next week. <a href="/rules">The rule book</a> has them all.</p>
+  </div>
+  <div class="rm-party" id="realm-party"></div>
+</section>
+<script>
+  document.getElementById("realm-party").innerHTML =
+    rmFigure("highelf", null, "asks the questions", "The archmage picked three rules from the book. It already knows the answers. It wants to know if you do.", { name: "High elf" }) +
+    rmFigure("human", null, "answers them", "Your words first, then the truth. You grade yourself; nobody else is watching. The elf is, a little.", { name: "Guildmaster" }) +
+    rmFigure("goblin", null, "waits for a miss", "A missed rule comes back next week, louder. Goblins love a repeat.", { name: "Goblin" });
+</script>
 <h1>This Week's Rule Drill</h1>
 <p class="lead">Three business rules from the work. Answer each in your own words first, then check the truth and mark yourself. A miss comes back next week. <a href="/rules">The rule book</a> has them all.</p>
 <p class="score" id="score"></p>

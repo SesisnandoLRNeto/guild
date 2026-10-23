@@ -6,6 +6,7 @@
 <title>Guild Campaign</title>
 <link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 <style>
   :root {
     --wood-1: #2a1d14; --wood-2: #22170f; --wood-line: #1a110b; --frame: #4a3322;
@@ -325,13 +326,10 @@ function niceTitle(c) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-// a race portrait from races.svg in its gold ring (realm.css .race)
-const race = (key, cls = "") => key ? `<span class="race ${cls}" title="${esc(key)}"><svg aria-hidden="true"><use href="/races.svg#${esc(key)}"/></svg></span>` : "";
-const bust = (key) => `<svg aria-hidden="true"><use href="/races.svg#${esc(key)}"/></svg>`;
-const RACE_NAME = { human: "Humans", highelf: "High elves", nightelf: "Night elves", dwarf: "Dwarves", gnome: "Gnomes", dragon: "Dragons",
-  orc: "Orcs", troll: "Trolls", goblin: "Goblins", undead: "Undead" };
+const race = rmRace;   // a race portrait from races.svg in its gold ring (realm.js)
 const RACE_WORD = { road: "on the road", waiting: "await your word", trial: "at the gate" };
 const HORDE_WORD = { orc: "slew a quest", troll: "hold a bridge", goblin: "in the tests", undead: "told no tale" };
+const quests = (n) => `${n} quest${n === 1 ? "" : "s"}`;
 // the hero banner: who walks the realm now, by race, and the creatures the troubled quests met
 function realmParty(cards) {
   const guild = {}, horde = {};
@@ -343,13 +341,15 @@ function realmParty(cards) {
       g.n += 1; g.cols[c.column] = (g.cols[c.column] || 0) + 1;
     }
   }
-  const fig = (key, n, sub, cls) => `<figure><span class="race big ${cls}">${bust(key)}<b class="n">${n}</b></span><figcaption>${esc(RACE_NAME[key] || key)}<small>${esc(sub)}</small></figcaption></figure>`;
   const out = Object.entries(guild).sort((a, b) => b[1].n - a[1].n).map(([k, g]) => {
-    const top = Object.entries(g.cols).sort((a, b) => b[1] - a[1])[0];
-    return fig(k, g.n, top ? RACE_WORD[top[0]] : "", "");
+    const cols = Object.entries(g.cols).sort((a, b) => b[1] - a[1]);
+    const live = "Right now: " + cols.map(([c, n]) => `${quests(n)} ${RACE_WORD[c]}`).join(", ") + ".";
+    return rmFigure(k, g.n, RACE_WORD[cols[0][0]], live, { plural: true });
   });
-  out.push(...Object.entries(horde).sort((a, b) => b[1] - a[1]).map(([k, n]) => fig(k, n, HORDE_WORD[k] || "", "horde")));
-  $("#realm-party").innerHTML = out.join("") || `<figure><span class="race big dim">${bust("human")}</span><figcaption>Quiet realm<small>nobody on the road</small></figcaption></figure>`;
+  out.push(...Object.entries(horde).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+    rmFigure(k, n, HORDE_WORD[k] || "", `Right now: ${quests(n)}. The card below says which.`, { plural: true })));
+  const html = out.join("") || rmFigure("human", null, "nobody on the road", "The realm is quiet. Suspicious.", { name: "Quiet realm", dim: true });
+  if ($("#realm-party").innerHTML !== html) $("#realm-party").innerHTML = html;
 }
 
 function tilt(id) { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 5) - 2) * 0.35; }

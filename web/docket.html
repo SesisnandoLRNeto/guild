@@ -119,6 +119,7 @@
 </style>
 <link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 </head>
 <body>
 <section class="rm-hero rm-frame" aria-label="The oracle's hall">
@@ -169,9 +170,7 @@
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const $ = (s) => document.querySelector(s);
 const key = (i) => `${i.quest}/${i.board}`;
-const race = (key, cls = "") => key ? `<span class="race ${cls}" title="${esc(key)}"><svg aria-hidden="true"><use href="/races.svg#${esc(key)}"/></svg></span>` : "";
-const bust = (key) => `<svg aria-hidden="true"><use href="/races.svg#${esc(key)}"/></svg>`;
-const RACE_NAME = { human: "Human", highelf: "High elf", nightelf: "Night elf", dwarf: "Dwarf", gnome: "Gnome", dragon: "Dragon" };
+const race = rmRace;   // realm.js
 let data = null;
 const picks = {}, notes = {};          // survive the refresh: what you chose but did not send yet
 
@@ -211,8 +210,9 @@ function realmParty(open) {
   const by = {};
   for (const i of open) { const r = i.pseudo ? "highelf" : i.klass && i.klass.race; if (r) by[r] = (by[r] || 0) + 1; }
   const figs = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
-    `<figure><span class="race big">${bust(k)}<b class="n">${n}</b></span><figcaption>${esc(RACE_NAME[k] || k)}<small>${n === 1 ? "waits for your word" : "wait for your word"}</small></figcaption></figure>`);
-  $("#realm-party").innerHTML = figs.join("") || `<figure><span class="race big dim">${bust("human")}</span><figcaption>The hall is quiet<small>nobody waits</small></figcaption></figure>`;
+    rmFigure(k, n, n === 1 ? "waits for your word" : "wait for your word", `Right now: ${n} ruling${n === 1 ? "" : "s"} on the docket from them.`));
+  const html = figs.join("") || rmFigure("human", null, "nobody waits", "The hall is quiet. Enjoy it while it lasts.", { name: "Quiet hall", dim: true });
+  if ($("#realm-party").innerHTML !== html) $("#realm-party").innerHTML = html;
 }
 
 function render() {

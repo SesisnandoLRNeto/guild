@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 <style>
   html:root body { max-width: 900px; background: none; box-shadow: none; padding: 0 16px 40px; color: var(--rm-text); }
   html:root body::before { display: none; }
@@ -45,8 +46,13 @@
       <p class="rm-sub">Every board your adventurers put up: the oracle's questions, why cards and the bards' tales. A gold edge means it waits for your word.</p>
       <nav class="rm-nav" style="margin-top:12px"><a href="/docket"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a></nav>
     </div>
-    <div class="rm-party"><figure><span class="race big"><svg aria-hidden="true"><use href="/races.svg#human"/></svg></span><figcaption>Guildmaster<small>reads the wall</small></figcaption></figure></div>
+    <div class="rm-party" id="realm-party"></div>
   </section>
+  <script>
+    document.getElementById("realm-party").innerHTML =
+      rmFigure("highelf", null, "pins the tales", "Every wrap-up here was read by the quartermaster first. Grade it anyway; elves are polite about dwarves.", { name: "High elf" }) +
+      rmFigure("human", null, "reads the wall", "A gold edge means a board waits for your word. The rest is history, and the bard's tales.", { name: "Guildmaster" });
+  </script>
   <h1>The notice wall</h1>
   <!--BOARDS-->
 </body>

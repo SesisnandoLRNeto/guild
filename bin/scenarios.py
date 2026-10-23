@@ -325,7 +325,13 @@ def page(slug, meta=None, export=False, image=None, prs=None):
                                       meta.get("ticket", ""), pr_label, "updated " + time.strftime("%d %b %Y")] if x)
     back = "" if export else (f'<a class="btn back" href="{esc(report_url(slug) or "/campaign")}" id="back">'
                               f'&larr; Back to the {"report" if report_url(slug) else "campaign board"}</a>')
-    h = [f'<header>{back}<div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
+    strip = "" if export else (
+        '<div class="rm-party gauntlet">'
+        + figure("dwarf", "built it", "The dwarf swears it works on its machine. The gauntlet is where you find out.")
+        + figure("goblin", "hide in the tests", "Every scenario still to run is a place a goblin can hide. Run them all; count what you find.")
+        + figure("human", "runs the gauntlet", "You. Pass, fail or skip each one; a fail goes back to the forge with your note, and the last pass writes the certificate.")
+        + '</div>')
+    h = [f'<header>{back}{strip}<div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
     if spec.get("lede"):
         h.append(f'<p class="lede">{rich(spec["lede"])}</p>')
     h.append('<div class="progress"><span id="count"></span><div class="bar" aria-hidden="true">'
@@ -427,10 +433,18 @@ def page(slug, meta=None, export=False, image=None, prs=None):
 WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "web")
 
 
+def figure(race, sub, tip):
+    """One race of the gauntlet, for the strip on the war table page (realm.css draws the ring and the hover)."""
+    name = {"dwarf": "Dwarf", "goblin": "Goblins", "human": "Guildmaster"}[race]
+    horde = " horde" if race == "goblin" else ""
+    return (f'<figure data-tip="{esc(tip)}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
+            f'<figcaption>{name}<small>{esc(sub)}</small></figcaption></figure>')
+
+
 def theme(inline):
     """The guild's parchment theme: linked on the war table, copied in for the standalone export."""
     if not inline:
-        return '<meta name="color-scheme" content="light"><link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
+        return '<meta name="color-scheme" content="light"><link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/realm.css">'
     css = ""
     for name in ("icons.css", "theme.css"):
         try:
@@ -448,6 +462,8 @@ html:root body{max-width:1100px}
 *{box-sizing:border-box}
 .wrap{display:grid;gap:36px}
 header{display:grid;gap:12px;border-bottom:1px solid var(--line);padding-bottom:22px}
+.rm-party.gauntlet{justify-content:flex-start;gap:10px 22px;padding:12px 14px;border-radius:6px;background:linear-gradient(180deg,#241d2b,#17121c);border:1px solid #8a6a1e;box-shadow:inset 0 0 0 1px #000}
+.rm-party.gauntlet figcaption{color:#f3cf6c}.rm-party.gauntlet figcaption small{color:#a8987a}
 .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
 h1{margin:0}h2{margin:0}h3{margin:0}p{margin:0}
 .lede,.sub{color:var(--muted);max-width:75ch}.lede{font-size:16px}

@@ -65,8 +65,8 @@ html.realm ::selection { background: rgba(217, 164, 65, .45); }
 .rm-hero > div:first-child { flex: 1 1 420px; min-width: 0; }
 .rm-hero .rm-sub { max-width: 64ch; }
 .rm-party { display: flex; flex-wrap: wrap; gap: 14px 18px; justify-content: flex-end; }
-.rm-party figure { margin: 0; width: 84px; text-align: center; }
-.rm-party figcaption { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--rm-gold); margin-top: 6px; line-height: 1.25; }
+.rm-party figure { margin: 0; width: 94px; text-align: center; overflow: visible; }
+.rm-party figcaption { font-size: 10.5px; letter-spacing: .05em; overflow-wrap: anywhere; text-transform: uppercase; color: var(--rm-gold); margin-top: 6px; line-height: 1.25; }
 .rm-party figcaption small { display: block; text-transform: none; letter-spacing: 0; color: var(--rm-dim); font-size: 11px; }
 .rm-party .n { position: absolute; right: -4px; bottom: -2px; min-width: 22px; height: 22px; border-radius: 11px; padding: 0 5px;
   background: var(--rm-gold); color: #2a1d14; font: 700 12px/22px ui-sans-serif, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 0 0 2px #0d0b10; }
@@ -113,3 +113,47 @@ html.realm .rm-sheet { border-radius: 3px; }
   .rm-party { justify-content: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { html.realm body { background-attachment: scroll; } }
+
+/* ── hover on a hero figure: who they are, in plain words (data-tip from realm.js) ───────────── */
+.rm-party figure { position: relative; cursor: help; outline: none; }
+.rm-party figure[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 250px; z-index: 30;
+  background: linear-gradient(180deg, #2a2230, #15111a); color: var(--rm-text); border: 1px solid var(--rm-gold-3); border-radius: 4px;
+  padding: 9px 11px; font: 12.5px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; text-align: left;
+  box-shadow: inset 0 0 0 1px #000, 0 10px 24px rgba(0, 0, 0, .7); opacity: 0; pointer-events: none; transition: opacity .12s;
+}
+.rm-party figure[data-tip]::before {
+  content: ""; position: absolute; top: calc(100% + 3px); left: 50%; width: 9px; height: 9px; margin-left: -5px; transform: rotate(45deg);
+  background: #2a2230; border-left: 1px solid var(--rm-gold-3); border-top: 1px solid var(--rm-gold-3); z-index: 31; opacity: 0; pointer-events: none; transition: opacity .12s;
+}
+.rm-party figure:hover::after, .rm-party figure:focus::after, .rm-party figure:hover::before, .rm-party figure:focus::before { opacity: 1; }
+.rm-party figure:last-child::after { left: auto; right: 0; transform: none; }
+.rm-party figure:first-child:not(:last-child)::after { left: 0; transform: none; }
+.rm-hero { overflow: visible; }
+.rm-party figure:hover .race { box-shadow: 0 0 0 2px var(--rm-gold), 0 0 0 3px #000, 0 0 0 4px rgba(217, 164, 65, .6), 0 0 18px rgba(217, 164, 65, .5); }
+
+/* ── dark pages that were parchment sheets: the treasury, the rule book, the drill ──────────── */
+html.realm.rm-dark body { max-width: 1180px; background: none; border: 0; box-shadow: none; padding: 0 16px 48px; color: var(--rm-text); }
+html.realm.rm-dark body::before { display: none; }
+html.realm.rm-dark { --text: #e9dcc0; --dim: #a8987a; --line: #4a3f52; --card: #241d2b; --accent: #d9a441; --ok: #8fb35a; --bad: #e0573f; --warn: #e0a93a; }
+html.realm.rm-dark h1 { display: none; }
+html.realm.rm-dark h2, html.realm.rm-dark h3, html.realm.rm-dark h4 { color: #f3cf6c; }
+html.realm.rm-dark h2::before, html.realm.rm-dark ul > li::before { background: var(--rm-gold); }
+html.realm.rm-dark h3::before { color: var(--rm-gold); }
+html.realm.rm-dark p.lead, html.realm.rm-dark .lead { display: none; }
+html.realm.rm-dark a { color: var(--rm-gold); }
+html.realm.rm-dark code, html.realm.rm-dark pre:not(.mermaid) { background: rgba(0, 0, 0, .35); }
+html.realm.rm-dark th { background: rgba(217, 164, 65, .10); color: var(--rm-dim); }
+html.realm.rm-dark th, html.realm.rm-dark td { border-bottom-color: var(--line); }
+html.realm.rm-dark figure, html.realm.rm-dark .note { background: var(--card); border-color: var(--line); }
+html.realm.rm-dark blockquote { background: rgba(0, 0, 0, .3); border-left-color: var(--rm-gold); }
+html.realm.rm-dark hr { background: var(--i-swords) center / 22px 22px no-repeat, linear-gradient(var(--rm-gold-3), var(--rm-gold-3)) center / 100% 1px no-repeat; }
+html.realm.rm-dark details.dev { background: rgba(0, 0, 0, .3); border-color: var(--line); }
+html.realm.rm-dark details.dev > summary { color: #f3cf6c; }
+html.realm.rm-dark textarea, html.realm.rm-dark input, html.realm.rm-dark select { background: rgba(0, 0, 0, .35); color: var(--rm-text); border-color: var(--line); color-scheme: dark; }
+
+/* ── the hero banner inside a theme.css page: no parchment box around a figure, no ornament under the title ── */
+html:root .rm-party figure { background: none; border: 0; box-shadow: none; border-radius: 0; padding: 0; }
+html:root .rm-title { color: transparent; padding: 0; margin: 0; }
+html:root .rm-title::after { display: none; }
+html:root .rm-hero h1 { display: block; }

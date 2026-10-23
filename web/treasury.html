@@ -1,15 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm rm-dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guild Treasury</title>
 <link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 <style>
   /* The treasury: what the work cost and what it was worth. Charts are plain SVG drawn
      here, so the page works offline like every war table page. */
   html:root body { max-width: 1120px; }
+  html.realm .tile { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; box-shadow: inset 0 0 0 1px #000; }
+  html.realm .tile b { color: #f3cf6c; }
+  html.realm .warn { background: rgba(217, 164, 65, .12); border-left-color: var(--rm-gold); }
+  html.realm .seg { border-color: #4a3f52; }
+  html.realm .seg button { background: rgba(0, 0, 0, .35); color: var(--text); }
+  html.realm .seg button + button { border-left-color: #4a3f52; }
+  html.realm .seg button[aria-pressed="true"] { background: var(--rm-gold); color: #2a1d14; }
+  html.realm .hbars .track { background: rgba(0, 0, 0, .4); }
+  html.realm .hbars .fill { background: #c08a22; }
+  html.realm .stars { color: var(--rm-gold); }
+  html.realm #mix .track { background: rgba(0, 0, 0, .4); }
+  html.realm .rm-hero { margin-top: 18px; }
   .lead { margin-top: 0; }
   .warn { background: rgba(217, 164, 65, .22); border-left: 3px solid #b5651d; padding: 8px 12px; font-size: 13.5px; margin: 0 0 18px; }
   .warn code { font-size: 12px; }
@@ -44,6 +58,16 @@
 </style>
 </head>
 <body>
+<section class="rm-hero rm-frame" aria-label="The treasury">
+  <div>
+    <p class="rm-kicker">The war table</p>
+    <h1 class="rm-title" style="display:block">The Treasury</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub" style="display:block">What the work cost, and what it was worth. Dollars are API prices: on a subscription nothing is billed per token, and this is what the same work would cost on the API. The dragons eat most of it.</p>
+    <nav class="rm-nav" style="margin-top:12px"><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/docket"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a></nav>
+  </div>
+  <div class="rm-party" id="realm-party" aria-label="Who ate the gold"></div>
+</section>
 <h1>The Treasury</h1>
 <p class="lead">What the work cost, and what it was worth. Dollars are API prices: on a subscription nothing is billed per token, and this is what the same work would cost on the API.</p>
 <div id="warn"></div>
@@ -148,7 +172,7 @@ function daily() {
   const y = (v) => H - B - (v / max) * (H - B - T);
   const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((s) => max / s <= 5) || 2000;
   let g = "";
-  for (let v = 0; v <= max; v += step) g += `<line x1="${L}" x2="${W - 4}" y1="${y(v)}" y2="${y(v)}" stroke="#cdb88e" stroke-width="1"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#6e5a41">$${v}</text>`;
+  for (let v = 0; v <= max; v += step) g += `<line x1="${L}" x2="${W - 4}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--dim)">$${v}</text>`;
   rows.forEach((r, i) => {
     let acc = 0; const x = L + i * cw + (cw - bw) / 2;
     const total = keys.reduce((s, k) => s + (r[k] || 0), 0);
@@ -159,7 +183,7 @@ function daily() {
       g += `<rect x="${x}" y="${y(acc + v)}" width="${bw}" height="${Math.max(0.5, y(acc) - y(acc + v))}" fill="${color(k)}"/>`; acc += v;
     }
     g += `</g>`;
-    if (i % 5 === 4 || i === rows.length - 1) g += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6e5a41">${r.day.slice(5)}</text>`;
+    if (i % 5 === 4 || i === rows.length - 1) g += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--dim)">${r.day.slice(5)}</text>`;
   });
   $("#daily").innerHTML = g;
   $("#daily-legend").innerHTML = keys.map((k) => `<span><i style="background:${color(k)}"></i>${esc(dailyBy === "model" ? short(k) : k)}</span>`).join("");
@@ -216,12 +240,12 @@ function scatter() {
   const max = Math.max(1, ...qs.map((q) => q.cost)) * 1.1;
   const x = (v) => L + (v / max) * (W - L - R), y = (g) => H - B - ((g - 0.5) / 5) * (H - B - T);
   let g = "";
-  for (let s = 1; s <= 5; s++) g += `<line x1="${L}" x2="${W - R}" y1="${y(s)}" y2="${y(s)}" stroke="#cdb88e"/><text x="${L - 8}" y="${y(s) + 4}" text-anchor="end" font-size="11" fill="#6e5a41">${s}</text>`;
+  for (let s = 1; s <= 5; s++) g += `<line x1="${L}" x2="${W - R}" y1="${y(s)}" y2="${y(s)}" stroke="var(--line)"/><text x="${L - 8}" y="${y(s) + 4}" text-anchor="end" font-size="11" fill="var(--dim)">${s}</text>`;
   const step = [1, 2, 5, 10, 20, 25, 50, 100].find((s) => max / s <= 5) || 200;
-  for (let v = 0; v <= max; v += step) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="#6e5a41">$${v}</text>`;
-  g += `<text x="${W - R}" y="${H - 10 - 14}" text-anchor="end" font-size="11" fill="#6e5a41">cost</text><text x="${L - 30}" y="${T + 2}" font-size="11" fill="#6e5a41">grade</text>`;
-  for (const q of qs) g += `<circle cx="${x(q.cost)}" cy="${y(q.grade)}" r="6" fill="${modelColor(q.model)}" fill-opacity=".8" stroke="#2d2216" stroke-width=".5"><title>${esc(`${q.slug}: ${money(q.cost)}, grade ${q.grade} (${short(q.model)})`)}</title></circle>`;
-  if (!qs.length) g += `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#6e5a41">No graded quests yet.</text>`;
+  for (let v = 0; v <= max; v += step) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--dim)">$${v}</text>`;
+  g += `<text x="${W - R}" y="${H - 10 - 14}" text-anchor="end" font-size="11" fill="var(--dim)">cost</text><text x="${L - 30}" y="${T + 2}" font-size="11" fill="var(--dim)">grade</text>`;
+  for (const q of qs) g += `<circle cx="${x(q.cost)}" cy="${y(q.grade)}" r="6" fill="${modelColor(q.model)}" fill-opacity=".85" stroke="#000" stroke-width=".6"><title>${esc(`${q.slug}: ${money(q.cost)}, grade ${q.grade} (${short(q.model)})`)}</title></circle>`;
+  if (!qs.length) g += `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="var(--dim)">No graded quests yet.</text>`;
   $("#scatter").innerHTML = g;
 }
 
@@ -291,7 +315,24 @@ function questsTable() {
       <td class="n">${q.grade ? q.grade + "/5" : "-"}</td><td class="n">${esc(q.pr || "-")}</td><td class="n">${esc((q.created || "").slice(5, 10))}</td></tr>`).join("");
 }
 
-function render() { tiles(); daily(); where(); mix(); kinds(); worth(); scatter(); folders(); jev(); questsTable();
+// ── the hero: which race ate the gold in the period, with a dry word on each ──
+const EATS = { dragon: "ate most of the gold", highelf: "charged by the thought", dwarf: "paid by the hammer", gnome: "cheap, as promised", human: "a model the guild does not know" };
+function realmParty() {
+  const per = {}, qs = D.quests.filter(inPeriod);
+  for (const q of qs) {
+    const total = Object.values(q.models).reduce((a, b) => a + b, 0) || 1;
+    for (const [m, c] of Object.entries(q.models)) { const r = rmRaceOf(m); per[r] = per[r] || { cost: 0, n: 0 }; per[r].cost += q.cost * c / total; per[r].n += 1; }
+  }
+  const rows = Object.entries(per).sort((a, b) => b[1].cost - a[1].cost);
+  const all = rows.reduce((s, r) => s + r[1].cost, 0) || 1;
+  const html = rows.map(([k, v], i) =>
+    rmFigure(k, money(v.cost), i === 0 ? EATS[k] || "" : `${Math.round(100 * v.cost / all)}% of the gold`,
+      `In this period: ${money(v.cost)} over ${v.n} quest${v.n === 1 ? "" : "s"}, ${Math.round(100 * v.cost / all)}% of the quests' gold.`, { plural: true }))
+    .join("") || rmFigure("human", null, "no gold spent", "Nothing in this period. The vault is dusty.", { name: "Empty vault", dim: true });
+  if ($("#realm-party").innerHTML !== html) $("#realm-party").innerHTML = html;
+}
+
+function render() { tiles(); daily(); where(); mix(); kinds(); worth(); scatter(); folders(); jev(); questsTable(); realmParty();
   $("#at").textContent = `Updated ${D.at}. * priced with the default model because its own price is not set.`;
   for (const [id, v] of [["#daily-by", dailyBy], ["#group-by", groupBy], ["#period", String(period)], ["#worth-by", worthBy]])
     document.querySelectorAll(id + " button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));

@@ -629,8 +629,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/races.svg":                     # the races of the guild, one sprite for every page
                 with open(os.path.join(WEB, "races.svg"), "rb") as f:
                     return self.send(200, f.read(), "image/svg+xml")
-            if path == "/lightbox.js":
-                with open(os.path.join(WEB, "lightbox.js"), "rb") as f:
+            if path in ("/lightbox.js", "/realm.js"):
+                with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
