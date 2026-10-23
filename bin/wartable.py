@@ -78,7 +78,7 @@ def list_boards():
 # Added to every board page: the parchment theme, after the page's own styles so it wins,
 # and a light color scheme for Mermaid, so diagrams read on parchment.
 THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
-         b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
+         b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/realm.css">'
          b'<script src="/lightbox.js" defer></script>'   # click a picture to zoom it or go full screen
          b'<script>addEventListener("pageshow",function(e){if(e.persisted)location.reload()});</script>'   # Back shows fresh state
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
@@ -90,7 +90,7 @@ THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock
 # A report is written for whoever reads the code; this strip is for anyone: where the work
 # stands, in words and as a path of steps, and the few numbers that matter.
 
-GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><style>
+GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/realm.css"><style>
 .gg{font:14px/1.5 inherit;margin:0 0 26px;padding:16px 18px 14px;border:1px solid var(--line,#cdb88e);border-radius:6px;
   background:rgba(255,250,235,.55)}
 .gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 12px;padding-right:48px}
@@ -98,7 +98,8 @@ GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><style>
 .gg-say{font-size:16px;font-weight:600}
 .gg-say.bad{color:var(--bad,#a8322a)}.gg-say.turn{color:#9a5a0c}.gg-say.ok{color:var(--ok,#3f7d3a)}
 .gg-say .gi-icon{width:18px;height:18px;margin-right:7px;vertical-align:-3px}
-.gg-seal{display:inline-flex;align-items:center;gap:5px;color:#5b3e28;font-weight:600}
+.gg-seal{display:inline-flex;align-items:center;gap:7px;color:#5b3e28;font-weight:600}
+.gg-say .race{margin-right:8px;vertical-align:-10px}
 .gg-seal .gi-icon{width:16px;height:16px}.gg-seal small{font-weight:400;color:var(--dim,#6e5a41)}
 .gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0;counter-reset:s}
 .gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:var(--dim,#6e5a41);padding-top:26px;min-width:0}
@@ -125,6 +126,13 @@ GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><style>
 .gw-row b{font-variant:small-caps;color:#8a4b12}
 @media (max-width:640px){.gg-path li{font-size:10.5px}}
 </style>"""
+
+
+def race_html(key, cls=""):
+    """A race portrait from races.svg in its ring, or "" for no race."""
+    if not key:
+        return ""
+    return (f'<span class="race {cls}" title="{_html.escape(key)}"><svg aria-hidden="true"><use href="/races.svg#{_html.escape(key)}"/></svg></span>')
 
 
 def glance(quest):
@@ -192,6 +200,7 @@ def glance(quest):
     else:
         say, tone, icon = "On the road: an agent is working on it now.", "", "map"
 
+    say_icon = f'<i class="gi-icon gi-{icon}" aria-hidden="true"></i>'
     tiles = []
     cost = q.get("cost") or 0
     est = " (estimated)" if q.get("unknown") else ""
@@ -231,14 +240,19 @@ def glance(quest):
                   (grade or {}).get("verdict", "") or "on the right side"))
     model = meta.get("model") or ""
     k = lore.klass(model, meta.get("tier", ""))
-    seal = (f'<span class="gg-seal"><i class="gi-icon gi-{k["icon"]}" aria-hidden="true"></i>{_html.escape(k["name"])}'
+    seal = (f'<span class="gg-seal">{race_html(k.get("race"), "small")}<i class="gi-icon gi-{k["icon"]}" aria-hidden="true"></i>{_html.escape(k["name"])}'
             + (f'<small>({_html.escape(model)})</small>' if model else "") + "</span>") if k else _html.escape(model)
+    if stuck:
+        say_race = race_html(lore.STATE_RACE.get(state, ""), "small horde")
+        if say_race:
+            say_icon = say_race + f'<i class="gi-icon gi-{icon}" aria-hidden="true"></i>'
+    
     head = " · ".join(x for x in [_html.escape(ticket), seal, _html.escape(os.path.basename(meta.get("repo", "")))] if x)
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import why
     card = why.glance_html(quest)
     return (GLANCE_CSS + '<section class="gg" aria-label="At a glance">'
-            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}"><i class="gi-icon gi-{icon}" aria-hidden="true"></i>{_html.escape(say)}</span>'
+            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{say_icon}{_html.escape(say)}</span>'
             f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
             f'<ol class="gg-path">{"".join(items)}</ol><div class="gg-tiles">'
             + "".join((f'<a class="gg-tile gg-go" href="{t[3]}" target="_top">' if len(t) > 3 else '<div class="gg-tile">')
@@ -609,9 +623,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps(docket_items()), "application/json")
             if path == "/boards":
                 return self.send(200, self.render_index())
-            if path in ("/theme.css", "/icons.css"):    # the guild look (and its icons) for every page
+            if path in ("/theme.css", "/icons.css", "/realm.css"):    # the guild look (and its icons) for every page
                 with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/css; charset=utf-8")
+            if path == "/races.svg":                     # the races of the guild, one sprite for every page
+                with open(os.path.join(WEB, "races.svg"), "rb") as f:
+                    return self.send(200, f.read(), "image/svg+xml")
             if path == "/lightbox.js":
                 with open(os.path.join(WEB, "lightbox.js"), "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")

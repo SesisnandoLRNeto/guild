@@ -1,0 +1,115 @@
+/* The realm look for the guild's pages: dark stone with an ember glow, gold frames, and the races
+   of the guild drawn as portraits (races.svg). The war table serves it at /realm.css after each page's own
+   styles. A page opts in with class="realm" on <html>; the tokens below are the one palette every page reads. */
+:root {
+  --rm-bg: #0d0b10; --rm-stone: #18141d; --rm-stone-2: #221c28; --rm-iron: #3b3340; --rm-line: #4a3f52;
+  --rm-gold: #d9a441; --rm-gold-2: #f3cf6c; --rm-gold-3: #8a6a1e; --rm-ember: #ff7a1a; --rm-blood: #b0412e;
+  --rm-ice: #4f93e0; --rm-text: #e9dcc0; --rm-dim: #a8987a; --rm-ok: #7fbf5a; --rm-glow: rgba(255, 122, 26, .28);
+  --rm-alliance: #2b4a86; --rm-horde: #8a1c12;
+}
+html.realm { background: var(--rm-bg); }
+html.realm body {
+  background-color: var(--rm-bg);
+  background-image:
+    radial-gradient(ellipse 70% 40% at 50% 110%, var(--rm-glow), transparent 70%),
+    radial-gradient(ellipse 60% 30% at 50% -10%, rgba(217, 164, 65, .14), transparent 70%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, .018) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, #110e15, #0d0b10 40%, #120c0c);
+  background-attachment: fixed;
+  color: var(--rm-text);
+}
+html.realm ::selection { background: rgba(217, 164, 65, .45); }
+
+/* ── gold frame: a panel with a double gold border, iron corners and a dark inner shadow ───────── */
+.rm-frame {
+  position: relative; background: linear-gradient(180deg, var(--rm-stone-2), var(--rm-stone));
+  border: 2px solid var(--rm-gold-3); border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #000, inset 0 0 0 3px rgba(217, 164, 65, .32), inset 0 0 40px rgba(0, 0, 0, .55),
+    0 0 0 1px #000, 0 12px 30px rgba(0, 0, 0, .6);
+}
+.rm-frame::before, .rm-frame::after {   /* the studs on the four corners */
+  content: ""; position: absolute; inset: -7px; pointer-events: none;
+  background:
+    radial-gradient(circle at 7px 7px, var(--rm-gold-2) 0 3px, var(--rm-gold-3) 3.5px 5px, transparent 5.5px),
+    radial-gradient(circle at calc(100% - 7px) 7px, var(--rm-gold-2) 0 3px, var(--rm-gold-3) 3.5px 5px, transparent 5.5px),
+    radial-gradient(circle at 7px calc(100% - 7px), var(--rm-gold-2) 0 3px, var(--rm-gold-3) 3.5px 5px, transparent 5.5px),
+    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), var(--rm-gold-2) 0 3px, var(--rm-gold-3) 3.5px 5px, transparent 5.5px);
+}
+.rm-frame::after { display: none; }
+
+/* ── titles: gold, lit from below, with the rule that ends in two diamonds ────────────────────── */
+.rm-title {
+  margin: 0; font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-variant: small-caps; letter-spacing: .08em; font-weight: 700; line-height: 1.1;
+  background: linear-gradient(180deg, #fbe6a3 0%, var(--rm-gold-2) 45%, #c08a22 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .7)) drop-shadow(0 0 14px rgba(217, 164, 65, .25));
+}
+.rm-rule { height: 10px; margin: 8px 0 0; background:
+    linear-gradient(90deg, transparent, var(--rm-gold-3) 12%, var(--rm-gold) 50%, var(--rm-gold-3) 88%, transparent) center / 100% 1px no-repeat;
+  position: relative; }
+.rm-rule::before, .rm-rule::after { content: ""; position: absolute; top: 1px; width: 8px; height: 8px; background: var(--rm-gold);
+  transform: rotate(45deg); left: calc(50% - 4px); box-shadow: 0 0 10px var(--rm-gold); }
+.rm-rule::after { display: none; }
+.rm-kicker { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--rm-gold); margin: 0 0 6px; }
+.rm-sub { color: var(--rm-dim); font-style: italic; margin: 6px 0 0; }
+.rm-sub a { color: var(--rm-gold); }
+
+/* ── the hero banner: a title on the left, the races of the moment on the right ─────────────── */
+.rm-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 32px; padding: 26px 30px 22px; margin: 18px auto 22px; max-width: 1180px;
+  background:
+    radial-gradient(ellipse 55% 90% at 85% 50%, rgba(255, 122, 26, .20), transparent 70%),
+    radial-gradient(ellipse 40% 100% at 10% 100%, rgba(79, 147, 224, .10), transparent 70%),
+    linear-gradient(180deg, #241a2a, #15111a); }
+.rm-hero .rm-title { font-size: 40px; }
+.rm-hero > div:first-child { flex: 1 1 420px; min-width: 0; }
+.rm-hero .rm-sub { max-width: 64ch; }
+.rm-party { display: flex; flex-wrap: wrap; gap: 14px 18px; justify-content: flex-end; }
+.rm-party figure { margin: 0; width: 84px; text-align: center; }
+.rm-party figcaption { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--rm-gold); margin-top: 6px; line-height: 1.25; }
+.rm-party figcaption small { display: block; text-transform: none; letter-spacing: 0; color: var(--rm-dim); font-size: 11px; }
+.rm-party .n { position: absolute; right: -4px; bottom: -2px; min-width: 22px; height: 22px; border-radius: 11px; padding: 0 5px;
+  background: var(--rm-gold); color: #2a1d14; font: 700 12px/22px ui-sans-serif, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 0 0 2px #0d0b10; }
+
+/* ── a race portrait in a gold ring; .horde for the creatures, .big for a hero banner ─────────── */
+.race { position: relative; display: inline-block; width: 56px; height: 56px; border-radius: 50%; vertical-align: middle;
+  background: radial-gradient(circle at 50% 35%, #2e2436, #15111a 70%);
+  box-shadow: 0 0 0 2px var(--rm-gold-3), 0 0 0 3px #000, 0 0 0 4px rgba(217, 164, 65, .45), 0 4px 10px rgba(0, 0, 0, .6); overflow: visible; }
+.race svg { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 50%; overflow: hidden; }
+.race.horde { background: radial-gradient(circle at 50% 35%, #3a1a1a, #170c0c 70%); box-shadow: 0 0 0 2px #6e1a10, 0 0 0 3px #000, 0 0 0 4px rgba(176, 65, 46, .5), 0 4px 10px rgba(0, 0, 0, .6); }
+.race.big { width: 84px; height: 84px; }
+.race.small { width: 30px; height: 30px; box-shadow: 0 0 0 1.5px var(--rm-gold-3), 0 0 0 2px #000; }
+.race.small svg { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
+.race.horde.small { box-shadow: 0 0 0 1.5px #6e1a10, 0 0 0 2px #000; }
+.race.dim { filter: saturate(.3) brightness(.7); }
+
+/* ── small parts the pages share: chips, buttons, slots ───────────────────────────────────────── */
+.rm-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--rm-text); border: 1px solid var(--rm-line);
+  background: rgba(0, 0, 0, .35); padding: 3px 10px; border-radius: 3px; text-decoration: none; }
+.rm-chip:hover, .rm-chip[aria-pressed="true"] { border-color: var(--rm-gold); color: var(--rm-gold-2); }
+.rm-chip[aria-pressed="true"] { background: rgba(217, 164, 65, .18); }
+.rm-btn { font: inherit; font-weight: 700; letter-spacing: .04em; color: #2a1d14; cursor: pointer; border-radius: 3px; padding: 8px 18px;
+  border: 1px solid #6e4e10; background: linear-gradient(180deg, #f3cf6c, #c08a22); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 2px 6px rgba(0, 0, 0, .5); }
+.rm-btn:hover { background: linear-gradient(180deg, #ffe08a, #d19a2c); }
+.rm-btn:disabled { opacity: .45; cursor: default; }
+.rm-slot { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 4px; background: linear-gradient(180deg, #2a2230, #15111a);
+  box-shadow: inset 0 0 0 1px #000, 0 0 0 1px var(--rm-gold-3), 0 0 0 2px #000; color: var(--rm-gold); }
+.rm-slot .gi-icon { width: 24px; height: 24px; }
+.rm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.rm-card { padding: 12px 14px; text-align: center; }
+.rm-card .name { font-variant: small-caps; letter-spacing: .06em; color: var(--rm-gold-2); font-weight: 700; margin-top: 8px; }
+.rm-card .blurb { color: var(--rm-dim); font-size: 12.5px; }
+.rm-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.rm-nav a { color: var(--rm-text); text-decoration: none; font-size: 13px; letter-spacing: .04em; padding: 5px 14px; border-radius: 3px;
+  border: 1px solid var(--rm-line); background: rgba(0, 0, 0, .35); }
+.rm-nav a:hover, .rm-nav a[aria-current] { border-color: var(--rm-gold); color: var(--rm-gold-2); }
+.rm-nav a .gi-icon { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; color: var(--rm-gold); }
+
+/* ── a parchment sheet inside the realm: reports stay readable on paper, the paper sits in a gold frame ── */
+html.realm .rm-sheet { border-radius: 3px; }
+@media (max-width: 700px) {
+  .rm-hero { padding: 18px 16px; margin: 0 0 16px; }
+  .rm-hero .rm-title { font-size: 28px; }
+  .rm-party { justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { html.realm body { background-attachment: scroll; } }

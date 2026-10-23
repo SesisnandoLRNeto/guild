@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guild Campaign</title>
 <link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/realm.css">
 <style>
   :root {
     --wood-1: #2a1d14; --wood-2: #22170f; --wood-line: #1a110b; --frame: #4a3322;
@@ -193,9 +194,59 @@
     .toolbar .note { margin-left: 0; width: 100%; }
   }
   @media (prefers-reduced-motion: reduce) { .card, .state.working::before { transition: none; animation: none; } }
+
+  /* ── the realm: the same board on dark stone, gold frames, and the races on the cards ─────── */
+  html.realm {
+    --paper: #241d2b; --paper-2: #17121c; --ink: #e9dcc0; --ink-dim: #a8987a; --rule: #4a3f52;
+    --sign: #1b1520; --sign-text: #e9dcc0; --hint: #a8987a; --frame: #8a6a1e; --gold: #d9a441;
+    --working: #7fbf5a; --turn: #e0a93a; --bad: #e0573f; --done: #8fb35a; --common: #6a6072; --glow: rgba(217, 164, 65, .45);
+  }
+  html.realm header { display: none; }   /* the hero banner carries the title now */
+  html.realm .toolbar, html.realm .summary, html.realm .threads { max-width: 1180px; margin: 0 auto; }
+  html.realm main { max-width: 1180px; margin: 0 auto; }
+  html.realm .colhead { background: linear-gradient(180deg, #2a2230, #15111a); border: 1px solid var(--frame); border-radius: 3px;
+    box-shadow: inset 0 0 0 1px #000, 0 4px 10px rgba(0, 0, 0, .5); }
+  html.realm .colhead h2 { color: var(--gold); }
+  html.realm .colhead h2 .n { background: rgba(217, 164, 65, .18); color: #f3cf6c; }
+  html.realm .lane { border-top: 1px solid var(--frame); }
+  html.realm .lane h3 { color: #f3cf6c; }
+  html.realm .card { border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .18), 0 6px 14px rgba(0, 0, 0, .5); border-left-width: 4px; }
+  html.realm .card:hover { box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .35), 0 10px 20px rgba(0, 0, 0, .6); }
+  html.realm .card.working { box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .18), 0 0 0 1px var(--glow), 0 6px 14px rgba(0, 0, 0, .5); }
+  html.realm .key { color: var(--gold); }
+  html.realm .alert.turn { color: var(--turn); }
+  html.realm .seal { width: auto; height: auto; transform: none; background: none; box-shadow: none; color: var(--gold); gap: 3px;
+    font-size: 9px; letter-spacing: .06em; }
+  html.realm .seal .gi-icon { display: none; }
+  html.realm .alert .race { margin-right: 7px; vertical-align: -9px; }
+  html.realm .actions a, html.realm .actions button { background: rgba(0, 0, 0, .35); color: var(--ink); border-color: var(--rule); }
+  html.realm .actions a:hover, html.realm .actions button:hover { background: var(--gold); color: #2a1d14; border-color: var(--gold); }
+  html.realm .actions .go { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; border-color: #6e4e10; font-weight: 700; }
+  html.realm .post input { background: rgba(0, 0, 0, .35); }
+  html.realm .post button { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; }
+  html.realm .label.plain { background: rgba(217, 164, 65, .16); color: var(--ink); }
+  html.realm .grade { background: rgba(217, 164, 65, .22); }
+  html.realm .party { border-top-color: var(--rule); }
+  html.realm .party li b { color: #c9a0ff; }
+  html.realm .banner { display: none; }
+  html.realm .toast { background: #2a2230; border: 1px solid var(--frame); }
+  html.realm .lane form input { background: rgba(0, 0, 0, .35); }
+  html.realm .empty, html.realm .cell .dash { color: var(--hint); }
+  html.realm .more { border-color: var(--rule); }
+  html.realm .tchip { background: rgba(0, 0, 0, .35); }
 </style>
 </head>
 <body>
+<section class="rm-hero rm-frame" aria-label="The realm">
+  <div>
+    <p class="rm-kicker">The war table</p>
+    <h1 class="rm-title">The Guild Campaign</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub">One row per story, its quests moving from the tavern to the treasury. Dwarves at the forge, elves at the gate, the high elf quartermaster sending them out; orcs, trolls and goblins where it hurts. <a href="/treasury">The treasury</a> shows what it cost.</p>
+    <nav class="rm-nav" style="margin-top:12px"><a href="/docket"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a></nav>
+  </div>
+  <div class="rm-party" id="realm-party" aria-label="Who is on the road"></div>
+</section>
 <header>
   <div>
     <h1>The Guild Campaign</h1>
@@ -274,12 +325,39 @@ function niceTitle(c) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+// a race portrait from races.svg in its gold ring (realm.css .race)
+const race = (key, cls = "") => key ? `<span class="race ${cls}" title="${esc(key)}"><svg aria-hidden="true"><use href="/races.svg#${esc(key)}"/></svg></span>` : "";
+const bust = (key) => `<svg aria-hidden="true"><use href="/races.svg#${esc(key)}"/></svg>`;
+const RACE_NAME = { human: "Humans", highelf: "High elves", nightelf: "Night elves", dwarf: "Dwarves", gnome: "Gnomes", dragon: "Dragons",
+  orc: "Orcs", troll: "Trolls", goblin: "Goblins", undead: "Undead" };
+const RACE_WORD = { road: "on the road", waiting: "await your word", trial: "at the gate" };
+const HORDE_WORD = { orc: "slew a quest", troll: "hold a bridge", goblin: "in the tests", undead: "told no tale" };
+// the hero banner: who walks the realm now, by race, and the creatures the troubled quests met
+function realmParty(cards) {
+  const guild = {}, horde = {};
+  for (const c of cards) {
+    if (c.kind === "todo" || c.id.startsWith("closed:")) continue;
+    if (stateClass(c.state) === "bad") { if (c.lore && c.lore.race) horde[c.lore.race] = (horde[c.lore.race] || 0) + 1; continue; }
+    if (c.klass && c.klass.race && ["road", "waiting", "trial"].includes(c.column)) {
+      const g = guild[c.klass.race] = guild[c.klass.race] || { n: 0, cols: {} };
+      g.n += 1; g.cols[c.column] = (g.cols[c.column] || 0) + 1;
+    }
+  }
+  const fig = (key, n, sub, cls) => `<figure><span class="race big ${cls}">${bust(key)}<b class="n">${n}</b></span><figcaption>${esc(RACE_NAME[key] || key)}<small>${esc(sub)}</small></figcaption></figure>`;
+  const out = Object.entries(guild).sort((a, b) => b[1].n - a[1].n).map(([k, g]) => {
+    const top = Object.entries(g.cols).sort((a, b) => b[1] - a[1])[0];
+    return fig(k, g.n, top ? RACE_WORD[top[0]] : "", "");
+  });
+  out.push(...Object.entries(horde).sort((a, b) => b[1] - a[1]).map(([k, n]) => fig(k, n, HORDE_WORD[k] || "", "horde")));
+  $("#realm-party").innerHTML = out.join("") || `<figure><span class="race big dim">${bust("human")}</span><figcaption>Quiet realm<small>nobody on the road</small></figcaption></figure>`;
+}
+
 function tilt(id) { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 5) - 2) * 0.35; }
 
 function cardHtml(c) {
   const sc = stateClass(c.state);
   const k = c.klass;
-  const seal = k ? `<div class="seal ${c.rank || "common"}" title="${esc(k.name)}: ${esc(k.blurb || "")}${c.model ? " (" + esc(c.model) + (c.rank ? ", " + c.rank : "") + ")" : ""}"><i class="gi-icon gi-${esc(k.icon)}" aria-hidden="true"></i><span>${esc(k.name)}</span></div>`
+  const seal = k ? `<div class="seal ${c.rank || "common"}" title="${esc(k.name)}: ${esc(k.blurb || "")}${c.model ? " (" + esc(c.model) + (c.rank ? ", " + c.rank : "") + ")" : ""}">${race(k.race, "small")}<i class="gi-icon gi-${esc(k.icon)}" aria-hidden="true"></i><span>${esc(k.name)}</span></div>`
     : c.model ? `<div class="seal ${c.rank || "common"}" title="${esc(c.model)}">${esc(c.model.slice(0, 6))}</div>` : "";
   const meta = [`<span class="state ${sc}">${esc(STATE_WORD[c.state] || c.state)}</span>`];
   if (c.ticket && c.kind === "jira" && c.ticket !== c.title) meta.push(`<span>${esc(c.ticket)}</span>`);
@@ -316,7 +394,7 @@ function cardHtml(c) {
   const tone = sc === "bad" ? "bad" : sc === "turn" ? "turn" : sc === "working" ? "working" : "";
   const L = c.lore;
   const creature = (cls) => L
-    ? `<p class="alert ${cls}"><i class="gi-icon gi-${esc(L.icon)}" aria-hidden="true"></i>${esc(L.line)} <span class="plain">(${esc(L.plain)})</span>${c.what ? ": " + esc(c.what) : ""}</p>${L.quip ? `<p class="quip">${esc(L.quip)}</p>` : ""}`
+    ? `<p class="alert ${cls}">${race(L.race, "small horde")}<i class="gi-icon gi-${esc(L.icon)}" aria-hidden="true"></i>${esc(L.line)} <span class="plain">(${esc(L.plain)})</span>${c.what ? ": " + esc(c.what) : ""}</p>${L.quip ? `<p class="quip">${esc(L.quip)}</p>` : ""}`
     : "";
   const alert = sc === "bad" ? (creature("") || `<p class="alert">${esc(ALERT[c.state] || c.state)}${c.what ? ": " + esc(c.what) : ""}</p>`)
     : c.column === "waiting" ? (creature("turn") || `<p class="alert turn">Your call${c.what ? ": " + esc(c.what) : ""}</p>`) : "";
@@ -348,6 +426,7 @@ function render() {
   const byId = {};
   if (data.columns.every((col) => col.title)) COLS = data.columns.map((col) => ({ key: col.key, title: col.title, hint: col.hint, icon: col.icon }));
   data.columns.forEach((col) => col.cards.forEach((c) => { byId[c.id] = c; }));
+  realmParty(Object.values(byId));
   const keep = (c) => c && (filter === "all" || c.kind === filter);
   const count = {};
   COLS.forEach((k) => { count[k.key] = 0; });

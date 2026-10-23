@@ -5,16 +5,20 @@ html:root {
   --bg: #efe2c2; --card: #f6ecd2; --line: #cdb88e; --text: #2d2216; --dim: #6e5a41;
   --accent: #8a4b12; --ok: #3f7d3a; --bad: #a8322a; --warn: #9a6a12;
   color-scheme: light;
-  background-color: #22170f;
+  /* the realm behind the sheet: dark stone with an ember glow (the same backdrop as realm.css) */
+  background-color: #0d0b10;
   background-image:
-    radial-gradient(ellipse at 50% 0%, rgba(255, 190, 110, .10), transparent 60%),
-    repeating-linear-gradient(0deg, #2a1d14 0 46px, #1a110b 46px 48px, #22170f 48px 94px, #1a110b 94px 96px);
+    radial-gradient(ellipse 70% 40% at 50% 110%, rgba(255, 122, 26, .28), transparent 70%),
+    radial-gradient(ellipse 60% 30% at 50% -10%, rgba(217, 164, 65, .14), transparent 70%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, .018) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, #110e15, #0d0b10 40%, #120c0c);
 }
 html:root body {
   max-width: 1000px; margin: 20px auto 40px; padding: 34px 44px 48px;
   background: linear-gradient(170deg, #f3e7c9, #e6d5ad); color: var(--text);
   font: 15px/1.62 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  border-radius: 3px; box-shadow: 0 2px 0 rgba(0, 0, 0, .2), 0 14px 34px rgba(0, 0, 0, .5);
+  border-radius: 3px; border: 2px solid #8a6a1e;
+  box-shadow: 0 0 0 1px #000, 0 0 0 3px rgba(217, 164, 65, .35), 0 14px 34px rgba(0, 0, 0, .6);
 }
 html:root h1, html:root h2, html:root h3, html:root h4 {
   font-family: inherit; font-variant: small-caps; letter-spacing: .03em; color: #4a2f1a;

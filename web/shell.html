@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -82,8 +82,28 @@
   label.opt[data-q="verdict"][data-o="changes"] { --opt-icon: var(--i-sword); }
   label.opt[data-q="verdict"][data-o="split"] { --opt-icon: var(--i-scroll); }
   button .gi-icon { margin-right: 6px; }
+  /* ── the realm: dark stone around the parchment, gold header, dark order cards ───────────── */
+  html.realm {
+    --paper: #241d2b; --paper-2: #17121c; --ink: #e9dcc0; --ink-dim: #a8987a; --rule: #4a3f52; --sign: #15111a; --sign-text: #e9dcc0;
+    --hint: #a8987a; --gold: #d9a441; --seal: #e0573f;
+  }
+  html.realm body { height: 100vh; background-attachment: scroll; }
+  html.realm header { border-bottom: 1px solid #8a6a1e; box-shadow: 0 3px 12px rgba(0, 0, 0, .6); }
+  html.realm header h1 { color: #f3cf6c; }
+  html.realm aside { background: rgba(0, 0, 0, .35); border-left: 1px solid #8a6a1e; }
+  html.realm .q { border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .2), 0 6px 14px rgba(0, 0, 0, .5); }
+  html.realm .q h3 { color: #f3cf6c; }
+  html.realm .q::before { background: var(--gold); opacity: .35; }
+  html.realm label.opt .lab::before { background: var(--gold); }
+  html.realm label.opt:hover { background: rgba(217, 164, 65, .10); }
+  html.realm label.opt.chosen { background: rgba(217, 164, 65, .16); }
+  html.realm textarea { color-scheme: dark; }
+  html.realm footer { border-top: 1px solid #8a6a1e; }
+  html.realm button.primary { background: linear-gradient(180deg, #f3cf6c, #c08a22); border-color: #6e4e10; }
+  html.realm .sent { color: #8fb35a; }
 </style>
 <link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/realm.css">
 </head>
 <body>
 <header>
