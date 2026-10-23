@@ -122,11 +122,22 @@ event() { # slug state note
 calm_on() { [ "$(cat "$GUILD_HOME/calm" 2>/dev/null | tr -d '[:space:]')" = "on" ]; }
 calm_env() { calm_on && printf 'CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GUILD_CALM=1 '; }
 
+# Claude Code 2.1.309 loads mods (the calm party among them) only in a folder you have trusted.
+# The quartermaster runs in $HOME, which most people never trusted, so the party would never show.
+dir_trusted() { # dir
+  python3 -c "import json,sys;p=json.load(open('$HOME/.claude.json')).get('projects',{}).get(sys.argv[1],{});sys.exit(0 if p.get('hasTrustDialogAccepted') else 1)" "$1" 2>/dev/null
+}
+calm_warn() { # dir
+  calm_on || return 0
+  dir_trusted "$1" && return 0
+  echo "guild: calm is on but Claude Code trusts no session in $1, so the party will not draw there." >&2
+  echo "       Once: cd '$1' && claude, answer 'Yes, I trust this folder', quit. Then: guild qm reset" >&2
+}
 cmd_calm() {
   case "${1:-status}" in
-    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the party instead of tool calls (/calm toggles it inside a session)" ;;
+    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the party instead of tool calls (/calm toggles it inside a session)"; calm_warn "$HOME" ;;
     off) echo off > "$GUILD_HOME/calm"; echo "calm off: guild sessions draw normally again" ;;
-    status) calm_on && echo on || echo off ;;
+    status) calm_on && echo on || echo off; calm_warn "$HOME" ;;
     *) die "usage: guild calm on|off|status" ;;
   esac
 }
@@ -258,6 +269,7 @@ cmd_up() {
       resume="--session-id '$sid'"
     fi
     local qm="$(calm_env)GUILD_ROLE=qm GUILD_QM=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
+    calm_warn "$dir"
     tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" "guild watch; exec \$SHELL"
     # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
