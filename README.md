@@ -119,6 +119,7 @@ guild up ~/Workspace
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
+| `guild draw <spec.json> [--into PAGE]` | Draws a picture for a page from a small spec and picks the form: a state machine, a flow, an organogram or a rules table. Each move or rule carries its scene (where it is triggered, who, the scenario, what they see, where in the code), numbered on the arrow and listed under the picture |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 

@@ -79,6 +79,7 @@ def list_boards():
 # and a light color scheme for Mermaid, so diagrams read on parchment.
 THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
          b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/realm.css">'
+         b'<script>document.documentElement.classList.add("realm","rm-dark")</script>'
          b'<script src="/lightbox.js" defer></script>'   # click a picture to zoom it or go full screen
          b'<script>addEventListener("pageshow",function(e){if(e.persisted)location.reload()});</script>'   # Back shows fresh state
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
@@ -91,40 +92,43 @@ THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock
 # stands, in words and as a path of steps, and the few numbers that matter.
 
 GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/realm.css"><style>
-.gg{font:14px/1.5 inherit;margin:0 0 26px;padding:16px 18px 14px;border:1px solid var(--line,#cdb88e);border-radius:6px;
-  background:rgba(255,250,235,.55)}
-.gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 12px;padding-right:48px}
-.gg-top b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41)}
-.gg-say{font-size:16px;font-weight:600}
-.gg-say.bad{color:var(--bad,#a8322a)}.gg-say.turn{color:#9a5a0c}.gg-say.ok{color:var(--ok,#3f7d3a)}
+.gg{font:14px/1.5 inherit;margin:0 0 28px;padding:18px 22px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 26px;align-items:start;
+  background:radial-gradient(ellipse 55% 90% at 85% 50%,rgba(255,122,26,.16),transparent 70%),linear-gradient(180deg,#241a2a,#15111a);color:#e9dcc0}
+.gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 10px}
+.gg-top b{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#d9a441}
+.gg-say{font-size:19px;font-weight:700;font-variant:small-caps;letter-spacing:.03em;color:#f3cf6c}
+.gg-say.bad{color:#f0a08f}.gg-say.turn{color:#f3cf6c}.gg-say.ok{color:#a9d88a}
 .gg-say .gi-icon{width:18px;height:18px;margin-right:7px;vertical-align:-3px}
-.gg-seal{display:inline-flex;align-items:center;gap:7px;color:#5b3e28;font-weight:600}
+.gg-head{font-size:12px;color:#a8987a;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin:0 0 12px}
+.gg-seal{display:inline-flex;align-items:center;gap:7px;color:#e9dcc0;font-weight:600}
+.gg-seal .gi-icon{width:16px;height:16px;color:#d9a441}.gg-seal small{font-weight:400;color:#a8987a}
 .gg-say .race{margin-right:8px;vertical-align:-10px}
-.gg-seal .gi-icon{width:16px;height:16px}.gg-seal small{font-weight:400;color:var(--dim,#6e5a41)}
-.gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0;counter-reset:s}
-.gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:var(--dim,#6e5a41);padding-top:26px;min-width:0}
+.gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0}
+.gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:#a8987a;padding-top:26px;min-width:0}
 .gg-path li::before{content:"";position:absolute;top:4px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;
-  border:2px solid #b9a37a;background:#f6ecd2;z-index:1}
-.gg-path li::after{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:#cdb88e}
+  border:2px solid #4a3f52;background:#15111a;z-index:1}
+.gg-path li::after{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:#4a3f52}
 .gg-path li:first-child::after{display:none}
-.gg-path li.done{color:var(--text,#2d2216)}.gg-path li.done::before{background:var(--ok,#3f7d3a);border-color:var(--ok,#3f7d3a)}
-.gg-path li.done::after,.gg-path li.now::after{background:var(--ok,#3f7d3a)}
-.gg-path li.now{color:var(--text,#2d2216);font-weight:700}.gg-path li.now::before{border-color:#b5651d;background:#f3d9a8;box-shadow:0 0 0 4px rgba(217,164,65,.3)}
-.gg-path li.stuck::before{border-color:var(--bad,#a8322a);background:#f2c4bb}
+.gg-path li.done{color:#e9dcc0}.gg-path li.done::before{background:#7fbf5a;border-color:#7fbf5a}
+.gg-path li.done::after,.gg-path li.now::after{background:#7fbf5a}
+.gg-path li.now{color:#f3cf6c;font-weight:700}.gg-path li.now::before{border-color:#d9a441;background:#2a2230;box-shadow:0 0 0 4px rgba(217,164,65,.3)}
+.gg-path li.stuck::before{border-color:#e0573f;background:#3a1a1a}
 .gg-path li.skip{opacity:.6;font-style:italic}
-.gg-path li.skip::before{border-style:dashed;border-color:#a99470;background:#efe3c8}
+.gg-path li.skip::before{border-style:dashed;border-color:#8a6a1e;background:#15111a}
 .gg-path li .gg-place{display:block}.gg-path li small{display:block;font-size:10px;opacity:.7;letter-spacing:.04em}
-.gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
-.gg-tile{background:rgba(255,255,255,.35);border:1px solid var(--line,#cdb88e);border-radius:4px;padding:7px 10px}
-.gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
-.gg-tile b{font-size:17px}.gg-go{text-decoration:none;color:inherit;border-color:#0d6b63;background:rgba(13,107,99,.08)}
-.gg-go:hover{background:rgba(13,107,99,.16)}.gg-tile i{display:block;font-size:11.5px;color:var(--dim,#6e5a41);font-style:normal}
-.gw{margin-top:12px;border-top:1px dashed var(--line,#cdb88e);padding-top:10px}
-.gw-head{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41);margin-bottom:6px}
+.gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.gg-tile{background:linear-gradient(180deg,#241d2b,#17121c);border:1px solid #4a3f52;border-radius:4px;padding:7px 10px;box-shadow:inset 0 0 0 1px #000}
+.gg-tile span{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#a8987a}
+.gg-tile b{font-size:17px;color:#f3cf6c}.gg-go{text-decoration:none;color:inherit;border-color:#8a6a1e}
+.gg-go:hover{background:linear-gradient(180deg,#2e2436,#1b151f)}.gg-tile i{display:block;font-size:11.5px;color:#a8987a;font-style:normal}
+.gg>div:first-child{grid-column:1;grid-row:1;min-width:0}.gg-party{grid-column:2;grid-row:1;align-self:center}
+.gg-party figure{width:104px}
+.gw{grid-column:1/-1;margin-top:6px;border-top:1px dashed #4a3f52;padding-top:10px}
+.gw-head{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#a8987a;margin-bottom:6px}
 .gw-head i{text-transform:none;letter-spacing:0;font-style:italic}
 .gw-row{display:grid;grid-template-columns:90px 1fr;gap:10px;font-size:14px;padding:2px 0}
-.gw-row b{font-variant:small-caps;color:#8a4b12}
-@media (max-width:640px){.gg-path li{font-size:10.5px}}
+.gw-row b{font-variant:small-caps;color:#d9a441}
+@media (max-width:760px){.gg{grid-template-columns:1fr}.gg-party{grid-column:1;grid-row:auto}.gg-path li{font-size:10.5px}}
 </style>"""
 
 
@@ -133,6 +137,14 @@ def race_html(key, cls=""):
     if not key:
         return ""
     return (f'<span class="race {cls}" title="{_html.escape(key)}"><svg aria-hidden="true"><use href="/races.svg#{_html.escape(key)}"/></svg></span>')
+
+
+def figure_html(race, name, sub, tip):
+    """A hero-banner figure, the same shape realm.js draws (the portrait, a name, a line, the hover)."""
+    r = __import__("lore").race(race) or {}
+    horde = " horde" if r.get("side") == "horde" else ""
+    return (f'<figure data-tip="{_html.escape(tip)}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
+            f'<figcaption>{_html.escape(name)}<small>{_html.escape(sub)}</small></figcaption></figure>')
 
 
 def glance(quest):
@@ -251,14 +263,27 @@ def glance(quest):
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import why
     card = why.glance_html(quest)
-    return (GLANCE_CSS + '<section class="gg" aria-label="At a glance">'
-            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{say_icon}{_html.escape(say)}</span>'
-            f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
+    figures = []
+    if k and k.get("race"):
+        r = lore.race(k["race"]) or {}
+        figures.append(figure_html(k["race"], k["name"], f'on {model}' if model else "the adventurer",
+                                   f'{r.get("name", "")}: {r.get("blurb", "")}. {k["blurb"]}. This is the adventurer that did the work.'))
+    if stuck and lore.STATE_RACE.get(state):
+        r = lore.race(lore.STATE_RACE[state]) or {}
+        L = lore.lore(state)
+        figures.append(figure_html(lore.STATE_RACE[state], r.get("name", ""), L["plain"] if L else state,
+                                   f'{r.get("blurb", "")}. ' + (f'{L["line"]} ({L["plain"]}). {L["quip"]}' if L else "") + (f" {note}" if note else "")))
+    elif tone == "turn" or state in ("done", "trial-pass", "trial-skip"):
+        figures.append(figure_html("human", "Guildmaster", "your word", "You. Grade it on the right, or send it back to the forge with a note."))
+    party = f'<div class="gg-party rm-party" aria-label="Who is in this tale">{"".join(figures)}</div>' if figures else ""
+    return (GLANCE_CSS + '<section class="gg rm-frame" aria-label="At a glance">'
+            f'<div><div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{say_icon}{_html.escape(say)}</span></div>'
+            f'<div class="gg-head">{head}</div>'
             f'<ol class="gg-path">{"".join(items)}</ol><div class="gg-tiles">'
             + "".join((f'<a class="gg-tile gg-go" href="{t[3]}" target="_top">' if len(t) > 3 else '<div class="gg-tile">')
                       + f'<span>{_html.escape(t[0])}</span><b>{_html.escape(str(t[1]))}</b><i>{_html.escape(t[2])}</i>'
                       + ("</a>" if len(t) > 3 else "</div>") for t in tiles)
-            + "</div>" + card + "</section>")
+            + "</div></div>" + party + card + "</section>")
 
 
 def load_json_safe(path):

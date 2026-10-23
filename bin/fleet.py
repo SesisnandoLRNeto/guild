@@ -265,7 +265,7 @@ def quests():
             continue
         meta.update(state=state, note=note, since=since, dir=d)
         boards = os.path.join(d, "boards")
-        meta["open_boards"], meta["wrapup"] = [], ""
+        meta["open_boards"], meta["wrapup"], meta["why_board"] = [], "", ""
         if os.path.isdir(boards):
             for b in sorted(os.listdir(boards)):
                 bj = load_json(os.path.join(boards, b, "board.json"), None)
@@ -273,6 +273,8 @@ def quests():
                     continue                 # not a board (a folder left by a failed open)
                 if bj.get("wrapup"):
                     meta["wrapup"] = b
+                elif b.startswith("why-") and not os.path.exists(os.path.join(boards, b, "decision.json")):
+                    meta["why_board"] = b     # your words about why the quest exists: a note to fill, not a decision
                 elif not os.path.exists(os.path.join(boards, b, "decision.json")):
                     held = bj.get("held_until", "")
                     if not held or held <= time.strftime("%Y-%m-%d"):      # a held decision waits for its date
@@ -575,6 +577,8 @@ def board():
                           "href": f"/q/{q['slug']}/validate", "hot": not v["certified"] and q["state"] in ("done", "trial-pass", "trial-skip")})
         for b in q["open_boards"] if q["state"] not in ("done", "failed") else []:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
+        if q.get("why_board") and q["state"] not in ("done", "failed"):
+            links.append({"label": "why card", "href": f"/b/{q['slug']}/{q['why_board']}/"})
         pr_info = pr_of.get(q["slug"])
         pr = re.search(r"https?://\S+/pull/(\d+)", q["note"] or "")
         if pr_info and not pr_info.get("error"):

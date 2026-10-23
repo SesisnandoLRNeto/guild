@@ -157,3 +157,24 @@ html:root .rm-party figure { background: none; border: 0; box-shadow: none; bord
 html:root .rm-title { color: transparent; padding: 0; margin: 0; }
 html:root .rm-title::after { display: none; }
 html:root .rm-hero h1 { display: block; }
+
+/* ── guild draw on a dark page ───────────────────────────────────────────────────────────────── */
+html.realm.rm-dark .guild-draw { --gd-node: #241d2b; --gd-line: #d9a441; --gd-text: #e9dcc0; --gd-pill: #15111a; --gd-dim: #e0c98a; background: rgba(0, 0, 0, .25); }
+html.realm.rm-dark .guild-draw .gd-title { color: #f3cf6c; }
+html.realm.rm-dark .gd-n { background: var(--rm-gold); color: #2a1d14; }
+html.realm.rm-dark .gd-scenes li.gd-hot { background: rgba(217, 164, 65, .14); border-color: var(--rm-gold-3); }
+html.realm.rm-dark .guild-rules tr.gd-hot td { background: rgba(217, 164, 65, .14); }
+
+/* ── a board page (the adventurer's report) on dark stone: the template's light parts turn dark ── */
+html.realm.rm-dark .opt, html.realm.rm-dark .q, html.realm.rm-dark .tile, html.realm.rm-dark .card, html.realm.rm-dark .step,
+html.realm.rm-dark .scen, html.realm.rm-dark .tbl, html.realm.rm-dark .proof, html.realm.rm-dark .box, html.realm.rm-dark .panel {
+  background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; color: var(--rm-text); }
+html.realm.rm-dark .opt.suggested { border-left-color: var(--rm-gold); }
+html.realm.rm-dark .opt.suggested .id, html.realm.rm-dark .tag { color: var(--rm-gold); }
+html.realm.rm-dark .plain, html.realm.rm-dark .lead, html.realm.rm-dark .why, html.realm.rm-dark .caption, html.realm.rm-dark .hint { color: var(--rm-dim); }
+html.realm.rm-dark figure img { background: #000; }
+html.realm.rm-dark table.proof td.pass, html.realm.rm-dark .pass { color: #a9d88a; }
+html.realm.rm-dark table.proof td.fail, html.realm.rm-dark .fail { color: #f0a08f; }
+html.realm.rm-dark pre.mermaid { background: #f3e7c9; border-color: #8a6a1e; }
+html.realm.rm-dark .guild-impact { --gi-card: #241d2b; --gi-line: #4a3f52; --gi-warn: #e0a93a; --gi-accent: #d9a441; }
+html.realm.rm-dark .gg-head .race.small { vertical-align: middle; }

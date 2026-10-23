@@ -69,13 +69,11 @@
 
 <h2>How the gears turn</h2>
 <!-- "How it works". -->
-<!-- One picture beats a paragraph: a flow, a state machine, who calls whom. Say in one line
-     under it what the reader should notice. Mermaid renders offline. -->
-<pre class="mermaid">
-flowchart LR
-  A[Finance opens the rate] --> B[Picks the values] --> C[Sees the rate in plain English] --> D[Saves]
-</pre>
-<p class="caption">The rate is always shown back in plain English before it is saved.</p>
+<!-- One picture beats a paragraph. Guild draws it: write a spec (guild draw --example) with the moves
+     or rules, and for each one its scene (trigger: the screen or endpoint; who; scenario; result: what
+     they see; where: Class.method), then `guild draw spec.json --into <this page>`. The figure lands
+     on the marker below. Mermaid is still fine for a sequence between services. -->
+<!--GUILD-DRAW-->
 
 <h2>Proof by trial</h2>
 <!-- "How we know it works". -->

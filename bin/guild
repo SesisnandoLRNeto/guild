@@ -95,6 +95,7 @@ guild prs                           each quest's PR as GitHub sees it (state, re
 guild jev status|test|on|off|allow|block|risk
                                     Jev (TypeSafe) for small judgment calls; scopes: board, quests, global
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
+guild draw <spec.json> [--into PAGE]    draw a state machine, flow, organogram or rules table for a page (picks the form, numbers the scenes)
                                     data model, impact and business rule changes, drawn for a wrap-up
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
@@ -1523,6 +1524,7 @@ case "${1:-}" in
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
+  draw) shift; python3 "$GUILD_REPO/bin/draw.py" "$@" ;;
   harnesses) harness list ;;
   layout) cmd_layout ;;
   check) shift; cmd_check "$@" ;;

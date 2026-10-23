@@ -100,3 +100,28 @@ html:root table.proof td.pass::before, html:root table.proof td.fail::before { c
   margin-right: 6px; vertical-align: -.15em; background: currentColor; -webkit-mask: var(--i-shield) center / contain no-repeat; mask: var(--i-shield) center / contain no-repeat; }
 html:root table.proof td.pass { color: var(--ok); font-weight: 700; } html:root table.proof td.fail { color: var(--bad); font-weight: 700; }
 html:root .caption { color: var(--dim); font-size: 13px; font-style: italic; }
+
+/* ── guild draw: the pictures guild draws (bin/draw.py), with their scenes under them ───────── */
+html:root .guild-draw { margin: 14px 0 22px; padding: 14px 16px 12px; --gd-node: #f6ecd2; --gd-line: #8a6a1e; --gd-text: #2d2216; --gd-pill: #fff8e6; --gd-dim: #5b3e28; }
+html:root .guild-draw .gd-title { font-variant: small-caps; letter-spacing: .04em; font-weight: 700; color: #4a2f1a; margin: 0 0 10px; padding: 0; }
+html:root .guild-draw .gd-body { overflow-x: auto; }
+html:root .guild-draw .gd-note { margin: 10px 0 0; padding: 0; font-size: 13.5px; color: var(--dim); font-style: italic; }
+html:root .guild-draw .gd-note small { font-style: normal; color: var(--dim); opacity: .85; }
+html:root .guild-draw svg .gd-hot { filter: drop-shadow(0 0 4px rgba(217, 164, 65, .9)); }
+html:root .guild-draw path.gd-hot { stroke-width: 3; }
+html:root .guild-rules { margin: 0; }
+html:root .guild-rules th { white-space: nowrap; }
+html:root .guild-rules td.gd-then { font-weight: 600; }
+html:root .guild-rules tr.gd-hot td { background: rgba(217, 164, 65, .22); }
+html:root .gd-n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #8a6a1e; color: #fff8e6; font: 700 11px/1 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+html:root .gd-scenes { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px dashed var(--line); display: grid; gap: 10px; }
+html:root .gd-scenes li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; padding: 8px 10px; border-radius: 6px; border: 1px solid transparent; }
+html:root .gd-scenes li::before { content: none; }
+html:root .gd-scenes li.gd-hot { background: rgba(217, 164, 65, .18); border-color: var(--line); }
+html:root .gd-scenes .gd-n { margin-top: 2px; }
+html:root .gd-scenes .gd-head { margin: 0 0 4px; font-weight: 700; font-size: 14px; }
+html:root .gd-scenes .gd-move { font-weight: 400; color: var(--dim); font-size: 12.5px; margin-left: 6px; }
+html:root .gd-scenes dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13.5px; }
+html:root .gd-scenes dt { color: var(--dim); font-variant: small-caps; letter-spacing: .03em; font-size: 12.5px; }
+html:root .gd-scenes dd { margin: 0; }
+html:root .gd-scenes dd code { font-size: 12px; }

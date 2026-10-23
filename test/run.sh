@@ -1109,6 +1109,35 @@ case "$out" in *"Not ready to merge"*) bad "a waived checklist does not block th
 "$GUILD" close cur --force >/dev/null 2>&1
 
 # the war table from a phone: a second listener that needs the key; pushes carry no details
+section "guild draw"
+"$GUILD" draw --example > "$TMP/spec.json"
+out=$("$GUILD" draw "$TMP/spec.json")
+has "a state machine is picked when the moves loop back" "$out" 'data-kind="state"'
+has "and the picture says why" "$out" "Drawn as a state machine"
+has "each scene is numbered under the picture" "$out" '<ol class="gd-scenes"><li data-scene="1">'
+has "with where it is triggered" "$out" "<dt>Triggered by</dt>"
+has "and the number sits on its arrow" "$out" 'class="gd-label" data-scene="1"'
+cat > "$TMP/org.json" <<'JSON'
+{"tree": {"label": "Project", "children": [{"label": "Objective"}, {"label": "Objective B", "children": [{"label": "Cohort"}]}]}}
+JSON
+has "a tree is drawn as an organogram" "$("$GUILD" draw "$TMP/org.json")" 'data-kind="org"'
+cat > "$TMP/rules.json" <<'JSON'
+{"rules": [{"when": "a day exists", "then": "the move is refused", "trigger": "the edit form", "where": "Service.move"}]}
+JSON
+out=$("$GUILD" draw "$TMP/rules.json")
+has "conditions are drawn as a rules table" "$out" 'data-kind="rules"'
+has "a rule with a trigger is a scene too" "$out" 'data-scene="1"'
+cat > "$TMP/flow.json" <<'JSON'
+{"edges": [{"from": "Open", "to": "Pick"}, {"from": "Pick", "to": "Save"}]}
+JSON
+has "a one-way path is a flow" "$("$GUILD" draw "$TMP/flow.json")" 'data-kind="flow"'
+printf '<!doctype html><body><h2>How the gears turn</h2>\n<p>x</p></body>' > "$TMP/page.html"
+"$GUILD" draw "$TMP/spec.json" --into "$TMP/page.html" >/dev/null
+has "--into lands the figure under the gears heading" "$(cat "$TMP/page.html")" '</h2>
+<figure class="guild-draw"'
+has "a board page wears the realm" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'classList.add("realm","rm-dark")'
+has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'class="gg-party rm-party"'
+
 section "remote and notifications"
 cat > "$GUILD_HOME/local/remote.json" <<'JSON'
 {"remote": true, "bind": "127.0.0.1", "port": 4896, "key": "k3y-for-tests", "mac": false}
