@@ -75,6 +75,7 @@ guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the cam
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild files <slug>                  the map room: find any file of the quest, read it with its changes marked, compare with any commit
 guild decide <spec.json>            a decision page: options as cards, cases, flows, screens, numbers (war-table skill)
 guild rules                         the rule book: every business rule the work changed, per area
 guild drill                         this week's three-question drill on those rules (you answer first)
@@ -1515,6 +1516,9 @@ case "${1:-}" in
   campaign) shift; cmd_campaign "$@" ;;
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
+  files) shift; need_quest "${1:-}"
+    port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+    echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/files" 2>/dev/null || true ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
   lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;

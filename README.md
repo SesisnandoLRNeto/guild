@@ -50,6 +50,7 @@ guild is a small control plane around agent CLIs. It adds no server of its own e
 | trial | pre-PR gate for one commit | `hooks/pr-gate.sh`, `bin/shims/gh`, `skills/trial` |
 | war table / board / docket | local web server / one decision or report page / the list of open decisions | `bin/wartable.py`, `web/` |
 | campaign board | kanban of quests, sessions and tickets | `bin/fleet.py`, `web/campaign.html` |
+| map room | find any file of a quest, read it with its changes marked, compare with the base or any commit | `bin/files.py`, `web/files.html` |
 | cockpit | tmux on its own server, with a side menu | `config/guild.tmux.conf`, `bin/watch.py` |
 
 Code map: `bin/guild` is the CLI (Bash); every `bin/*.py` is one area (war table, fleet, ledger, checks, lessons, budget, impact, harness, Jira, Jev, machines). Python uses only the standard library.
@@ -110,6 +111,7 @@ guild up ~/Workspace
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
 | `guild story "<name>" TICKET...` | Name the campaign board row those tickets sit in (an empty name removes it) |
 | `guild validate <slug>` / `guild validate export <slug> [--out F]` | The quest's end-to-end checklist, run before a merge; a standalone copy for the team |
+| `guild files <slug>` | The map room at `/q/<slug>/files`: a finder like an editor's (type part of a name, changed files first), the file with the quest's changes marked in the margin, a diff against the base branch or any commit, and the file's history. Also the "files" link on a campaign card and the Files tile on a report |
 | `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
 | `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |

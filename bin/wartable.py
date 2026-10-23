@@ -248,6 +248,15 @@ def glance(quest):
                 else f"{v['fail']} failed" if v["fail"] else f"{v['open']} to run")
         tiles.append(("Validation", f"{v['pass']}/{v['total']} passed", word + ": open the checklist",
                       f"/q/{quest}/validate"))
+    try:                                   # the map room: every file the quest touched, readable with its diff
+        import files as fmod
+        fl = fmod.listing(quest)
+        if not fl.get("error"):
+            n = len(fl["changed"])
+            tiles.append(("Files", f"{n} changed", "find any file, read what changed" if n else "nothing changed yet; find any file",
+                          f"/q/{quest}/files"))
+    except Exception:
+        pass
     tiles.append(("Your grade", f"{grade['grade']}/5" if grade and grade.get("grade") else "not yet",
                   (grade or {}).get("verdict", "") or "on the right side"))
     model = meta.get("model") or ""
@@ -683,6 +692,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(404, "not installed: run install.sh")
                 with open(target, "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            v = re.match(r"^/q/([A-Za-z0-9._-]+)/files(\.json|/show|/diff)?$", path)
+            if v:
+                return self.files_get(v.group(1), v.group(2) or "", urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
             v = re.match(r"^/q/([A-Za-z0-9._-]+)/(validate|validate\.json|validate/export|file/(.+))$", path)
             if v:
                 return self.validation_get(v.group(1), v.group(2), v.group(3))
@@ -798,6 +810,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send(200, json.dumps({"ok": True}), "application/json")
         except Exception as e:
             return self.send(500, json.dumps({"error": str(e)}), "application/json")
+
+    def files_get(self, quest, what, qs):
+        """The map room: the page, the file list, one file with its change marks, or a diff."""
+        if what == "":
+            return self.send(200, open(os.path.join(WEB, "files.html")).read())
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import files as fmod
+        one = lambda k: (qs.get(k) or [""])[0]
+        if what == ".json":
+            d = fmod.listing(quest)
+            if not d.get("error"):
+                sc = scenarios_mod()
+                d["report"] = sc.report_url(quest)
+                d["validate"] = bool(sc.load(quest))
+        elif what == "/show":
+            d = fmod.show(quest, one("path"), one("rev"))
+        else:
+            d = fmod.diff(quest, one("path"), one("from"), one("to"))
+        return self.send(404 if d.get("error") else 200, json.dumps(d), "application/json")
 
     def validation_get(self, quest, what, rel):
         sc = scenarios_mod()

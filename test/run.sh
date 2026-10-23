@@ -237,6 +237,32 @@ echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" -c user.email=t
 is "a new commit makes the certificate stale" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" summary alpha | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["stale"], d["certified"])')" "True False"
 has "and the page asks to run it again" "$(curl -s "$vurl")" "Certificate out of date"
 
+# The map room: find any file of the quest, read it with its changes marked, compare with any commit
+section "map room"
+printf 'a = 1\nb = 2\n' > "$WT/room.py"; git -C "$WT" add room.py; git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "room: first"
+printf 'a = 1\nb = 3\nc = 4\n' > "$WT/room.py"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" list alpha)
+has "the map room lists the changed file" "$(echo "$out" | python3 -c 'import json,sys;print([c["path"] for c in json.load(sys.stdin)["changed"]])')" "'room.py'"
+has "with its status and counts" "$(echo "$out" | python3 -c 'import json,sys;c=[c for c in json.load(sys.stdin)["changed"] if c["path"]=="room.py"][0];print(c["status"], c["add"], c["del"])')" "A 3 0"
+has "and every tracked file" "$(echo "$out" | python3 -c 'import json,sys;print("fix.txt" in json.load(sys.stdin)["files"])')" "True"
+has "and the quest's own commits" "$(echo "$out" | python3 -c 'import json,sys;print([c["subject"] for c in json.load(sys.stdin)["commits"]])')" "room: first"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha room.py)
+is "a new file is marked new on every line" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["lang"], d["lines"], d["marks"])')" "python 3 [['add', 1, 3]]"
+has "and its history names the quest's commit" "$(echo "$out" | python3 -c 'import json,sys;print([(l["subject"], l["quest"]) for l in json.load(sys.stdin)["log"]])')" "('room: first', True)"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha room.py HEAD)
+is "a file can be read as it was at a commit" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["rev"], d["lines"], repr(d["text"]))')" "HEAD 2 'a = 1\nb = 2\n'"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" diff alpha room.py HEAD)
+is "a diff against the last commit has the right rows" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["add"], d["del"], [(r["kind"], r["text"]) for r in d["rows"] if r["kind"] in ("add","del")])')" "2 1 [('del', 'b = 2'), ('add', 'b = 3'), ('add', 'c = 4')]"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" diff alpha room.py)
+is "against the base, a new file is all additions" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["add"], d["del"])')" "3 0"
+has "a path outside the worktree is refused" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha ../../etc/passwd 2>/dev/null)" "no such file"
+has "a path that walks out through the worktree is refused" "$(curl -s "http://127.0.0.1:4899/q/alpha/files/show?path=room.py/../../../../etc/passwd")" "no such file"
+has "the war table serves the map room" "$(curl -s "http://127.0.0.1:4899/q/alpha/files")" "The Map Room"
+has "and its file list" "$(curl -s "http://127.0.0.1:4899/q/alpha/files.json")" '"room.py"'
+has "the campaign card links the map room" "$(python3 "$REPO/bin/fleet.py" json)" "/q/alpha/files"
+has "and the wrap-up's glance has a Files tile" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" "/q/alpha/files"
+git -C "$WT" checkout -q -- room.py     # leave the worktree clean for the sections below
+
 # Pass all: one click to mark everything still to run, for testing the page itself
 mkdir -p "$GUILD_HOME/quests/pall"
 echo '{"slug":"pall","repo":"/tmp/none","worktree":"/tmp/none"}' > "$GUILD_HOME/quests/pall/meta.json"

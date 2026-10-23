@@ -575,6 +575,9 @@ def board():
             v = scenarios.summary(q["slug"])
             links.append({"label": "validated" if v["certified"] else "validate again" if v["stale"] else f"validate {v['pass']}/{v['total']}",
                           "href": f"/q/{q['slug']}/validate", "hot": not v["certified"] and q["state"] in ("done", "trial-pass", "trial-skip")})
+        wt = (load_json(os.path.join(q["dir"], "meta.json"), {}) or {}).get("worktree", "")
+        if wt and os.path.isdir(wt):                                         # the map room: find any file, read its diff
+            links.append({"label": "files", "href": f"/q/{q['slug']}/files"})
         for b in q["open_boards"] if q["state"] not in ("done", "failed") else []:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
         if q.get("why_board") and q["state"] not in ("done", "failed"):

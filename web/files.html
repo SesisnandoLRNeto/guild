@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en" class="realm rm-dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Map Room · guild</title>
+<style>
+  :root { --mono: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; --sans: ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 var(--sans); min-height: 100vh; }
+  a { color: var(--rm-gold); }
+  .rm-hero.room-hero { padding: 16px 26px 14px; margin: 14px auto 12px; max-width: none; margin-left: 18px; margin-right: 18px; }
+  .rm-hero.room-hero .rm-title { font-size: 30px; }
+  .rm-hero.room-hero .rm-sub { font-size: 13px; margin-top: 4px; }
+  .rm-hero.room-hero .race.big { width: 64px; height: 64px; }
+  .rm-hero.room-hero .rm-party figure { width: 84px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--rm-gold-3); border-radius: 3px;
+    background: linear-gradient(180deg, #2a2230, #15111a); color: var(--rm-text); text-decoration: none; font-size: 13px; cursor: pointer; font-family: var(--sans); }
+  .btn:hover { border-color: var(--rm-gold); color: var(--rm-gold-2); }
+  .btn.on { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; border-color: #6e4e10; font-weight: 600; }
+  .btn.sm { padding: 2px 8px; font-size: 12px; }
+  .btn b { font-weight: 600; margin-left: 2px; color: inherit; }
+  main.room { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 14px; padding: 0 18px 18px; height: calc(100vh - 168px); min-height: 480px; }
+  .finder, .view { display: flex; flex-direction: column; min-height: 0; }
+  .search { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; }
+  .search .gi-icon { width: 16px; height: 16px; color: var(--rm-gold); flex: none; }
+  .search input { flex: 1; min-width: 0; font: 14px var(--mono); padding: 7px 10px; color: var(--rm-text); background: #0d0b10; border: 1px solid var(--rm-line); border-radius: 3px; outline: none; }
+  .search input:focus { border-color: var(--rm-gold); box-shadow: 0 0 0 2px rgba(217, 164, 65, .2); }
+  .chips { display: flex; gap: 6px; padding: 0 12px 8px; }
+  ol.list { list-style: none; margin: 0; padding: 0 6px 6px; overflow: auto; flex: 1; font: 12.5px/1.35 var(--mono); border-top: 1px solid var(--rm-line); }
+  ol.list li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 5px 8px; border-left: 3px solid transparent; cursor: pointer; border-radius: 2px; }
+  ol.list li:hover { background: rgba(217, 164, 65, .08); }
+  ol.list li.sel { background: rgba(217, 164, 65, .14); border-left-color: var(--rm-gold); }
+  ol.list li.cur .name { color: var(--rm-gold-2); }
+  ol.list li.cur .st::after, ol.list li.cur > span:first-child:empty::after { content: ""; position: absolute; left: 0; width: 3px; top: 4px; bottom: 4px; background: var(--rm-gold-2); }
+  ol.list li { position: relative; }
+  ol.list .st { font-weight: 700; font-size: 11px; text-align: center; }
+  .st.M { color: var(--rm-gold-2); } .st.A { color: var(--rm-ok); } .st.D { color: #f0a08f; } .st.R { color: var(--rm-ice); }
+  ol.list .p { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+  ol.list .p bdi { direction: ltr; unicode-bidi: isolate; }
+  ol.list .p .dir { color: var(--rm-dim); }
+  ol.list .p .name { color: var(--rm-text); }
+  ol.list .p mark { background: none; color: var(--rm-gold-2); font-weight: 700; }
+  ol.list .num { font-size: 11px; color: var(--rm-dim); white-space: nowrap; }
+  .num .a { color: var(--rm-ok); } .num .d { color: #f0a08f; }
+  .hint { margin: 0; padding: 6px 12px 10px; font-size: 11px; color: var(--rm-dim); border-top: 1px solid var(--rm-line); }
+  .hint kbd { font: 11px var(--mono); color: var(--rm-gold); }
+  .empty { padding: 20px 14px; color: var(--rm-dim); font-style: italic; }
+  .vhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px 10px; border-bottom: 1px solid var(--rm-line); }
+  .vpath { font: 13px var(--mono); color: var(--rm-text); min-width: 0; flex: 1 1 320px; overflow-wrap: anywhere; }
+  .vpath .dir { color: var(--rm-dim); } .vpath .name { color: var(--rm-gold-2); font-weight: 600; }
+  .vpath .rev { margin-left: 8px; font-size: 11px; color: var(--rm-ice); }
+  .vstat { font-size: 12px; color: var(--rm-dim); }
+  .tabs { display: flex; gap: 4px; }
+  .vbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 7px 14px; font-size: 12.5px; color: var(--rm-dim); border-bottom: 1px solid rgba(74, 63, 82, .6); min-height: 36px; }
+  .vbar:empty { display: none; }
+  .vbar select { font: 12.5px var(--sans); color: var(--rm-text); background: #0d0b10; border: 1px solid var(--rm-line); border-radius: 3px; padding: 3px 6px; max-width: 340px; color-scheme: dark; }
+  .vbody { flex: 1; min-height: 0; overflow: auto; font: 12.5px/1.55 var(--mono); }
+  .code { display: table; min-width: 100%; border-collapse: collapse; }
+  .row { display: table-row; }
+  .row > span, .row > code { display: table-cell; vertical-align: top; }
+  .row .g { width: 4px; padding: 0; }
+  .row.add .g { background: var(--rm-ok); } .row.change .g { background: var(--rm-gold); } .row.del .g { background: #b0412e; }
+  .row.del:not(.d) .n::before { content: "▲"; position: absolute; left: 8px; top: -7px; font-size: 8px; color: #f0a08f; }
+  .row .n { position: relative; width: 1%; padding: 0 12px 0 10px; text-align: right; color: var(--rm-dim); user-select: none; white-space: nowrap; }
+  .row .n.o { padding-right: 4px; } .row .n.o + .n { padding-left: 4px; }
+  .row code { padding: 0 16px 0 6px; white-space: pre; tab-size: 4; color: var(--rm-text); }
+  .row.add.d code, .row.add.d .n { background: rgba(127, 191, 90, .13); }
+  .row.del.d code, .row.del.d .n { background: rgba(176, 65, 46, .18); }
+  .row.hunk code { color: var(--rm-ice); background: rgba(79, 147, 224, .08); padding: 4px 6px; font-style: italic; }
+  .row.hunk.first code { border-top: 0; }
+  .row.hunk code { border-top: 1px solid rgba(74, 63, 82, .6); }
+  .row.hot code { animation: hot 1.6s ease-out; }
+  @keyframes hot { from { background: rgba(217, 164, 65, .35); } to { background: transparent; } }
+  .row.d.add code::before { content: "+"; color: var(--rm-ok); margin-right: 6px; } .row.d.del code::before { content: "−"; color: #f0a08f; margin-right: 6px; }
+  .row.d.ctx code::before { content: " "; margin-right: 6px; }
+  /* tokens, the few colours a file needs to read like an editor */
+  .t-k { color: var(--rm-gold-2); } .t-s { color: #8fb35a; } .t-c { color: #7f7262; font-style: italic; } .t-n { color: #e0a06b; }
+  .t-t { color: #7fb8ff; } .t-f { color: #e9dcc0; font-weight: 600; } .t-a { color: var(--rm-gold); } .t-x { color: #c9a3e8; }
+  .t-h { color: var(--rm-gold-2); font-weight: 700; } .t-g { color: #e0a06b; }
+  .log { list-style: none; margin: 0; padding: 8px 14px 14px; font-family: var(--sans); }
+  .log li { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 9px 6px; border-bottom: 1px solid rgba(74, 63, 82, .5); }
+  .log .sha { font: 12.5px var(--mono); color: var(--rm-ice); }
+  .log .sub { color: var(--rm-text); }
+  .log .sub small { display: block; color: var(--rm-dim); font-size: 12px; }
+  .log .q { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--rm-gold); margin-left: 8px; }
+  .log .acts { display: flex; gap: 6px; }
+  .note { padding: 16px; color: var(--rm-dim); font-family: var(--sans); font-style: italic; }
+  @media (max-width: 900px) { main.room { grid-template-columns: 1fr; height: auto; } .finder ol.list { max-height: 40vh; } .vbody { max-height: 70vh; } }
+</style>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/realm.css">
+</head>
+<body>
+<section class="rm-hero rm-frame room-hero">
+  <div>
+    <p class="rm-kicker">The war table · <span id="kicker">the map room</span></p>
+    <h1 class="rm-title">The Map Room</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub">Type part of a file name and the scout finds it; the files this quest changed come first. Open one to read it with the changes marked in the margin, or compare it with the base branch or any earlier commit.</p>
+    <nav class="nav"><a class="btn" id="back" href="/campaign">&larr; Back to the campaign</a><a class="btn" id="validate" hidden>The gauntlet</a></nav>
+  </div>
+  <div class="rm-party" id="party" aria-label="Who is in the map room"></div>
+</section>
+<main class="room">
+  <aside class="finder rm-frame">
+    <div class="search"><i class="gi-icon gi-map" aria-hidden="true"></i><input id="q" type="search" placeholder="find a file   (Ctrl+P or /)" autocomplete="off" spellcheck="false" autofocus></div>
+    <div class="chips"><button class="btn sm on" data-scope="changed" type="button">Changed <b id="nChanged">0</b></button><button class="btn sm" data-scope="all" type="button">All <b id="nAll">0</b></button></div>
+    <ol class="list" id="list"></ol>
+    <p class="hint"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Enter</kbd> open · <kbd>Esc</kbd> back to the search · <kbd>]</kbd> <kbd>[</kbd> next or previous change</p>
+  </aside>
+  <section class="view rm-frame">
+    <header class="vhead">
+      <div class="vpath" id="vpath">Pick a file on the left, or start typing.</div>
+      <div class="vstat" id="vstat"></div>
+      <div class="tabs"><button class="btn sm on" data-tab="code" type="button">Code</button><button class="btn sm" data-tab="diff" type="button">Changes</button><button class="btn sm" data-tab="log" type="button">History</button></div>
+    </header>
+    <div class="vbar" id="vbar"></div>
+    <div class="vbody" id="vbody"><p class="note">Nothing open yet. The scout is waiting for a name.</p></div>
+  </section>
+</main>
+<script src="/realm.js"></script>
+<script>
+const SLUG = location.pathname.split("/")[2];
+const API = `/q/${SLUG}/files`;
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+let DATA = null, scope = "changed", rows = [], sel = 0, cur = null, tab = "code", shown = null, dif = null, cmp = { from: "", to: "" };
+
+// ── the finder: fzf-style subsequence match, word starts and the file name count more ──────────
+function fuzzy(q, path) {
+  const p = path.toLowerCase(), lo = q.toLowerCase();
+  const base = path.lastIndexOf("/") + 1;
+  const boundary = (j) => { const prev = p[j - 1]; return j === 0 || "/_-. ".includes(prev) || (path[j] !== p[j] && prev === prev.toLowerCase()); };
+  let score = 0, pos = [];
+  for (const term of lo.split(/\s+/).filter(Boolean)) {
+    let best = null;
+    // Try every place the term could start, so "edit" finds the E of WorkstreamEditService and not the e of Workstream.
+    for (let k = p.indexOf(term[0]); k >= 0; k = p.indexOf(term[0], k + 1)) {
+      let i = k, s = 0, last = -2, hit = [];
+      for (const ch of term) {
+        let j = hit.length ? p.indexOf(ch, i) : k;
+        if (j < 0) { hit = null; break; }
+        if (hit.length && j !== last + 1)       // not a run: prefer a word start within reach over a letter inside a word
+          for (let m = j; m >= 0 && m < i + 14; m = p.indexOf(ch, m + 1)) if (boundary(m)) { j = m; break; }
+        // a run that starts at a word (Edit in WorkstreamEditService) beats letters found inside one (edIT in TrackedIT)
+        s += 1 + (j === last + 1 ? 3 : 0) + (boundary(j) ? 4 : hit.length ? 0 : -4) + (j >= base ? 1 : 0) - (hit.length ? Math.min(10, j - last - 1) * .5 : 0);
+        hit.push(j); last = j; i = j + 1;
+      }
+      if (hit) s -= (hit[hit.length - 1] - hit[0] + 1 - term.length) * .3;     // a tight match beats a scattered one
+      if (hit && (!best || s > best.s)) best = { s, hit };
+    }
+    if (!best) return null;
+    score += best.s; pos = pos.concat(best.hit);
+  }
+  return { score: score - path.length * .01, pos };
+}
+function lit(path, pos) {
+  const set = new Set(pos), base = path.lastIndexOf("/") + 1;
+  let out = "";
+  for (let i = 0; i < path.length; i++) {
+    if (i === base) out += '</span><span class="name">';
+    out += set.has(i) ? `<mark>${esc(path[i])}</mark>` : esc(path[i]);
+  }
+  return `<bdi><span class="dir">${out}</span></bdi>`;
+}
+function refind() {
+  if (!DATA) return;
+  const q = $("#q").value.trim();
+  const changed = new Map(DATA.changed.map((c) => [c.path, c]));
+  const pool = scope === "changed" ? DATA.changed.map((c) => c.path) : DATA.files;
+  let out = [];
+  for (const path of pool) {
+    const m = q ? fuzzy(q, path) : { score: 0, pos: [] };
+    if (m) out.push({ path, c: changed.get(path), ...m });
+  }
+  if (q) out.sort((a, b) => b.score - a.score || a.path.length - b.path.length || a.path.localeCompare(b.path));
+  rows = out.slice(0, 400);
+  sel = Math.min(sel, Math.max(0, rows.length - 1));
+  const list = $("#list");
+  if (!rows.length) {
+    list.innerHTML = `<li class="empty">${scope === "changed" && !q ? "This quest changed nothing yet." : "No path matches. The scout shrugs."}</li>`;
+    return;
+  }
+  list.innerHTML = rows.map((r, i) => {
+    const c = r.c;
+    const st = c ? `<span class="st ${c.status}" title="${{ M: "modified", A: c.untracked ? "new, not committed yet" : "added", D: "deleted", R: "renamed" }[c.status] || c.status}">${c.status}</span>` : "<span></span>";
+    const num = c && (c.add || c.del) ? `<span class="num"><span class="a">+${c.add}</span> <span class="d">−${c.del}</span></span>` : "<span></span>";
+    return `<li data-i="${i}" class="${i === sel ? "sel" : ""} ${cur === r.path ? "cur" : ""}">${st}<span class="p" title="${esc(r.path)}">${lit(r.path, r.pos)}</span>${num}</li>`;
+  }).join("");
+  list.querySelector("li.sel")?.scrollIntoView({ block: "nearest" });
+}
+function move(d) {
+  if (!rows.length) return;
+  sel = (sel + d + rows.length) % rows.length;
+  [...$("#list").children].forEach((li, i) => li.classList.toggle("sel", i === sel));
+  $("#list").children[sel]?.scrollIntoView({ block: "nearest" });
+}
+
+// ── tokens: a small highlighter, one regex per language family, no library needed ────────────
+const KW = {
+  c: "abstract as assert async await boolean break byte case catch char class const continue default defer delete do double else enum export extends extern final finally float fn for from func function go goto if impl implements import in instanceof int interface internal is let long match mod module mut namespace native new null nullptr object override package private protected pub public record return sealed short static struct super switch synchronized this throw throws trait transient try type typeof undefined unsafe use val var virtual void volatile when where while with yield true false None self data companion open lateinit init object sealed suspend fun inline reified crossinline operator infix tailrec vararg out typealias readonly declare keyof satisfies unknown any never string number bigint symbol get set of",
+  python: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield True False None self cls match case",
+  sh: "if then else elif fi for while until do done case esac in function return local export readonly declare set unset shift exit source alias echo printf test true false",
+  sql: "select from where and or not in is null as join left right inner outer full on group by order having limit offset insert into values update set delete create table alter drop index view primary key foreign references unique default constraint begin commit rollback with union all distinct case when then else end exists between like asc desc cascade if returning",
+  yaml: "true false null yes no on off", json: "true false null", css: "", html: "", md: "", ini: "", toml: "true false", make: "", groovy: "", hcl: "resource variable output module provider locals data true false null",
+};
+const FAMILY = { java: "c", kotlin: "c", ts: "c", js: "c", go: "c", rust: "c", csharp: "c", c: "c", swift: "c", php: "c", groovy: "c", python: "python", ruby: "python", sh: "sh", make: "sh", sql: "sql", yaml: "yaml", json: "json", css: "css", html: "html", md: "md", ini: "yaml", toml: "yaml", hcl: "c" };
+const RX = {
+  c: /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("""[\s\S]*?"""|`(?:\\[\s\S]|[^`\\])*`|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(@[A-Za-z_][\w.]*)|(\b0[xX][\da-fA-F_]+\b|\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?[fFLdDuU]*\b)|\b([A-Za-z_]\w*)\b(?=\s*\()|\b([A-Z][A-Za-z\d_]*)\b|\b([a-z_]\w*)\b/g,
+  python: /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|[rbfu]*"(?:\\.|[^"\\\n])*"|[rbfu]*'(?:\\.|[^'\\\n])*')|(@[A-Za-z_][\w.]*)|(\b0[xX][\da-fA-F_]+\b|\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?j?\b)|\b([A-Za-z_]\w*)\b(?=\s*\()|\b([A-Z][A-Za-z\d_]*)\b|\b([a-z_]\w*)\b/g,
+  sh: /(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(\$\{?[\w@#?*!$-]+\}?)|(\b\d+\b)|\b([A-Za-z_]\w*)\b(?=\s*\(\))|(--?[\w-]+)|\b([a-z_]\w*)\b/g,
+  sql: /(--[^\n]*|\/\*[\s\S]*?\*\/)|('(?:''|[^'])*'|"[^"\n]*")|(:\w+|\$\d+)|(\b\d+(?:\.\d+)?\b)|\b([A-Za-z_]\w*)\b(?=\s*\()|(?!x)x|\b([A-Za-z_]\w*)\b/gi,
+  yaml: /(#[^\n]*)|("(?:\\.|[^"\\\n])*"|'[^'\n]*')|(^\s*-?\s*[\w.\/-]+(?=\s*:(?:\s|$)))|(\b\d[\d_]*(?:\.\d+)?\b)|(?!x)x|(?!x)x|\b([a-z_]\w*)\b/gm,
+  json: /(?!x)x|("(?:\\.|[^"\\\n])*"(?=\s*:))|("(?:\\.|[^"\\\n])*")|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(?!x)x|(?!x)x|\b(true|false|null)\b/g,
+  css: /(\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|([\w-]+(?=\s*:))|(#[\da-fA-F]{3,8}\b|-?\b\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?\b)|([\w-]+)(?=\()|(@[\w-]+)|(?!x)x/g,
+  html: /(<!--[\s\S]*?-->)|("[^"]*"|'[^']*')|(<\/?[\w:-]+|\/?>)|(?!x)x|(?!x)x|(?!x)x|\b([\w:-]+)(?=\s*=)/g,
+  md: /(^```[\s\S]*?^```|`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(^#{1,6}\s[^\n]*)|(\[[^\]\n]*\]\([^)\n]*\))|(?!x)x|(?!x)x|(^\s*(?:[-*+]|\d+\.)\s)/gm,
+};
+const CLS = { c: ["t-c", "t-s", "t-a", "t-n", "t-f", "t-t", "kw"], python: ["t-c", "t-s", "t-a", "t-n", "t-f", "t-t", "kw"], sh: ["t-c", "t-s", "t-x", "t-n", "t-f", "t-a", "kw"],
+  sql: ["t-c", "t-s", "t-x", "t-n", "t-f", "", "kw"], yaml: ["t-c", "t-s", "t-a", "t-n", "", "", "kw"], json: ["", "t-a", "t-s", "t-n", "", "", "t-k"],
+  css: ["t-c", "t-s", "t-a", "t-n", "t-f", "t-k", ""], html: ["t-c", "t-s", "t-k", "", "", "", "t-a"], md: ["t-s", "t-f", "t-h", "t-x", "", "", "t-g"] };
+function tokens(text, lang) {
+  const fam = FAMILY[lang], rx = RX[fam];
+  if (!rx) return [["", text]];
+  const kw = new Set((KW[lang] || KW[fam] || "").split(" "));
+  const out = []; let last = 0, m; rx.lastIndex = 0;
+  while ((m = rx.exec(text))) {
+    if (m.index > last) out.push(["", text.slice(last, m.index)]);
+    const g = m.slice(1).findIndex((x) => x !== undefined);
+    let cls = CLS[fam][g] || "";
+    if (cls === "kw") cls = kw.has(m[0].toLowerCase()) ? "t-k" : "";
+    if (cls === "t-f" && kw.has(m[0].toLowerCase())) cls = "t-k";
+    out.push([cls, m[0]]); last = rx.lastIndex;
+    if (!m[0].length) rx.lastIndex++;
+  }
+  if (last < text.length) out.push(["", text.slice(last)]);
+  return out;
+}
+function paint(text, lang) {        // whole-file tokens, split back into lines so comments can span lines
+  const lines = [""];
+  for (const [cls, t] of tokens(text, lang)) {
+    const parts = t.split("\n");
+    parts.forEach((p, i) => {
+      if (i) lines.push("");
+      if (p) lines[lines.length - 1] += cls ? `<span class="${cls}">${esc(p)}</span>` : esc(p);
+    });
+  }
+  if (text.endsWith("\n")) lines.pop();
+  return lines;
+}
+
+// ── the view: code with the margin marks, the diff, the history ──────────────────────────────
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll(".tabs .btn").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+  render();
+  pushHash();
+}
+function markOf(marks) {
+  const m = new Map();
+  for (const [kind, a, b] of marks) for (let i = a; i <= b; i++) m.set(i, kind);
+  return m;
+}
+function renderCode() {
+  const vb = $("#vbody"), bar = $("#vbar");
+  if (shown.binary) { vb.innerHTML = '<p class="note">A binary file. Nothing to read here, only to download.</p>'; bar.innerHTML = ""; return; }
+  const marks = markOf(shown.marks), lines = paint(shown.text, shown.lang);
+  vb.innerHTML = `<div class="code">${lines.map((h, i) => { const k = marks.get(i + 1) || ""; return `<div class="row ${k}" id="L${i + 1}"><span class="g"></span><span class="n">${i + 1}</span><code>${h || " "}</code></div>`; }).join("")}</div>`
+    + (shown.truncated ? '<p class="note">The file is longer than the room can show; this is the first part of it.</p>' : "");
+  const n = shown.marks.length;
+  bar.innerHTML = shown.rev
+    ? `<span>Reading the file as it was at <b class="t-t">${esc(shown.rev.slice(0, 8))}</b>.</span><button class="btn sm" id="now" type="button">Back to now</button>`
+    : (n ? `<span><b>${n}</b> changed ${n === 1 ? "place" : "places"} since the quest began, marked in the margin: <span class="st A">green</span> new, <span class="st M">gold</span> changed, <span class="st D">red</span> removed.</span>
+       <button class="btn sm" id="prev" type="button">[ previous</button><button class="btn sm" id="next" type="button">next ]</button>` : "<span>Nothing changed in this file since the quest began.</span>");
+  $("#now")?.addEventListener("click", () => open(cur, ""));
+  $("#prev")?.addEventListener("click", () => jump(-1));
+  $("#next")?.addEventListener("click", () => jump(1));
+}
+let hunkAt = -1;
+function jump(d) {
+  if (!shown || !shown.marks.length || tab !== "code") return;
+  hunkAt = (hunkAt + d + shown.marks.length) % shown.marks.length;
+  const row = document.getElementById("L" + shown.marks[hunkAt][1]);
+  if (!row) return;
+  row.scrollIntoView({ block: "center" });
+  row.classList.remove("hot"); void row.offsetWidth; row.classList.add("hot");
+}
+function revName(sha) {
+  if (!sha || sha === "WORK") return "now, the working tree";
+  if (sha === shown?.base_sha || sha === DATA.base_sha) return `the quest's start (${DATA.base}, ${sha.slice(0, 8)})`;
+  if (sha === "HEAD") return `the last commit (${DATA.head})`;
+  const c = (shown?.log || []).find((l) => l.sha === sha || l.short === sha);
+  return c ? `${c.short} ${c.subject}` : sha.slice(0, 8);
+}
+function renderDiff() {
+  const vb = $("#vbody"), bar = $("#vbar");
+  const revs = [[DATA.base_sha, `the quest's start (${DATA.base})`], ["HEAD", `the last commit (${DATA.head})`]]
+    .concat((shown.log || []).map((l) => [l.sha, `${l.short} ${l.subject.slice(0, 60)} · ${l.when}${l.quest ? " · this quest" : ""}`]));
+  const opts = (list, sel) => list.map(([v, t]) => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(t)}</option>`).join("");
+  const from = cmp.from || DATA.base_sha;
+  if (!revs.some(([v]) => v === from)) revs.push([from, from.slice(0, 12)]);      // a deep link to a commit the log does not list
+  bar.innerHTML = `<label>Compare <select id="from">${opts(revs, from)}</select></label><label>with <select id="to">${opts([["", "now, the working tree"], ...revs], cmp.to)}</select></label>`
+    + (dif ? `<span>${dif.same ? "no difference" : `<span class="num"><span class="a">+${dif.add}</span> <span class="d">−${dif.del}</span></span>`}</span>` : "");
+  $("#from").onchange = (e) => { cmp.from = e.target.value; loadDiff(); };
+  $("#to").onchange = (e) => { cmp.to = e.target.value; loadDiff(); };
+  if (!dif) { vb.innerHTML = '<p class="note">Reading the two versions...</p>'; return; }
+  if (dif.same) { vb.innerHTML = `<p class="note">The file is the same in ${esc(revName(dif.from))} and ${esc(revName(dif.to))}.</p>`; return; }
+  let first = true;
+  vb.innerHTML = `<div class="code">${dif.rows.map((r) => {
+    if (r.kind === "hunk") { const f = first ? " first" : ""; first = false; return `<div class="row hunk${f}"><span class="g"></span><span class="n"></span><span class="n"></span><code>${esc(r.text)}</code></div>`; }
+    const h = paint(r.text + "\n", dif.lang)[0] || " ";
+    return `<div class="row d ${r.kind}"><span class="g"></span><span class="n o">${r.old ?? ""}</span><span class="n">${r.new ?? ""}</span><code>${h}</code></div>`;
+  }).join("")}</div>`;
+}
+function renderLog() {
+  const vb = $("#vbody"); $("#vbar").innerHTML = `<span>Every commit that touched this file, newest first. "This quest" marks the ones made on this branch.</span>`;
+  if (!shown.log.length) { vb.innerHTML = '<p class="note">No commit has this file yet: it is new and not committed.</p>'; return; }
+  vb.innerHTML = `<ol class="log">${shown.log.map((l) => `<li><span class="sha">${esc(l.short)}</span><span class="sub">${esc(l.subject)}${l.quest ? '<span class="q">this quest</span>' : ""}<small>${esc(l.author)} · ${esc(l.when)}</small></span>
+    <span class="acts"><button class="btn sm" data-read="${l.sha}" type="button">Read at this commit</button><button class="btn sm" data-did="${l.sha}" type="button">What it changed</button><button class="btn sm" data-since="${l.sha}" type="button">Compare with now</button></span></li>`).join("")}</ol>`;
+  vb.querySelectorAll("[data-read]").forEach((b) => b.onclick = () => { open(cur, b.dataset.read); });
+  vb.querySelectorAll("[data-did]").forEach((b) => b.onclick = () => { cmp = { from: b.dataset.did + "~1", to: b.dataset.did }; setTab("diff"); });
+  vb.querySelectorAll("[data-since]").forEach((b) => b.onclick = () => { cmp = { from: b.dataset.since, to: "" }; setTab("diff"); });
+}
+function render() {
+  if (!shown) return;
+  if (tab === "code") renderCode();
+  else if (tab === "log") renderLog();
+  else { if (!dif || dif.from !== (cmp.from || DATA.base_sha) || dif.to !== (cmp.to || "WORK")) loadDiff(); else renderDiff(); }
+}
+async function loadDiff() {
+  dif = null; renderDiff();
+  const u = new URL(API + "/diff", location.origin);
+  u.searchParams.set("path", cur); if (cmp.from) u.searchParams.set("from", cmp.from); if (cmp.to) u.searchParams.set("to", cmp.to);
+  const d = await (await fetch(u)).json();
+  if (d.error) { $("#vbody").innerHTML = `<p class="note">${esc(d.error)}</p>`; return; }
+  if (!cmp.from) d.from = DATA.base_sha;
+  dif = d; renderDiff(); pushHash();
+}
+async function open(path, rev = "") {
+  cur = path; hunkAt = -1; dif = null;
+  const c = DATA.changed.find((x) => x.path === path);
+  if (c && c.status === "D" && !rev) rev = DATA.base_sha;      // deleted here: read it as it was at the base
+  const i = path.lastIndexOf("/") + 1;
+  $("#vpath").innerHTML = `<span class="dir">${esc(path.slice(0, i))}</span><span class="name">${esc(path.slice(i))}</span>${rev ? `<span class="rev">at ${esc(rev.slice(0, 8))}</span>` : ""}`;
+  $("#vstat").textContent = "";
+  $("#vbody").innerHTML = '<p class="note">Unrolling the scroll...</p>';
+  const u = new URL(API + "/show", location.origin);
+  u.searchParams.set("path", path); if (rev) u.searchParams.set("rev", rev);
+  const d = await (await fetch(u)).json();
+  if (d.error) { $("#vbody").innerHTML = `<p class="note">${esc(d.error)}</p>`; shown = null; return; }
+  shown = d;
+  $("#vstat").textContent = [d.lang || "text", `${d.lines} lines`, c ? ({ M: "modified", A: c.untracked ? "new, uncommitted" : "added", D: "deleted", R: "renamed" }[c.status]) : "unchanged", c && (c.add || c.del) ? `+${c.add} −${c.del}` : ""].filter(Boolean).join(" · ");
+  render(); pushHash();
+  document.querySelectorAll("#list li").forEach((li) => li.classList.toggle("cur", rows[li.dataset.i]?.path === path));
+}
+function pushHash() {
+  if (!cur) return;
+  const p = new URLSearchParams({ path: cur }); if (tab !== "code") p.set("tab", tab);
+  if (shown?.rev) p.set("rev", shown.rev); if (tab === "diff" && cmp.from) p.set("from", cmp.from); if (tab === "diff" && cmp.to) p.set("to", cmp.to);
+  history.replaceState(null, "", "#" + p);
+}
+
+// ── the party on the banner ──────────────────────────────────────────────────────────────────
+function party() {
+  const ch = DATA.changed, add = ch.reduce((s, c) => s + c.add, 0), del = ch.reduce((s, c) => s + c.del, 0);
+  $("#party").innerHTML =
+    rmFigure("gnome", DATA.files.length, "paths mapped", `The scout has walked every path in ${DATA.worktree.split("/").pop()} and remembers all of them. Type any part of a name; it points.`, { plural: true, name: "Gnome scout" })
+    + rmFigure("dwarf", ch.length, ch.length === 1 ? "file at the forge" : "files at the forge", `The dwarves hammered on ${ch.length} ${ch.length === 1 ? "file" : "files"} since the quest began: ${add} lines in, ${del} out. They say every line was needed. Read the margin and judge.`, { plural: true, name: "Dwarves" })
+    + rmFigure("human", DATA.commits.length, DATA.commits.length === 1 ? "commit to inspect" : "commits to inspect", `You. Open a file, read what changed, compare it with the base branch or any older commit. The history tab tells who touched it and when; no one has ever lied to git for long.`, { name: "Guildmaster" });
+}
+
+// ── wiring ───────────────────────────────────────────────────────────────────────────────────
+async function boot() {
+  const d = await (await fetch(API + ".json")).json();
+  if (d.error) { $("#list").innerHTML = `<li class="empty">${esc(d.error)}</li>`; $("#vbody").innerHTML = `<p class="note">${esc(d.error)}</p>`; return; }
+  DATA = d;
+  document.title = `The Map Room · ${d.slug}`;
+  $("#kicker").textContent = [d.repo.split("/").pop(), d.branch, d.ticket].filter(Boolean).join(" · ");
+  if (d.report) { $("#back").href = d.report; $("#back").innerHTML = "&larr; Back to the report"; }
+  if (d.validate) { $("#validate").href = `/q/${d.slug}/validate`; $("#validate").hidden = false; }
+  $("#nChanged").textContent = d.changed.length; $("#nAll").textContent = d.files.length;
+  if (!d.changed.length) scope = "all";
+  document.querySelectorAll(".chips .btn").forEach((b) => b.classList.toggle("on", b.dataset.scope === scope));
+  party(); refind();
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("path")) {
+    tab = h.get("tab") || "code"; cmp = { from: h.get("from") || "", to: h.get("to") || "" };
+    document.querySelectorAll(".tabs .btn").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+    open(h.get("path"), h.get("rev") || "");
+  }
+}
+$("#q").addEventListener("input", () => { sel = 0; refind(); });
+$("#q").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+  else if (e.key === "Enter" && rows[sel]) { e.preventDefault(); open(rows[sel].path); }
+  else if (e.key === "Escape") { $("#q").value = ""; sel = 0; refind(); }
+});
+$("#list").addEventListener("click", (e) => { const li = e.target.closest("li[data-i]"); if (li) { sel = +li.dataset.i; refind(); open(rows[sel].path); } });
+document.querySelectorAll(".chips .btn").forEach((b) => b.addEventListener("click", () => { scope = b.dataset.scope; sel = 0;
+  document.querySelectorAll(".chips .btn").forEach((x) => x.classList.toggle("on", x === b)); refind(); $("#q").focus(); }));
+document.querySelectorAll(".tabs .btn").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName);
+  if ((e.key === "p" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) { e.preventDefault(); $("#q").focus(); $("#q").select(); return; }
+  if (e.key === "Escape" && !typing) { $("#q").focus(); return; }
+  if (typing) return;
+  if (e.key === "]") jump(1); else if (e.key === "[") jump(-1);
+  else if (e.key === "j") move(1); else if (e.key === "k") move(-1);
+  else if (e.key === "Enter" && rows[sel]) open(rows[sel].path);
+});
+boot();
+</script>
+</body>
+</html>
