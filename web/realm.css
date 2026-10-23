@@ -132,6 +132,38 @@ html.realm .rm-sheet { border-radius: 3px; }
 .rm-hero { overflow: visible; }
 .rm-party figure:hover .race { box-shadow: 0 0 0 2px var(--rm-gold), 0 0 0 3px #000, 0 0 0 4px rgba(217, 164, 65, .6), 0 0 18px rgba(217, 164, 65, .5); }
 
+/* ── each race moves in its own way while you hover it (data-race from realm.js / the python side) ── */
+.rm-party .race svg { transform-origin: 50% 90%; }
+.rm-party .race .n { transition: transform .15s; }
+.rm-party figure:hover .race .n, .rm-party figure:focus .race .n { transform: scale(1.18); }
+.rm-party figure:hover figcaption, .rm-party figure:focus figcaption { color: var(--rm-gold-2); }
+.rm-party figure:hover .race svg, .rm-party figure:focus .race svg { animation: rm-nod 1.1s ease-in-out infinite; }
+.rm-party figure[data-race="gnome"]:hover .race svg, .rm-party figure[data-race="gnome"]:focus .race svg { animation: rm-hop .55s ease-in-out infinite; }
+.rm-party figure[data-race="dwarf"]:hover .race svg, .rm-party figure[data-race="dwarf"]:focus .race svg { animation: rm-hammer .7s ease-in-out infinite; }
+.rm-party figure[data-race="highelf"]:hover .race svg, .rm-party figure[data-race="highelf"]:focus .race svg { animation: rm-float 2.2s ease-in-out infinite; }
+.rm-party figure[data-race="nightelf"]:hover .race svg, .rm-party figure[data-race="nightelf"]:focus .race svg { animation: rm-shadow 1.6s ease-in-out infinite; }
+.rm-party figure[data-race="dragon"]:hover .race svg, .rm-party figure[data-race="dragon"]:focus .race svg { animation: rm-breathe 1.8s ease-in-out infinite; }
+.rm-party figure[data-race="dragon"]:hover .race, .rm-party figure[data-race="dragon"]:focus .race {
+  box-shadow: 0 0 0 2px var(--rm-ember), 0 0 0 3px #000, 0 0 0 4px rgba(255, 122, 26, .55), 0 0 26px rgba(255, 122, 26, .7); animation: rm-ember 1.8s ease-in-out infinite; }
+.rm-party figure[data-race="orc"]:hover .race svg, .rm-party figure[data-race="orc"]:focus .race svg { animation: rm-rage .18s linear infinite; }
+.rm-party figure[data-race="troll"]:hover .race svg, .rm-party figure[data-race="troll"]:focus .race svg { animation: rm-stomp 1.3s ease-in-out infinite; }
+.rm-party figure[data-race="goblin"]:hover .race svg, .rm-party figure[data-race="goblin"]:focus .race svg { animation: rm-jitter .3s ease-in-out infinite; }
+.rm-party figure[data-race="undead"]:hover .race svg, .rm-party figure[data-race="undead"]:focus .race svg { animation: rm-flicker 1.4s steps(1, end) infinite; }
+.rm-party figure[data-race="human"]:hover .race svg, .rm-party figure[data-race="human"]:focus .race svg { animation: rm-bow 1.4s ease-in-out infinite; }
+@keyframes rm-nod { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes rm-hop { 0%, 100% { transform: translateY(0) scaleY(1); } 30% { transform: translateY(-7px) scaleY(1.04); } 60% { transform: translateY(0) scaleY(.94); } }
+@keyframes rm-hammer { 0%, 100% { transform: rotate(-9deg) translateY(-2px); } 45% { transform: rotate(4deg) translateY(1px); } 55% { transform: rotate(5deg) translateY(2px); } }
+@keyframes rm-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes rm-shadow { 0%, 100% { opacity: 1; filter: none; } 50% { opacity: .45; filter: brightness(.6) saturate(.6); } }
+@keyframes rm-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+@keyframes rm-ember { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.25); } }
+@keyframes rm-rage { 0% { transform: translateX(-3px) rotate(-2deg); } 50% { transform: translateX(3px) rotate(2deg); } 100% { transform: translateX(-3px) rotate(-2deg); } }
+@keyframes rm-stomp { 0%, 100% { transform: translateY(0) scale(1); } 40% { transform: translateY(-4px) scale(1.03); } 55% { transform: translateY(2px) scale(.98, .95); } 70% { transform: translateY(0) scale(1); } }
+@keyframes rm-jitter { 0%, 100% { transform: rotate(-7deg) translateX(-1px); } 50% { transform: rotate(7deg) translateX(1px); } }
+@keyframes rm-flicker { 0%, 100% { opacity: 1; } 20% { opacity: .25; } 30% { opacity: 1; } 55% { opacity: .5; } 60% { opacity: 1; } 85% { opacity: .2; } 90% { opacity: 1; } }
+@keyframes rm-bow { 0%, 100% { transform: rotate(0) translateY(0); } 50% { transform: rotate(-6deg) translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { .rm-party figure:hover .race svg, .rm-party figure:focus .race svg, .rm-party figure:hover .race, .rm-party figure:focus .race { animation: none; } }
+
 /* ── dark pages that were parchment sheets: the treasury, the rule book, the drill ──────────── */
 html.realm.rm-dark body { max-width: 1180px; background: none; border: 0; box-shadow: none; padding: 0 16px 48px; color: var(--rm-text); }
 html.realm.rm-dark body::before { display: none; }

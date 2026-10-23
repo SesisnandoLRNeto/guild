@@ -350,7 +350,10 @@ function realmParty(cards) {
   out.push(...Object.entries(horde).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
     rmFigure(k, n, HORDE_WORD[k] || "", `Right now: ${quests(n)}. The card below says which.`, { plural: true })));
   const html = out.join("") || rmFigure("human", null, "nobody on the road", "The realm is quiet. Suspicious.", { name: "Quiet realm", dim: true });
-  if ($("#realm-party").innerHTML !== html) $("#realm-party").innerHTML = html;
+  // Compare with what we built last time, not with innerHTML: the browser rewrites entities when it
+  // serializes, so that comparison never matched and the figures were rebuilt on every refresh,
+  // which killed the hover (tooltip and animation) under the mouse.
+  if (realmParty.last !== html) { realmParty.last = html; $("#realm-party").innerHTML = html; }
 }
 
 function tilt(id) { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 5) - 2) * 0.35; }

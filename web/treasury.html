@@ -329,7 +329,7 @@ function realmParty() {
     rmFigure(k, money(v.cost), i === 0 ? EATS[k] || "" : `${Math.round(100 * v.cost / all)}% of the gold`,
       `In this period: ${money(v.cost)} over ${v.n} quest${v.n === 1 ? "" : "s"}, ${Math.round(100 * v.cost / all)}% of the quests' gold.`, { plural: true }))
     .join("") || rmFigure("human", null, "no gold spent", "Nothing in this period. The vault is dusty.", { name: "Empty vault", dim: true });
-  if ($("#realm-party").innerHTML !== html) $("#realm-party").innerHTML = html;
+  if (realmParty.last !== html) { realmParty.last = html; $("#realm-party").innerHTML = html; }   // keep the hover alive across refreshes
 }
 
 function render() { tiles(); daily(); where(); mix(); kinds(); worth(); scatter(); folders(); jev(); questsTable(); realmParty();

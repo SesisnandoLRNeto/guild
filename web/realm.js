@@ -51,6 +51,6 @@ function rmFigure(key, n, sub, extra = "", opts = {}) {
   const name = opts.name || (n === 1 && !opts.plural ? r.one : r.name);
   const tip = [r.who ? r.who + "." : "", r.tip, extra].filter(Boolean).join(" ");
   const badge = n == null ? "" : `<b class="n">${rmEsc(n)}</b>`;
-  return `<figure data-tip="${rmEsc(tip)}" tabindex="0"><span class="race big${r.side === "horde" ? " horde" : ""}${opts.dim ? " dim" : ""}">${rmBust(key)}${badge}</span>` +
+  return `<figure data-tip="${rmEsc(tip)}" data-race="${rmEsc(key)}" tabindex="0"><span class="race big${r.side === "horde" ? " horde" : ""}${opts.dim ? " dim" : ""}">${rmBust(key)}${badge}</span>` +
     `<figcaption>${rmEsc(name)}<small>${rmEsc(sub || "")}</small></figcaption></figure>`;
 }

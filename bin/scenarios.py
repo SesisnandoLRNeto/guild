@@ -444,7 +444,7 @@ def figure(race, sub, tip):
     """One race of the gauntlet, for the strip on the war table page (realm.css draws the ring and the hover)."""
     name = {"dwarf": "Dwarf", "goblin": "Goblins", "human": "Guildmaster"}[race]
     horde = " horde" if race == "goblin" else ""
-    return (f'<figure data-tip="{esc(tip)}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
+    return (f'<figure data-tip="{esc(tip)}" data-race="{race}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
             f'<figcaption>{name}<small>{esc(sub)}</small></figcaption></figure>')
 
 

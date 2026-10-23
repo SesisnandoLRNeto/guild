@@ -143,7 +143,7 @@ def figure_html(race, name, sub, tip):
     """A hero-banner figure, the same shape realm.js draws (the portrait, a name, a line, the hover)."""
     r = __import__("lore").race(race) or {}
     horde = " horde" if r.get("side") == "horde" else ""
-    return (f'<figure data-tip="{_html.escape(tip)}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
+    return (f'<figure data-tip="{_html.escape(tip)}" data-race="{race}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
             f'<figcaption>{_html.escape(name)}<small>{_html.escape(sub)}</small></figcaption></figure>')
 
 

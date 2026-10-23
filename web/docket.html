@@ -212,7 +212,7 @@ function realmParty(open) {
   const figs = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
     rmFigure(k, n, n === 1 ? "waits for your word" : "wait for your word", `Right now: ${n} ruling${n === 1 ? "" : "s"} on the docket from them.`));
   const html = figs.join("") || rmFigure("human", null, "nobody waits", "The hall is quiet. Enjoy it while it lasts.", { name: "Quiet hall", dim: true });
-  if ($("#realm-party").innerHTML !== html) $("#realm-party").innerHTML = html;
+  if (realmParty.last !== html) { realmParty.last = html; $("#realm-party").innerHTML = html; }   // keep the hover alive across refreshes
 }
 
 function render() {
