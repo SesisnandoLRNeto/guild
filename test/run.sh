@@ -212,6 +212,8 @@ root=sys.argv[1]
 for b in sorted(os.listdir(root)):
     if json.load(open(os.path.join(root,b,'board.json'))).get('wrapup'): print(b)" "$GUILD_HOME/quests/alpha/boards" | tail -1)
 has "a wrap-up asks for a grade" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" '"id": "grade"'
+has "a board page wears the realm" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'classList.add("realm","rm-dark")'
+has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'class="gg-party rm-party"'
 out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}')
 has "ready to merge waits for the validation" "$out" "Not ready to merge yet"
 [ -f "$GUILD_HOME/quests/alpha/grade.json" ] && bad "and nothing is recorded" "graded anyway" || ok "and nothing is recorded"
@@ -1133,10 +1135,8 @@ JSON
 has "a one-way path is a flow" "$("$GUILD" draw "$TMP/flow.json")" 'data-kind="flow"'
 printf '<!doctype html><body><h2>How the gears turn</h2>\n<p>x</p></body>' > "$TMP/page.html"
 "$GUILD" draw "$TMP/spec.json" --into "$TMP/page.html" >/dev/null
-has "--into lands the figure under the gears heading" "$(cat "$TMP/page.html")" '</h2>
-<figure class="guild-draw"'
-has "a board page wears the realm" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'classList.add("realm","rm-dark")'
-has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'class="gg-party rm-party"'
+has "--into lands the figure on the page" "$(cat "$TMP/page.html")" '<figure class="guild-draw"'
+is "right under the gears heading" "$(tr -d '\n' < "$TMP/page.html" | grep -o '</h2><figure class="guild-draw"' | head -1)" '</h2><figure class="guild-draw"'
 
 section "remote and notifications"
 cat > "$GUILD_HOME/local/remote.json" <<'JSON'
