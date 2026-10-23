@@ -891,8 +891,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 questions, waiting = [], ("The adventurer has not reported done yet. Grading and the next "
                                           "step open here when the quest ends.")
         shell = open(os.path.join(WEB, "shell.html")).read()
+        qmeta = load_json_safe(os.path.join(QUESTS, quest, "meta.json")) or {}
+        files_link = (f'<a class="hbtn" href="/q/{quest}/files"><i class="gi-icon gi-map" aria-hidden="true"></i>All the changes</a>'
+                      if os.path.isdir(qmeta.get("worktree") or "") else "")
         return (shell
                 .replace("{{TITLE}}", meta.get("title", board))
+                .replace("{{FILES}}", files_link)
                 .replace("{{QUEST}}", quest)
                 .replace("{{BOARD}}", board)
                 .replace("{{SUBTITLE}}", meta.get("subtitle", ""))

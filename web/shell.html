@@ -23,6 +23,11 @@
   header h1 { font-size: 17px; margin: 0; font-weight: 700; font-variant: small-caps; letter-spacing: .03em; }
   header .sub { color: var(--hint); font-size: 13px; font-style: italic; }
   header .quest { margin-left: auto; color: var(--hint); font-size: 12px; font-family: ui-monospace, monospace; }
+  header .hbtn { margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 13px;
+    color: #f3cf6c; text-decoration: none; border: 1px solid #8a6a1e; border-radius: 3px; background: linear-gradient(180deg, #2a2230, #15111a); }
+  header .hbtn:hover { border-color: #d9a441; }
+  header .hbtn .gi-icon { width: 15px; height: 15px; }
+  header .hbtn + .quest { margin-left: 0; }
   main { flex: 1; display: flex; min-height: 0; }
   iframe { flex: 1; border: 0; background: transparent; }
   aside { width: 400px; display: flex; flex-direction: column; min-height: 0; background: rgba(0, 0, 0, .28);
@@ -108,7 +113,7 @@
 <body>
 <header>
   <span class="gi-icon gi-swords crest" aria-hidden="true"></span><span class="mark">War table</span><h1>{{TITLE}}</h1><span class="sub">{{SUBTITLE}}</span>
-  <span class="quest">quest {{QUEST}}</span>
+  {{FILES}}<span class="quest">quest {{QUEST}}</span>
 </header>
 <main>
   <iframe src="content.html" title="analysis" allow="fullscreen" allowfullscreen></iframe>

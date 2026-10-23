@@ -8,6 +8,7 @@
   :root { --mono: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; --sans: ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.45 var(--sans); min-height: 100vh; }
+  html.realm.rm-dark body.wide { max-width: none; padding: 0; }     /* the map room uses the whole window */
   a { color: var(--rm-gold); }
   .rm-hero.room-hero { padding: 16px 26px 14px; margin: 14px auto 12px; max-width: none; margin-left: 18px; margin-right: 18px; }
   .rm-hero.room-hero .rm-title { font-size: 30px; }
@@ -21,7 +22,7 @@
   .btn.on { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; border-color: #6e4e10; font-weight: 600; }
   .btn.sm { padding: 2px 8px; font-size: 12px; }
   .btn b { font-weight: 600; margin-left: 2px; color: inherit; }
-  main.room { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 14px; padding: 0 18px 18px; height: calc(100vh - 168px); min-height: 480px; }
+  main.room { display: grid; grid-template-columns: clamp(300px, 24vw, 440px) minmax(0, 1fr); gap: 14px; padding: 0 18px 18px; height: calc(100vh - 168px); min-height: 480px; }
   .finder, .view { display: flex; flex-direction: column; min-height: 0; }
   .search { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; }
   .search .gi-icon { width: 16px; height: 16px; color: var(--rm-gold); flex: none; }
@@ -87,12 +88,12 @@
   .log .q { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--rm-gold); margin-left: 8px; }
   .log .acts { display: flex; gap: 6px; }
   .note { padding: 16px; color: var(--rm-dim); font-family: var(--sans); font-style: italic; }
-  @media (max-width: 900px) { main.room { grid-template-columns: 1fr; height: auto; } .finder ol.list { max-height: 40vh; } .vbody { max-height: 70vh; } }
+  @media (max-width: 900px) { main.room { grid-template-columns: minmax(0, 1fr); height: auto; } .finder ol.list { max-height: 40vh; } .vbody { max-height: 70vh; } }
 </style>
 <link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/realm.css">
 </head>
-<body>
+<body class="wide">
 <section class="rm-hero rm-frame room-hero">
   <div>
     <p class="rm-kicker">The war table · <span id="kicker">the map room</span></p>

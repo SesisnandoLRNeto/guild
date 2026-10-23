@@ -331,7 +331,13 @@ def page(slug, meta=None, export=False, image=None, prs=None):
         + figure("goblin", "hide in the tests", "Every scenario still to run is a place a goblin can hide. Run them all; count what you find.")
         + figure("human", "runs the gauntlet", "You. Pass, fail or skip each one; a fail goes back to the forge with your note, and the last pass writes the certificate.")
         + '</div>')
-    h = [f'<header>{back}{strip}<div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
+    # On the war table the header is a realm hero: title and buttons on the left, the three races on the
+    # right. The export for the team keeps the plain header.
+    nav = "" if export else (f'<nav class="nav">{back}<a class="btn" href="/q/{esc(slug)}/files">'
+                             '<i class="gi-icon gi-map" aria-hidden="true"></i>All the changes</a></nav>')
+    h = [('<header>' if export else '<header class="rm-hero rm-frame"><div>') + nav
+         + f'<div class="eyebrow">{esc(eyebrow)}</div><h1 class="rm-title">{esc(spec.get("title") or "Validate " + slug)}</h1>'
+         + ("" if export else '<div class="rm-rule"></div>')]
     if spec.get("lede"):
         h.append(f'<p class="lede">{rich(spec["lede"])}</p>')
     h.append('<div class="progress"><span id="count"></span><div class="bar" aria-hidden="true">'
@@ -349,7 +355,7 @@ def page(slug, meta=None, export=False, image=None, prs=None):
         done = summary(slug)
         h.append(f'<p class="note">The guildmaster ran this list: {done["pass"]} passed, {done["fail"]} failed, '
                  f'{done["skip"]} skipped, {done["open"]} not run. Their result shows on each scenario. Your ticks stay in your browser.</p>')
-    h.append('</header>')
+    h.append(('' if export else '</div>' + strip) + '</header>')
 
     tested = spec.get("tested") or ([{"what": meta.get("title") or slug, "ticket": meta.get("ticket", ""),
                                       "pr": f"#{prs['number']}" if prs else "", "state": (prs or {}).get("state", "")}] if meta else [])
@@ -427,6 +433,7 @@ def page(slug, meta=None, export=False, image=None, prs=None):
 
     script = EXPORT_JS.replace("__KEY__", json.dumps(f"guild-validate-{slug}")) if export else LIVE_JS
     return (PAGE_HEAD.replace("__TITLE__", esc(spec.get("title") or f"Validate {slug}")).replace("__THEME__", theme(export))
+            .replace('<html lang="en">', '<html lang="en">' if export else '<html lang="en" class="realm rm-dark">')
             + '<div class="wrap">' + "".join(h) + '</div><script>' + COPY_JS + script + '</script></body></html>')
 
 
@@ -511,6 +518,24 @@ footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padd
 .cert.stale{border-color:var(--warn);background:var(--warn-soft)}.cert.stale b{color:var(--warn)}
 .zoom{position:fixed;inset:0;background:rgba(0,0,0,.88);display:grid;place-items:center;z-index:9;cursor:zoom-out}.zoom img{max-width:96vw;max-height:94vh}
 @media (max-width:700px){.pair{grid-template-columns:1fr}.scen{grid-template-columns:28px minmax(0,1fr)}}
+/* the realm look on the war table (realm.css sets the tokens; the export keeps the parchment) */
+html.realm.rm-dark{--paper:rgba(0,0,0,.25);--ink:#e9dcc0;--muted:#a8987a;--accent-soft:rgba(217,164,65,.14);--ok-soft:rgba(127,191,90,.14);--bad-soft:rgba(176,65,46,.22);--warn-soft:rgba(224,169,58,.16);--code-bg:rgba(0,0,0,.4);--bg:#15111a}
+html.realm.rm-dark h1.rm-title{display:block;font-size:30px}
+html.realm.rm-dark header.rm-hero{display:flex;gap:18px 32px;padding:18px 26px 16px;margin:14px auto 22px;border-bottom:0}
+html.realm.rm-dark header.rm-hero>div:first-child{display:grid;gap:12px;flex:1 1 420px;min-width:0}
+html.realm.rm-dark .rm-party.gauntlet{background:none;border:0;box-shadow:none;padding:0;justify-content:flex-end}
+html.realm.rm-dark .nav{display:flex;gap:8px;flex-wrap:wrap}
+html.realm.rm-dark .btn{background:linear-gradient(180deg,#2a2230,#15111a);border-color:#8a6a1e;color:#e9dcc0;display:inline-flex;align-items:center;gap:6px}
+html.realm.rm-dark .btn .gi-icon{width:14px;height:14px}
+html.realm.rm-dark .btn[hidden]{display:none}
+html.realm.rm-dark .rm-party.gauntlet figure{width:112px}
+html.realm.rm-dark .btn:hover{color:#2a1d14}
+html.realm.rm-dark .btn.warn{background:#8a1c12;border-color:#b0412e;color:#fff5dc}
+html.realm.rm-dark .copy,html.realm.rm-dark .mk{background:#241d2b;color:#e9dcc0}
+html.realm.rm-dark .mnote{background:#0d0b10}
+html.realm.rm-dark .nname{fill:#e9dcc0}
+html.realm.rm-dark .screen figure,html.realm.rm-dark figure.shot{background:#000}
+html.realm.rm-dark .zoom{background:rgba(0,0,0,.92)}
 </style></head><body>"""
 
 COPY_JS = r"""
