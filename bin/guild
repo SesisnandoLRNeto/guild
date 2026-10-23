@@ -95,8 +95,8 @@ guild prs                           each quest's PR as GitHub sees it (state, re
 guild jev status|test|on|off|allow|block|risk
                                     Jev (TypeSafe) for small judgment calls; scopes: board, quests, global
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
-guild draw <spec.json> [--into PAGE]    draw a state machine, flow, organogram or rules table for a page (picks the form, numbers the scenes)
                                     data model, impact and business rule changes, drawn for a wrap-up
+guild draw <spec.json> [--into PAGE]    draw a state machine, flow, organogram or rules table for a page (picks the form, numbers the scenes)
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)

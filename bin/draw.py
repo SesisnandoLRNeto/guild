@@ -556,7 +556,8 @@ def main(argv):
     fig = figure(spec)
     if "--into" in argv:
         page = argv[argv.index("--into") + 1]
-        open(page, "w").write(into(page, fig))
+        out = into(page, fig)             # read first: open(page, "w") would empty it
+        open(page, "w").write(out)
         print(f"drawn into {page} as {pick(spec)[0]}")
     elif "--out" in argv:
         out = argv[argv.index("--out") + 1]
