@@ -4,8 +4,9 @@
 //
 // Each running session is one hero, chosen by its model: Sonnet is an archer, Opus a mage, Fable
 // a paladin, Haiku a warrior, Codex an artificer, and a model the guild does not know walks as a
-// wanderer with a torch. A warrior always walks at the front: when no session runs on Haiku the
-// guild's own guard takes the place, so the party is never without a blade.
+// wanderer with a torch. Two heroes are always there: the mage, who is the quartermaster itself
+// (it runs on Opus), and a warrior at the front, the guild's own guard when no session runs on
+// Haiku, so the party is never without a blade.
 //
 // Enemies come in from the right. Quests in trouble send their own creature (a goblin for red
 // checks, a troll for a blocked quest, an orc for a failed one); on a quiet road a bat, a slime
@@ -70,14 +71,18 @@ export function foeFor(state: string | undefined): FoeKind | undefined {
 const RANK: Record<Hero, number> = { archer: 0, mage: 1, artificer: 2, wanderer: 3, paladin: 4, warrior: 5 };
 const MAX_HEROES = 8;
 
-/** The heroes in marching order, with the guild's guard added when no warrior is among them. */
+/**
+ * The heroes in marching order. The quartermaster's mage is always among them, and the guild's
+ * guard takes the front when no warrior is.
+ */
 export function marchingOrder(heroes: readonly Hero[]): Hero[] {
-  const sorted = [...heroes].sort((a, b) => RANK[a] - RANK[b]);
+  const all: Hero[] = heroes.includes("mage") ? [...heroes] : [...heroes, "mage"];
+  const sorted = all.sort((a, b) => RANK[a] - RANK[b]);
   if (!sorted.includes("warrior")) sorted.push("warrior");
   return sorted.slice(-MAX_HEROES);        // too many to draw: the back of the line waits at camp
 }
 
-export const DEFAULT_PARTY: Party = { heroes: ["warrior"], foes: [] };
+export const DEFAULT_PARTY: Party = { heroes: ["mage", "warrior"], foes: [] };
 
 export type PartyPalette = {
   archer: number; mage: number; paladin: number; warrior: number; artificer: number; wanderer: number;

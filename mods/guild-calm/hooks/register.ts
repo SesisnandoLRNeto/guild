@@ -60,8 +60,10 @@ async function readTheme($: EngineInterface): Promise<unknown> {
 
 /**
  * The party from the quests folder: every quest whose status is `working` walks as the hero of
- * its model (the quartermaster included), and every blocked, failed or checks-red quest sends its
- * creature down the road. A quest that cannot be read is simply not on the road.
+ * its model, and every blocked, failed or checks-red quest sends its creature down the road. The
+ * quartermaster and the boards are pseudo quests with no model of their own: the quartermaster is
+ * the party's mage by rule (see marchingOrder), so they add no hero here. A quest that cannot be
+ * read is simply not on the road.
  */
 async function readRoster($: EngineInterface): Promise<void> {
   const next: Party = { heroes: [], foes: [] };
@@ -73,12 +75,13 @@ async function readRoster($: EngineInterface): Promise<void> {
     const state = status.split("\n")[0]?.split("\t")[0]?.trim() ?? "";
     if (state === "working") {
       const meta = await $.fs.read(`${dir}/meta.json`).catch(() => "{}");
-      let model = "";
+      let model = "", pseudo = false;
       try {
-        const m = JSON.parse(meta) as { model?: string; build_model?: string };
+        const m = JSON.parse(meta) as { model?: string; build_model?: string; pseudo?: boolean };
         model = m.model || m.build_model || "";
+        pseudo = m.pseudo === true;
       } catch { /* a quest without readable meta walks as a wanderer */ }
-      next.heroes.push(heroFor(model));
+      if (!pseudo) next.heroes.push(heroFor(model));
     }
     const foe = foeFor(state);
     if (foe) next.foes.push(foe);
