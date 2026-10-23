@@ -82,7 +82,7 @@ Write `decisions.json` beside the page and pass `--decisions`:
 - A short "what I already ruled out and why".
 - Numbers when they exist: bundle size, query count, render time, token cost.
 
-**Wrap-up report** (after the trial, before or with the PR). Open it with `--wrapup`, which marks it as the quest's report and leaves the quest working instead of waiting on a decision. A code quest cannot report `done` without one.
+**Wrap-up report** (after the trial, before or with the PR). Open it with `--wrapup`, which marks it as the quest's report and leaves the quest working instead of waiting on a decision. A code quest cannot report `done` without one. The wrap-up stays hidden (no grading, not on the docket) until you report `done`, so settle the checklist and any open question first; a question asked after the wrap-up is posted would otherwise sit beside it. `--no-scenarios "<why>"` waives the checklist for good: a draft scenarios.json left behind no longer holds back the merge.
 
 Write it so someone who does not read code knows what happened in one minute. The war table already puts an "At a glance" strip on top (where the quest stands as a path of steps, cost, time, checks, trial, PR, grade), so do not repeat those numbers. Follow the template's order:
 
