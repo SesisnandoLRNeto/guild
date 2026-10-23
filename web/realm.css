@@ -210,3 +210,10 @@ html.realm.rm-dark table.proof td.fail, html.realm.rm-dark .fail { color: #f0a08
 html.realm.rm-dark pre.mermaid { background: #f3e7c9; border-color: #8a6a1e; }
 html.realm.rm-dark .guild-impact { --gi-card: #241d2b; --gi-line: #4a3f52; --gi-warn: #e0a93a; --gi-accent: #d9a441; }
 html.realm.rm-dark .gg-head .race.small { vertical-align: middle; }
+/* callouts an adventurer styles for paper (a pale yellow .warn, grey table borders) must still read on the stone */
+html.realm.rm-dark .warn, html.realm.rm-dark .warning, html.realm.rm-dark .callout, html.realm.rm-dark .alert, html.realm.rm-dark .notice,
+html.realm.rm-dark .info, html.realm.rm-dark .tip, html.realm.rm-dark .danger, html.realm.rm-dark .caution, html.realm.rm-dark .important {
+  background: rgba(224, 169, 58, .14); color: var(--rm-text); border: 1px solid rgba(224, 169, 58, .35); border-left: 3px solid var(--warn, #e0a93a); border-radius: 4px; }
+html.realm.rm-dark .danger, html.realm.rm-dark .alert { background: rgba(176, 65, 46, .18); border-color: rgba(176, 65, 46, .4); border-left-color: var(--bad, #e0573f); }
+html.realm.rm-dark .info, html.realm.rm-dark .tip { background: rgba(79, 147, 224, .12); border-color: rgba(79, 147, 224, .35); border-left-color: var(--rm-ice); }
+html.realm.rm-dark td, html.realm.rm-dark th, html.realm.rm-dark img, html.realm.rm-dark table { border-color: var(--line); }
