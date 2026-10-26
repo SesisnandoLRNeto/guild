@@ -84,6 +84,9 @@ guild drill                         this week's three-question drill on those ru
 guild why <slug>                    the quest's Why card: show it, or put it on the docket again (open)
 guild pr-body [slug]                the PR's contract section (acceptance, behaviour, checklist) for HEAD; gh pr create needs it
 guild behaviour [slug]              an independent validator drives the running app through the scenarios (never reads the code)
+guild reap [--dry-run]              stop what finished quests left running: window (paused, revivable), stray
+                                    processes by exact PID, s<ticket>-* containers; after GUILD_REAP_AFTER
+                                    minutes (default 30) in done/failed/stopped, and on its own every 5 minutes
 guild tidy [--dry-run]              move old events to monthly files, delete the dead pages and pictures of
                                     closed quests (runs monthly on its own, and at every guild close)
 guild lore                          the bestiary: which class each model is, what each state looks like
@@ -305,10 +308,13 @@ cmd_revive() {
     slug=$(basename "$d")
     [ -n "$only" ] && [ "$only" != "$slug" ] && continue
     state=$(cut -f1 "$d/status" 2>/dev/null)
-    case "$state" in working|needs-decision|blocked|stopped) ;; *) continue ;; esac
+    # a paused quest (guild reap) comes back when you ask for it by name, never in the sweep
+    if [ -f "$d/paused" ]; then [ -n "$only" ] || continue
+    else case "$state" in working|needs-decision|blocked|stopped) ;; *) continue ;; esac; fi
     tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$slug" && continue
     open_tab "$slug" "$HOME" "GUILD_RESUME=1 bash '$d/launch.sh'" --bg >/dev/null
-    event "$slug" "$state" "window revived after a restart"
+    if [ -f "$d/paused" ]; then rm -f "$d/paused"; date +%Y-%m-%dT%H:%M:%S > "$d/revived"; event "$slug" "$state" "window revived after a pause"
+    else event "$slug" "$state" "window revived after a restart"; fi
     echo "revived $slug ($state)"
     revived=$((revived + 1))
   done
@@ -990,6 +996,8 @@ d = sys.argv[1]
 m = json.load(open(os.path.join(d, "meta.json")))
 state, note, _ = (open(os.path.join(d, "status")).read().rstrip("\n").split("\t") + ["", "", ""])[:3]
 h = m["harness"] + ("/" + m["model"] if m.get("model") else "")
+if os.path.exists(os.path.join(d, "paused")) and state in ("done", "failed", "stopped"):
+    state += " (paused)"
 print(f'{m["slug"]:<28} {os.path.basename(m["repo"]):<22} {h:<18} {state:<15} {note[:70]}')
 PY
   done
@@ -1117,6 +1125,7 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   if [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ]; then
     printf '%s\n' "${note% (no*}" > "$(qdir "$slug")/scenarios.waived"
   fi
+  [ "$state" = working ] && rm -f "$(qdir "$slug")/paused"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
   # The wrap-up waits hidden until the end: it opens now, when the quest really is done.
@@ -1528,6 +1537,7 @@ case "${1:-}" in
   files) shift; need_quest "${1:-}"
     port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
     echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/files" 2>/dev/null || true ;;
+  reap) shift; python3 "$GUILD_REPO/bin/reaper.py" run "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
   lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;

@@ -114,6 +114,7 @@ guild up ~/Workspace
 | `guild files <slug>` | The map room at `/q/<slug>/files`: a finder like an editor's (type part of a name, changed files first), the file with the quest's changes marked in the margin, a diff against the base branch or any commit, and the file's history. Also the "files" link on a campaign card and the Files tile on a report |
 | `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
 | `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
+| `guild reap [--dry-run]` | Stop what finished quests left running: window (paused, `guild revive <slug>` brings it back), stray processes by exact PID, `s<ticket>-*` containers. After 30 minutes in done, failed or stopped (`GUILD_REAP_AFTER`); runs on its own every 5 minutes. Skips a quest that looks busy. `"auto_reap": false` in `local/dispatch.json` turns it off |
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
