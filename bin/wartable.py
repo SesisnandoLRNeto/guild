@@ -975,6 +975,12 @@ def refresh_prs_forever():
                 tidy.maybe()
         except Exception:
             pass
+        try:                                   # stop what finished quests left running (every 5 minutes)
+            import contextlib, io, reaper
+            with contextlib.redirect_stdout(io.StringIO()):
+                reaper.maybe()
+        except Exception:
+            pass
         time.sleep(120)
 
 

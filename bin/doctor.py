@@ -172,7 +172,7 @@ def check_state():
         meta = json.load(open(os.path.join(d, "meta.json")))
         if state in ("working", "needs-decision", "blocked", "stopped"):
             active += 1
-            if live and slug not in windows:
+            if live and slug not in windows and not os.path.exists(os.path.join(d, "paused")):
                 orphans.append(slug)
         if state in ("done", "failed") and os.path.isdir(meta.get("worktree", "")):
             stale.append(slug)
