@@ -8,12 +8,16 @@
 // (it runs on Opus), and a warrior at the front, the guild's own guard when no session runs on
 // Haiku, so the party is never without a blade.
 //
-// Enemies come in from the right. Quests in trouble send their own creature (a goblin for red
-// checks, a troll for a blocked quest, an orc for a failed one); on a quiet road a bat, a slime
-// or a skeleton wanders in. Each foe has the hero who answers it: the archer shoots the bat, the
-// mage melts the slime, the artificer throws a flask at the goblin, the paladin's light drops the
-// troll, and the warrior cuts down whatever reaches the front. The scene is a pure function of
-// the tick and the party, so a fight always plays out the same way.
+// The road is a sequence of encounters, one every ten seconds. Quests in trouble send their own
+// creature (a goblin for red checks, a troll for a blocked quest, an orc for a failed one), and
+// between them the road itself brings the rest: bats, slimes, skeletons, wolf packs, spiders,
+// wisps, ghosts, a mimic that was never a chest, and now and then a boss (an ogre, a dragon whelp)
+// that takes two blows. Some stretches are not creatures but obstacles: a fallen log, a river, a
+// locked gate, a web across the path, a chasm, a boulder. Each encounter has the hero who answers
+// it: the archer shoots, the mage casts (and freezes the river), the artificer throws a flask (and
+// picks the gate's lock), the paladin's light drops what is dark (and bridges the chasm), the
+// wanderer's torch burns the web, and the warrior cuts down or clears whatever reaches the front.
+// The scene is a pure function of the tick and the party, so a fight always plays out the same way.
 //
 // A Raster's `cells` prop is base64 of columns * rows little-endian u32 triplets
 // [codePoint, foreground, background]. Colors are 0x00RRGGBB, and bit 24 alone
@@ -39,7 +43,9 @@ const HEAD = 2, BODY = 3, FEET = 4;          // the rows the figures stand on
 
 // ── who walks and what comes at them ──────────────────────────────────────────
 export type Hero = "archer" | "mage" | "paladin" | "warrior" | "artificer" | "wanderer";
-export type FoeKind = "bat" | "slime" | "skeleton" | "goblin" | "orc" | "troll";
+export type FoeKind = "bat" | "slime" | "skeleton" | "goblin" | "orc" | "troll"
+  | "wolves" | "spider" | "wisp" | "ghost" | "mimic" | "ogre" | "whelp"
+  | "log" | "river" | "gate" | "web" | "chasm" | "boulder";
 /** What the road shows: the heroes back to front, and the creatures the quests in trouble send. */
 export type Party = { heroes: Hero[]; foes: FoeKind[] };
 
@@ -88,6 +94,8 @@ export type PartyPalette = {
   archer: number; mage: number; paladin: number; warrior: number; artificer: number; wanderer: number;
   tree: number; treeFar: number; grass: number; star: number;
   bat: number; slime: number; bones: number; goblin: number; orc: number; troll: number;
+  wolf: number; spider: number; wisp: number; ghost: number; mimic: number; ogre: number; dragon: number;
+  wood: number; water: number; ice: number; iron: number; stone: number; web: number;
   spell: number; light: number; flask: number; flame: number;
 };
 export type PartyFamily = "dark" | "light";
@@ -96,10 +104,14 @@ export const PARTY_PALETTES: Record<PartyFamily, PartyPalette> = {
   dark: { archer: 0xf0a430, mage: 0x3ec6ec, paladin: 0xf5d76e, warrior: 0xef4a3c, artificer: 0xd48cf0, wanderer: 0xc8b89a,
           tree: 0x4fa85a, treeFar: 0x2f5f38, grass: 0x3a6b42, star: 0xf2e3a6,
           bat: 0xb07ad8, slime: 0x9fd04a, bones: 0xe6e1d3, goblin: 0x7fc24f, orc: 0x6f9a3a, troll: 0x9a9a84,
+          wolf: 0xa7adb8, spider: 0xc0566e, wisp: 0x9ff3e0, ghost: 0xd8e4f0, mimic: 0xc9873a, ogre: 0xb08a5a, dragon: 0xe8553a,
+          wood: 0x9a6a3a, water: 0x4f93e0, ice: 0xbfefff, iron: 0x8a8f9a, stone: 0x9a948a, web: 0xd9d9d9,
           spell: 0x7fe8ff, light: 0xfff1b0, flask: 0xe6a8ff, flame: 0xffb347 },
   light: { archer: 0xb5651d, mage: 0x1e7fa0, paladin: 0xa8841f, warrior: 0xb33a2e, artificer: 0x8a4fb0, wanderer: 0x7a6a50,
            tree: 0x3f7d3a, treeFar: 0x9bb89a, grass: 0x8fb08a, star: 0xa8841f,
            bat: 0x7a3fa8, slime: 0x5a8a1a, bones: 0x6e6a60, goblin: 0x4f8a2a, orc: 0x3f6a1a, troll: 0x6a6a58,
+           wolf: 0x5a606a, spider: 0x9a2a48, wisp: 0x1f8f7a, ghost: 0x5a6a80, mimic: 0x8a5a1a, ogre: 0x7a5a30, dragon: 0xb3301a,
+           wood: 0x7a4a1a, water: 0x1f5fb0, ice: 0x2f8fb0, iron: 0x4a4f5a, stone: 0x6a645a, web: 0x6a6a6a,
            spell: 0x0f8fb0, light: 0xc08a10, flask: 0x9a3fb0, flame: 0xc75a10 },
 };
 
@@ -143,16 +155,63 @@ const GRASS = "  \\v/    ,    .   \\v/      ,  .     \\v/   ";
 // one column a tick (it walks left while the party walks right). The hero who answers it
 // shoots from where they walk; a foe nobody shoots down reaches the warrior's blade.
 const FIGHT = 70, START = 34, BURST = 4;
-type Foe = { rows: Array<[number, string]>; color: keyof PartyPalette; answer: Hero };
+type Rows = Array<[number, string]>;
+/**
+ * One encounter. `answer` is the hero who deals with it; a creature nobody answers reaches the
+ * warrior's blade. A boss (`tough`) shrugs off the first blow: it staggers, shows `wounded`, and
+ * only the warrior finishes it. An obstacle (`solved`) does not fall: the answer turns it into the
+ * way across (ice on the river, a bridge of light on the chasm), and the party walks over it.
+ */
+type Foe = { rows: Rows; color: keyof PartyPalette; answer: Hero; tough?: Rows; solved?: Rows; solvedColor?: keyof PartyPalette };
+const walk = (t: number, a = "/ \\", b = " | ") => (t % 4 < 2 ? a : b);
 const FOES: Record<FoeKind, (t: number) => Foe> = {
+  // ── creatures ──
   bat: (t) => ({ rows: [[HEAD, t % 4 < 2 ? "^o^" : "vov"]], color: "bat", answer: "archer" }),           // flaps its wings
   slime: (t) => ({ rows: [[BODY, t % 4 < 2 ? " __ " : " _  "], [FEET, "(oo)"]], color: "slime", answer: "mage" }),
-  skeleton: (t) => ({ rows: [[HEAD, " o "], [BODY, "<|\\"], [FEET, t % 4 < 2 ? "/ \\" : " | "]], color: "bones", answer: "warrior" }),
-  goblin: (t) => ({ rows: [[BODY, t % 4 < 2 ? ">o<" : ">o-"], [FEET, t % 4 < 2 ? "/ \\" : " | "]], color: "goblin", answer: "artificer" }),
-  orc: (t) => ({ rows: [[HEAD, "[o]"], [BODY, "<#\\"], [FEET, t % 4 < 2 ? "/ \\" : " | "]], color: "orc", answer: "warrior" }),
+  skeleton: (t) => ({ rows: [[HEAD, " o "], [BODY, "<|\\"], [FEET, walk(t)]], color: "bones", answer: "warrior" }),
+  goblin: (t) => ({ rows: [[BODY, t % 4 < 2 ? ">o<" : ">o-"], [FEET, walk(t)]], color: "goblin", answer: "artificer" }),
+  orc: (t) => ({ rows: [[HEAD, "[o]"], [BODY, "<#\\"], [FEET, walk(t)]], color: "orc", answer: "warrior" }),
   troll: (t) => ({ rows: [[HEAD, " 0 "], [BODY, "<##>"], [FEET, t % 4 < 2 ? "/  \\" : " || "]], color: "troll", answer: "paladin" }),
+  // a pack of two: the archer drops the first wolf, the warrior meets the second
+  wolves: (t) => ({ rows: [[BODY, "<^^ <^^"], [FEET, t % 4 < 2 ? "/\\/\\ /\\/\\" : "|| |  || |"]], color: "wolf", answer: "archer",
+                    tough: [[BODY, "    <^^"], [FEET, t % 4 < 2 ? "     /\\/\\" : "     ||||"]] }),
+  // hangs from a thread and swings down at the party
+  spider: (t) => ({ rows: [[HEAD, t % 6 < 3 ? " | " : "  |"], [BODY, t % 4 < 2 ? "/o\\" : "\\o/"]], color: "spider", answer: "mage" }),
+  wisp: (t) => ({ rows: [[t % 8 < 4 ? HEAD : BODY, t % 2 ? "o" : "*"]], color: "wisp", answer: "artificer" }),       // bobs and flickers
+  ghost: (t) => ({ rows: [[HEAD, " .-."], [BODY, "(o o)"], [FEET, t % 4 < 2 ? " ^^^" : "^^^ "]], color: "ghost", answer: "paladin" }),
+  // a chest on the road, until it is close enough to bite
+  mimic: (t) => ({ rows: t < START - 12 ? [[FEET, "[==]"]] : [[BODY, "/vv\\"], [FEET, "[^^]"]], color: "mimic", answer: "warrior" }),
+  // the bosses: the right hero staggers them, the warrior finishes them
+  ogre: (t) => ({ rows: [[1, " (o)"], [HEAD, "<###>"], [BODY, " ### "], [FEET, walk(t, "/   \\", " | | ")]], color: "ogre", answer: "paladin",
+                  tough: [[1, " (x)"], [HEAD, "<###>"], [BODY, " #!# "], [FEET, " | | "]] }),
+  whelp: (t) => ({ rows: [[HEAD, t % 4 < 2 ? "<\\^/ " : "</^\\ "], [BODY, "<{##}~"], [FEET, walk(t, " /  \\", "  ||  ")]], color: "dragon", answer: "mage",
+                   tough: [[HEAD, " \\x/ "], [BODY, "<{#!}~"], [FEET, "  ||  "]] }),
+  // ── obstacles: the answer opens the way, then the party walks across ──
+  log: () => ({ rows: [[FEET, "=##=#="]], color: "wood", answer: "warrior", solved: [[FEET, "=.  .="]], solvedColor: "wood" }),
+  river: (t) => ({ rows: [[FEET, t % 4 < 2 ? "~~=~~~~=" : "~=~~~=~~"]], color: "water", answer: "mage", solved: [[FEET, "========"]], solvedColor: "ice" }),
+  gate: () => ({ rows: [[1, "_____"], [HEAD, "|###|"], [BODY, "|#o#|"], [FEET, "|###|"]], color: "iron", answer: "artificer",
+                 solved: [[1, "_____"], [HEAD, "|   |"], [BODY, "|   |"], [FEET, "|   |"]], solvedColor: "iron" }),
+  web: () => ({ rows: [[1, "\\ | /"], [HEAD, " \\|/ "], [BODY, "--*--"], [FEET, " /|\\ "]], color: "web", answer: "wanderer",
+                solved: [[FEET, " ' . "]], solvedColor: "flame" }),
+  chasm: () => ({ rows: [[FEET, "_      _"]], color: "stone", answer: "paladin", solved: [[FEET, "_======_"]], solvedColor: "light" }),
+  boulder: () => ({ rows: [[BODY, " ___ "], [FEET, "(@@@)"]], color: "stone", answer: "warrior", solved: [[FEET, " . o "]], solvedColor: "stone" }),
 };
-const QUIET_ROAD: FoeKind[] = ["bat", "slime", "skeleton"];
+/** The road when no quest is in trouble: a fixed walk, creatures and obstacles in turn, a boss now and then. */
+const QUIET_ROAD: FoeKind[] = [
+  "bat", "log", "wolves", "slime", "river", "spider", "skeleton", "gate", "wisp", "ogre",
+  "web", "mimic", "ghost", "chasm", "bat", "boulder", "slime", "whelp",
+];
+/** The encounters in order: each creature a troubled quest sends comes first in its turn, the road fills the rest. */
+export function roadOf(party: Party): FoeKind[] {
+  if (party.foes.length === 0) return QUIET_ROAD;
+  const out: FoeKind[] = [];
+  const turns = Math.max(party.foes.length, Math.ceil(QUIET_ROAD.length / 2));
+  for (let i = 0; i < turns; i++) {
+    out.push(party.foes[i % party.foes.length]!);
+    out.push(QUIET_ROAD[i % QUIET_ROAD.length]!);
+  }
+  return out;
+}
 
 /** One frame: stars and a moon, two layers of forest, the party walking right, a fight. */
 export function partyFrame(columns: number, tick: number, palette: PartyPalette, party: Party = DEFAULT_PARTY): string {
@@ -191,19 +250,21 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
   const front = left + width;                                // the column just ahead of the warrior
   const heroX = (n: number) => left + n * STEP;
 
-  // the fight of the moment: a creature a quest in trouble sent, or whatever a quiet road has
+  // the encounter of the moment: a creature a quest in trouble sent, or whatever the road brings
   const t = tick % FIGHT;
   const round = Math.floor(tick / FIGHT);
-  const road = party.foes.length > 0 ? party.foes : QUIET_ROAD;
+  const road = roadOf(party);
   const kind = road[round % road.length]!;
   const foeOf = FOES[kind];
+  const first = foeOf(0);
   const foeX = (s: number) => front + START - s;
-  // who answers: the hero this foe belongs to if they walk with us, else the warrior up close
-  const answerer = heroes.lastIndexOf(foeOf(0).answer);
+  const wide = Math.max(...first.rows.map(([, r]) => r.length));
+  // who answers: the hero this encounter belongs to if they walk with us, else the warrior up close
+  const answerer = heroes.lastIndexOf(first.answer);
   const shooter = answerer >= 0 ? answerer : heroes.length - 1;
   const shot = FIGURES[heroes[shooter]!]!.shot;
   const shotAt = 4 + (heroes.length - 1 - shooter);          // the back of the line takes a beat longer to see it
-  const melee = START - 3;                                   // the foe reaches the warrior's blade
+  const melee = START - 3;                                   // it reaches the warrior's blade
   let hit = melee;
   if (shot) {
     for (let s = shotAt; s < melee; s++) {
@@ -211,12 +272,16 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
     }
   }
   const shotLands = shot !== undefined && hit < melee;
-  const swinging = !shotLands && t >= hit - 2 && t <= hit + 1;
+  const tough = first.tough !== undefined && shotLands;      // a boss or a pack: the shot only staggers it
+  const end = tough ? melee : hit;                           // when the encounter is over
+  const swinging = (!shotLands || tough) && t >= end - 2 && t <= end + 1;
   const casting = shotLands && t >= shotAt - 2 && t <= shotAt + 1;
+  const solved = first.solved !== undefined;
 
   // what stands in the way of the forest: the party, and the foe or its burst
   const boxes: Array<[number, number]> = [[left - 1, left + width + 1]];
-  if (t < hit + BURST) boxes.push([foeX(Math.min(t, hit)) - 2, foeX(Math.min(t, hit)) + 4]);
+  if (solved) boxes.push([foeX(t) - 2, foeX(t) + wide + 1]);                       // terrain stays on the road
+  else if (t < end + BURST) boxes.push([foeX(Math.min(t, end)) - 2, foeX(Math.min(t, end)) + wide + 1]);
   const blocked = (x: number, w: number) => boxes.some(([b0, b1]) => x + w > b0 && x <= b1);
 
   // the forest: near pines and bushes first, then far pines only where nothing near stands
@@ -249,6 +314,14 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
     if (g !== " " && cp[FEET * columns + c] === SPACE && !taken[FEET * columns + c] && !blocked(c, 1)) put(FEET, c, g, palette.grass);
   }
 
+  // an obstacle lies on the road: drawn under the party, so they walk across what the answer made of it
+  if (solved) {
+    const done = t >= end;
+    const art = done ? first.solved! : foeOf(t).rows, color = palette[done ? first.solvedColor ?? first.color : first.color];
+    for (const [row, line] of art) text(row, foeX(t), line, color);
+    if (done && t < end + BURST) text(HEAD, foeX(end) + 1, t < end + 2 ? "\\*/" : " . ", palette.star);
+  }
+
   const stride = Math.floor(tick / 2) % 2;
   const sparkle = ["*", ".", "x", "'"][Math.floor(tick / 3) % 4]!;   // no "+": that is the paladin's mark
   const flicker = ["'", "`", "'", "\""][Math.floor(tick / 2) % 4]!;
@@ -270,14 +343,18 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
     [...own].forEach((ch, i) => put(FEET, x + i, ch, color));
   });
 
-  // the foe walks in, and falls in a little burst
-  if (t < hit) {
+  // the creature walks in, staggers if it is tough, and falls in a little burst
+  if (!solved && t < end) {
     const foe = foeOf(t), x = foeX(t);
-    for (const [row, s] of foe.rows) text(row, x, s, palette[foe.color]);
-  } else if (t < hit + BURST) {
-    const x = foeX(hit), row = kind === "bat" ? HEAD : BODY;
-    clear(row, x - 1, x + 3);
-    text(row, x - 1, t < hit + 2 ? "\\*/" : " . ", palette.star);
+    const rows = tough && t >= hit ? first.tough! : foe.rows;
+    const color = tough && t >= hit && t < hit + 2 ? palette.star : palette[foe.color];   // flashes when the shot lands
+    for (const [row, line] of rows) text(row, x, line, color);
+    if (tough && t >= hit && t < hit + 3) text(1, x + 1, "!", palette.star);
+  } else if (!solved && t < end + BURST) {
+    const x = foeX(end), rows = (tough ? first.tough! : first.rows).map(([r]) => r);
+    const row = rows[Math.floor(rows.length / 2)] ?? BODY;
+    for (const r of rows) clear(r, x - 1, x + wide);
+    text(row, x + Math.max(0, Math.floor(wide / 2) - 2), t < end + 2 ? "\\*/" : " . ", palette.star);
   }
   // the arrow, the spell, the flask or the light in flight
   if (shotLands && shot && t >= shotAt && t < hit) {
