@@ -35,7 +35,8 @@ EVERY_MINUTES = 5
 CLOSED_DAYS = 7
 BUSY_CPU = 5.0
 SCRATCH_ROOTS = ("/private/tmp", "/tmp")
-SCRATCH_RE = re.compile(r"(?:/private)?/tmp/(?:claude-\d+/)?[A-Za-z0-9][A-Za-z0-9._-]*")
+SCRATCH_RE = re.compile(r"(?:^|[\s\"'=:(])((?:/private)?/tmp/(?:claude-\d+/)?[A-Za-z0-9][A-Za-z0-9._-]*)")
+GENERIC = {"out", "test", "tests", "build", "tmp", "log", "logs", "data", "work", "cache", "run", "output", "x", "a"}
 
 
 def grace_minutes():
@@ -161,7 +162,7 @@ def folders_of(q):
                 continue
             for m in SCRATCH_RE.findall(line):
                 name = m.rsplit("/", 1)[-1]
-                if name.startswith("claude-") or name.startswith("-"):
+                if name.startswith("claude-") or name.startswith("-") or len(name) < 4 or name in GENERIC:
                     continue                      # claude's own task folders, not a place a quest worked
                 out.add(real(m))
     out.discard("")
@@ -173,12 +174,14 @@ def folders_of(q):
 def process_table():
     """{pid: {ppid, cpu, command}} for the whole machine."""
     table = {}
-    for line in sh(["ps", "-axo", "pid=,ppid=,%cpu=,command="]).splitlines():
-        parts = line.split(None, 3)
-        if len(parts) < 4:
+    for line in sh(["ps", "-axo", "pid=,ppid=,%cpu=,lstart=,command="]).splitlines():
+        parts = line.split(None, 8)          # lstart is five words: Mon Oct 26 14:07:49 2026
+        if len(parts) < 9:
             continue
         try:
-            table[int(parts[0])] = {"ppid": int(parts[1]), "cpu": float(parts[2]), "command": parts[3]}
+            started = datetime.strptime(" ".join(parts[3:8]), "%a %b %d %H:%M:%S %Y")
+            table[int(parts[0])] = {"ppid": int(parts[1]), "cpu": float(parts[2]), "start": started,
+                                    "lstart": " ".join(parts[3:8]), "command": parts[8]}
         except ValueError:
             continue
     return table
@@ -282,8 +285,8 @@ def log_busy(q, has_window):
 # ── containers ────────────────────────────────────────────────────────────────
 
 def ticket_number(q):
-    digits = re.sub(r"\D", "", q["meta"].get("ticket") or "")
-    return digits
+    m = re.search(r"(\d+)$", q["meta"].get("ticket") or "")      # SARA-1245 -> 1245
+    return m.group(1) if m else ""
 
 
 def running_containers():
@@ -300,7 +303,7 @@ def plan(now=None):
     protected = set()
     for q in quests:
         if not is_finished(q) and not q["meta"].get("pseudo"):
-            protected |= folders_of(q)
+            protected |= folders_of(q) | {real(q["dir"])}     # its own stack and scratch live in its guild folder
     active_tickets = {ticket_number(q) for q in quests if not is_finished(q) and ticket_number(q)}
     unfinished_slugs = {q["slug"] for q in quests if not is_finished(q) and not q["closed"]}
     table, cwds = process_table(), cwd_table()
@@ -328,21 +331,28 @@ def plan(now=None):
         if wid and not q["closed"]:
             item["actions"].append({"kind": "window", "id": wid, "text": f"closed its window ({slug}), revivable"})
         folders = folders_of(q) - protected
+        try:
+            started = datetime.fromisoformat(q["meta"].get("created", ""))
+        except ValueError:
+            started = None
         window_tree = descendants(table, panes) | set(panes)
         for pid, info in sorted(table.items()):
             if pid in me or pid in claimed or is_protected_process(info):
                 continue
             cwd, where = cwds.get(pid, ""), ""
-            if inside(cwd, protected):
+            cmd_paths = paths_in(info["command"])
+            if inside(cwd, protected) or any(inside(p, protected) for p in cmd_paths):
                 continue
             if inside(cwd, folders):
                 where = f"cwd {cwd}"
             else:
-                hit = [p for p in paths_in(info["command"]) if inside(p, folders)]
-                if hit and not any(inside(p, protected) for p in paths_in(info["command"])):
+                hit = [p for p in cmd_paths if inside(p, folders)]
+                if hit:
                     where = f"path {hit[0]}"
             if not where:
                 continue
+            if started and info["start"] < started:
+                continue                          # older than the quest: not something it started
             if info["ppid"] != 1 and pid not in window_tree:
                 continue                          # your own terminal, not something the quest left behind
             if info["cpu"] > BUSY_CPU:
@@ -351,7 +361,7 @@ def plan(now=None):
                 continue
             claimed.add(pid)
             name = os.path.basename(info["command"].split()[0])
-            item["actions"].append({"kind": "process", "pid": pid, "command": info["command"],
+            item["actions"].append({"kind": "process", "pid": pid, "command": info["command"], "lstart": info["lstart"],
                                     "text": f"stopped {name} (pid {pid}), {where}"})
         num = ticket_number(q)
         if num and num not in active_tickets:
@@ -362,8 +372,10 @@ def plan(now=None):
     return out
 
 
-def alive(pid, command):
-    return sh(["ps", "-p", str(pid), "-o", "command="]).strip() == command
+def alive(pid, command, lstart):
+    """Still the process we matched: same command and same start time, so a recycled pid is safe."""
+    out = sh(["ps", "-p", str(pid), "-o", "lstart=,command="]).strip()
+    return out == f"{lstart} {command}" or (out.endswith(command) and " ".join(out.split()[:5]) == lstart)
 
 
 def apply(item, dry):
@@ -383,16 +395,16 @@ def apply(item, dry):
             done.append(a["text"])
     if kills and not dry:
         for a in kills:
-            if alive(a["pid"], a["command"]):
+            if alive(a["pid"], a["command"], a["lstart"]):
                 try:
                     os.kill(a["pid"], 15)
                 except OSError:
                     pass
         deadline = time.time() + 5
-        while time.time() < deadline and any(alive(a["pid"], a["command"]) for a in kills):
+        while time.time() < deadline and any(alive(a["pid"], a["command"], a["lstart"]) for a in kills):
             time.sleep(0.25)
         for a in kills:
-            if alive(a["pid"], a["command"]):      # same pid, same command: still ours
+            if alive(a["pid"], a["command"], a["lstart"]):      # same pid, same command: still ours
                 try:
                     os.kill(a["pid"], 9)
                 except OSError:
@@ -415,24 +427,24 @@ def log_event(slug, text):
         pass
 
 
-def run(dry=False):
+def run(dry=False, quiet=False):
     items = plan()
     lines = 0
+    say = (lambda text: None) if quiet else print
     for item in items:
         if item["skipped"]:
-            print(f"{item['slug']}: skipped, {item['skipped']}")
+            say(f"{item['slug']}: skipped, {item['skipped']}")
             lines += 1
             continue
         done = apply(item, dry)
         for text in done:
-            print(f"{item['slug']}: {'would have ' if dry else ''}{text}" if False else
-                  f"{item['slug']}: {'would have ' + text if dry else text}")
+            say(f"{item['slug']}: {'would have ' + text if dry else text}")
             lines += 1
         real_actions = [a for a in item["actions"] if a["kind"] != "busy"]
         if real_actions and not dry:
             log_event(item["slug"], "; ".join(a["text"] for a in real_actions)[:300])
     if not lines:
-        print("nothing to reap")
+        say("nothing to reap")
     if not dry:
         open(STAMP, "w").write(time.strftime("%Y-%m-%dT%H:%M:%S"))
 
@@ -449,7 +461,7 @@ def maybe():
         last = None
     if last and datetime.now() - last < timedelta(minutes=EVERY_MINUTES):
         return
-    run()
+    run(quiet=True)
 
 
 if __name__ == "__main__":

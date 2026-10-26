@@ -996,7 +996,7 @@ d = sys.argv[1]
 m = json.load(open(os.path.join(d, "meta.json")))
 state, note, _ = (open(os.path.join(d, "status")).read().rstrip("\n").split("\t") + ["", "", ""])[:3]
 h = m["harness"] + ("/" + m["model"] if m.get("model") else "")
-if os.path.exists(os.path.join(d, "paused")):
+if os.path.exists(os.path.join(d, "paused")) and state in ("done", "failed", "stopped"):
     state += " (paused)"
 print(f'{m["slug"]:<28} {os.path.basename(m["repo"]):<22} {h:<18} {state:<15} {note[:70]}')
 PY
@@ -1125,6 +1125,7 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   if [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ]; then
     printf '%s\n' "${note% (no*}" > "$(qdir "$slug")/scenarios.waived"
   fi
+  [ "$state" = working ] && rm -f "$(qdir "$slug")/paused"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
   # The wrap-up waits hidden until the end: it opens now, when the quest really is done.
