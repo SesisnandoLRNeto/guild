@@ -179,7 +179,7 @@ add_sidebar() { # content pane id
 # Open a tab: a new window with the side menu, content running CMD. Prints the window id.
 open_tab() { # name dir cmd [--bg] [after-window]
   local flag=""; [ "${4:-}" = --bg ] && flag="-d"
-  local wid pid where="$SESSION"
+  local wid pid where="$SESSION:"                           # the trailing colon: a session, not a window name
   [ -n "${5:-}" ] && where="$5" && flag="$flag -a"          # a helper opens right after its parent
   wid=$(tm new-window $flag -P -F '#{window_id}' -t "$where" -n "$1" -c "$2" "$3") || die "could not open tab $1"
   pid=$(tm display-message -p -t "$wid" '#{pane_id}')
