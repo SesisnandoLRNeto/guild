@@ -10,14 +10,19 @@
 //
 // The road is a sequence of encounters, one every ten seconds. Quests in trouble send their own
 // creature (a goblin for red checks, a troll for a blocked quest, an orc for a failed one), and
-// between them the road itself brings the rest: bats, slimes, skeletons, wolf packs, spiders,
-// wisps, ghosts, a mimic that was never a chest, and now and then a boss (an ogre, a dragon whelp)
-// that takes two blows. Some stretches are not creatures but obstacles: a fallen log, a river, a
-// locked gate, a web across the path, a chasm, a boulder. Each encounter has the hero who answers
-// it: the archer shoots, the mage casts (and freezes the river), the artificer throws a flask (and
-// picks the gate's lock), the paladin's light drops what is dark (and bridges the chasm), the
-// wanderer's torch burns the web, and the warrior cuts down or clears whatever reaches the front.
-// The scene is a pure function of the tick and the party, so a fight always plays out the same way.
+// between them the road brings its own: bats, slimes, skeletons, wolves, spiders, wisps, ghosts,
+// rats, harpies, imps, snakes, bandits, kobolds, gargoyles, a golem, a necromancer, a treant, a
+// mimic, and bosses (an ogre, a dragon whelp, a hydra, a lich) that take many blows. Some
+// stretches are obstacles: a log, a river, a locked gate, a web, a chasm, a boulder.
+//
+// A fight is an exchange. Every ranged hero fires in volleys as the creature comes: the archer's
+// arrows, the mage's spells, the artificer's flasks, the paladin's light, the wanderer's torch.
+// A creature has hit points, and some blows do nothing to it (arrows pass through a ghost, a
+// sword cannot reach a bat) while others hurt twice (ice on a whelp, light on the undead). What
+// is still alive at the front meets the warrior's sword. Whoever lands the last blow gets the
+// kill, and a star over their head. An obstacle is cleared by the hero who knows how (the mage
+// freezes the river, the artificer picks the gate) and the party walks across. The scene is a
+// pure function of the tick and the party, so a fight always plays out the same way.
 //
 // A Raster's `cells` prop is base64 of columns * rows little-endian u32 triplets
 // [codePoint, foreground, background]. Colors are 0x00RRGGBB, and bit 24 alone
@@ -43,8 +48,11 @@ const HEAD = 2, BODY = 3, FEET = 4;          // the rows the figures stand on
 
 // ── who walks and what comes at them ──────────────────────────────────────────
 export type Hero = "archer" | "mage" | "paladin" | "warrior" | "artificer" | "wanderer";
-export type FoeKind = "bat" | "slime" | "skeleton" | "goblin" | "orc" | "troll"
-  | "wolves" | "spider" | "wisp" | "ghost" | "mimic" | "ogre" | "whelp"
+export type FoeKind =
+  | "bat" | "slime" | "skeleton" | "goblin" | "orc" | "troll"
+  | "wolves" | "spider" | "wisp" | "ghost" | "mimic" | "rats" | "harpy" | "imp" | "snake" | "bandit"
+  | "kobold" | "gargoyle" | "golem" | "necromancer" | "treant"
+  | "ogre" | "whelp" | "hydra" | "lich"
   | "log" | "river" | "gate" | "web" | "chasm" | "boulder";
 /** What the road shows: the heroes back to front, and the creatures the quests in trouble send. */
 export type Party = { heroes: Hero[]; foes: FoeKind[] };
@@ -127,14 +135,15 @@ export function partyColumns(viewportColumns: number | undefined): number {
 
 // ── the heroes: three columns by three rows each, two leg frames make the walk ──
 type Figure = { top: string; body: string; shot?: Shot };
-type Shot = { speed: number; row: number; glyph: string; color: keyof PartyPalette };
+/** A ranged attack: how fast it flies, on which row, what it looks like, and how many ticks between two. */
+type Shot = { speed: number; row: number; glyph: string; color: keyof PartyPalette; every: number };
 const FIGURES: Record<Hero, Figure> = {
-  archer: { top: " o)", body: "/|)", shot: { speed: 2, row: HEAD, glyph: "->", color: "archer" } },       // bow
-  mage: { top: " o*", body: "/||", shot: { speed: 1.5, row: BODY, glyph: "~*", color: "spell" } },        // staff with a star
-  paladin: { top: " o+", body: "/|]", shot: { speed: 1.5, row: HEAD, glyph: "+)", color: "light" } },     // mace raised, shield
-  artificer: { top: " o%", body: "/|[", shot: { speed: 1.5, row: BODY, glyph: "o%", color: "flask" } },  // a flask, a toolbox
-  wanderer: { top: " o'", body: "/|!" },                                                                  // a torch
-  warrior: { top: " o/", body: "/| " },                                                                   // sword held up, fights up close
+  archer: { top: " o)", body: "/|)", shot: { speed: 3, row: HEAD, glyph: "->", color: "archer", every: 6 } },        // bow: fast and often
+  mage: { top: " o*", body: "/||", shot: { speed: 1.5, row: BODY, glyph: "~*", color: "spell", every: 11 } },        // staff with a star
+  paladin: { top: " o+", body: "/|]", shot: { speed: 1.5, row: HEAD, glyph: "+)", color: "light", every: 15 } },     // a bolt of light
+  artificer: { top: " o%", body: "/|[", shot: { speed: 1.5, row: BODY, glyph: "o%", color: "flask", every: 13 } },   // a flask
+  wanderer: { top: " o'", body: "/|!", shot: { speed: 1.5, row: HEAD, glyph: "'", color: "flame", every: 17 } },     // throws the torch, lights another
+  warrior: { top: " o/", body: "/| " },                                                                              // sword, fights up close
 };
 const LEGS = ["/ \\", " | "];                                        // stride, then together
 const STEP = 4;                                                      // three columns, one apart
@@ -151,55 +160,79 @@ const NEAR_LEN = 64, FAR_LEN = 57;
 const GRASS = "  \\v/    ,    .   \\v/      ,  .     \\v/   ";
 
 // ── the enemies and the fights ─────────────────────────────────────────────────
-// One fight every FIGHT ticks. An enemy starts START columns ahead of the front and closes
-// one column a tick (it walks left while the party walks right). The hero who answers it
-// shoots from where they walk; a foe nobody shoots down reaches the warrior's blade.
-const FIGHT = 70, START = 34, BURST = 4;
+// One encounter every FIGHT ticks. A creature starts START columns ahead of the front and closes
+// one column a tick (it walks left while the party walks right). The ranged heroes fire while it
+// comes; at MELEE it stands at the warrior's blade. Positions are relative to the front of the
+// party, which moves with the tick, so the fight itself does not depend on where the party is.
+const FIGHT = 70, START = 34, MELEE = START - 3, BURST = 4, SWING = 3;
 type Rows = Array<[number, string]>;
 /**
- * One encounter. `answer` is the hero who deals with it; a creature nobody answers reaches the
- * warrior's blade. A boss (`tough`) shrugs off the first blow: it staggers, shows `wounded`, and
- * only the warrior finishes it. An obstacle (`solved`) does not fall: the answer turns it into the
- * way across (ice on the river, a bridge of light on the chasm), and the party walks over it.
+ * One encounter. `art(t, hp)` draws it (a pack loses a head as it loses hp). `hp` is how many
+ * blows it takes; `resist` names the heroes whose blows do nothing to it, `weak` the ones whose
+ * blows count double. `flying` creatures cannot be reached by the sword: unhurt at the front,
+ * they swoop over the party and are gone. An obstacle has `solved` art and an `answer`: only
+ * that hero (or the warrior, when the hero is not on the road) can open the way.
  */
-type Foe = { rows: Rows; color: keyof PartyPalette; answer: Hero; tough?: Rows; solved?: Rows; solvedColor?: keyof PartyPalette };
-const walk = (t: number, a = "/ \\", b = " | ") => (t % 4 < 2 ? a : b);
-const FOES: Record<FoeKind, (t: number) => Foe> = {
-  // ── creatures ──
-  bat: (t) => ({ rows: [[HEAD, t % 4 < 2 ? "^o^" : "vov"]], color: "bat", answer: "archer" }),           // flaps its wings
-  slime: (t) => ({ rows: [[BODY, t % 4 < 2 ? " __ " : " _  "], [FEET, "(oo)"]], color: "slime", answer: "mage" }),
-  skeleton: (t) => ({ rows: [[HEAD, " o "], [BODY, "<|\\"], [FEET, walk(t)]], color: "bones", answer: "warrior" }),
-  goblin: (t) => ({ rows: [[BODY, t % 4 < 2 ? ">o<" : ">o-"], [FEET, walk(t)]], color: "goblin", answer: "artificer" }),
-  orc: (t) => ({ rows: [[HEAD, "[o]"], [BODY, "<#\\"], [FEET, walk(t)]], color: "orc", answer: "warrior" }),
-  troll: (t) => ({ rows: [[HEAD, " 0 "], [BODY, "<##>"], [FEET, t % 4 < 2 ? "/  \\" : " || "]], color: "troll", answer: "paladin" }),
-  // a pack of two: the archer drops the first wolf, the warrior meets the second
-  wolves: (t) => ({ rows: [[BODY, "<^^ <^^"], [FEET, t % 4 < 2 ? "/\\/\\ /\\/\\" : "|| |  || |"]], color: "wolf", answer: "archer",
-                    tough: [[BODY, "    <^^"], [FEET, t % 4 < 2 ? "     /\\/\\" : "     ||||"]] }),
-  // hangs from a thread and swings down at the party
-  spider: (t) => ({ rows: [[HEAD, t % 6 < 3 ? " | " : "  |"], [BODY, t % 4 < 2 ? "/o\\" : "\\o/"]], color: "spider", answer: "mage" }),
-  wisp: (t) => ({ rows: [[t % 8 < 4 ? HEAD : BODY, t % 2 ? "o" : "*"]], color: "wisp", answer: "artificer" }),       // bobs and flickers
-  ghost: (t) => ({ rows: [[HEAD, " .-."], [BODY, "(o o)"], [FEET, t % 4 < 2 ? " ^^^" : "^^^ "]], color: "ghost", answer: "paladin" }),
-  // a chest on the road, until it is close enough to bite
-  mimic: (t) => ({ rows: t < START - 12 ? [[FEET, "[==]"]] : [[BODY, "/vv\\"], [FEET, "[^^]"]], color: "mimic", answer: "warrior" }),
-  // the bosses: the right hero staggers them, the warrior finishes them
-  ogre: (t) => ({ rows: [[1, " (o)"], [HEAD, "<###>"], [BODY, " ### "], [FEET, walk(t, "/   \\", " | | ")]], color: "ogre", answer: "paladin",
-                  tough: [[1, " (x)"], [HEAD, "<###>"], [BODY, " #!# "], [FEET, " | | "]] }),
-  whelp: (t) => ({ rows: [[HEAD, t % 4 < 2 ? "<\\^/ " : "</^\\ "], [BODY, "<{##}~"], [FEET, walk(t, " /  \\", "  ||  ")]], color: "dragon", answer: "mage",
-                   tough: [[HEAD, " \\x/ "], [BODY, "<{#!}~"], [FEET, "  ||  "]] }),
-  // ── obstacles: the answer opens the way, then the party walks across ──
-  log: () => ({ rows: [[FEET, "=##=#="]], color: "wood", answer: "warrior", solved: [[FEET, "=.  .="]], solvedColor: "wood" }),
-  river: (t) => ({ rows: [[FEET, t % 4 < 2 ? "~~=~~~~=" : "~=~~~=~~"]], color: "water", answer: "mage", solved: [[FEET, "========"]], solvedColor: "ice" }),
-  gate: () => ({ rows: [[1, "_____"], [HEAD, "|###|"], [BODY, "|#o#|"], [FEET, "|###|"]], color: "iron", answer: "artificer",
-                 solved: [[1, "_____"], [HEAD, "|   |"], [BODY, "|   |"], [FEET, "|   |"]], solvedColor: "iron" }),
-  web: () => ({ rows: [[1, "\\ | /"], [HEAD, " \\|/ "], [BODY, "--*--"], [FEET, " /|\\ "]], color: "web", answer: "wanderer",
-                solved: [[FEET, " ' . "]], solvedColor: "flame" }),
-  chasm: () => ({ rows: [[FEET, "_      _"]], color: "stone", answer: "paladin", solved: [[FEET, "_======_"]], solvedColor: "light" }),
-  boulder: () => ({ rows: [[BODY, " ___ "], [FEET, "(@@@)"]], color: "stone", answer: "warrior", solved: [[FEET, " . o "]], solvedColor: "stone" }),
+type Foe = {
+  art: (t: number, hp: number) => Rows; color: keyof PartyPalette; hp: number;
+  resist?: Hero[]; weak?: Hero[]; flying?: boolean; boss?: boolean;
+  answer?: Hero; solved?: Rows; solvedColor?: keyof PartyPalette;
 };
-/** The road when no quest is in trouble: a fixed walk, creatures and obstacles in turn, a boss now and then. */
+const walk = (t: number, a = "/ \\", b = " | ") => (t % 4 < 2 ? a : b);
+const FOES: Record<FoeKind, Foe> = {
+  // ── small things ──
+  bat: { hp: 1, flying: true, weak: ["archer"], color: "bat", art: (t) => [[HEAD, t % 4 < 2 ? "^o^" : "vov"]] },
+  slime: { hp: 2, resist: ["archer"], weak: ["mage"], color: "slime",
+           art: (t, hp) => hp > 1 ? [[BODY, t % 4 < 2 ? " __ " : " _  "], [FEET, "(oo)"]] : [[FEET, "(o.)"]] },
+  skeleton: { hp: 2, resist: ["archer"], weak: ["paladin"], color: "bones", art: (t) => [[HEAD, " o "], [BODY, "<|\\"], [FEET, walk(t)]] },
+  goblin: { hp: 1, color: "goblin", art: (t) => [[BODY, t % 4 < 2 ? ">o<" : ">o-"], [FEET, walk(t)]] },
+  kobold: { hp: 1, color: "goblin", art: (t) => [[BODY, t % 4 < 2 ? "'o<" : "'o-"], [FEET, walk(t, "/\\", "||")]] },
+  snake: { hp: 1, weak: ["archer"], color: "slime", art: (t) => [[FEET, t % 4 < 2 ? "~~o>" : "_~o>"]] },
+  rats: { hp: 3, resist: ["archer"], weak: ["artificer"], color: "wolf",                              // a swarm: one less each blow
+          art: (t, hp) => [[FEET, ["", "~o", "~o ~o", "~o ~o ~o"][hp]!.replace(/o/g, t % 4 < 2 ? "o" : "0")]] },
+  imp: { hp: 1, flying: true, weak: ["paladin"], color: "spider", art: (t) => [[HEAD, t % 4 < 2 ? ">v<" : "-v-"]] },
+  wisp: { hp: 1, flying: true, weak: ["artificer"], color: "wisp", art: (t) => [[t % 8 < 4 ? HEAD : BODY, t % 2 ? "o" : "*"]] },
+  spider: { hp: 2, weak: ["mage", "wanderer"], color: "spider", art: (t) => [[HEAD, t % 6 < 3 ? " | " : "  |"], [BODY, t % 4 < 2 ? "/o\\" : "\\o/"]] },
+  // ── people and beasts ──
+  bandit: { hp: 2, color: "mimic", art: (t) => [[HEAD, " o>"], [BODY, "/|-"], [FEET, walk(t)]] },
+  wolves: { hp: 2, weak: ["archer"], color: "wolf",
+            art: (t, hp) => hp > 1 ? [[BODY, "<^^ <^^"], [FEET, t % 4 < 2 ? "/\\/\\ /\\/\\" : "|| |  || |"]]
+                                   : [[BODY, "    <^^"], [FEET, t % 4 < 2 ? "     /\\/\\" : "     || |"]] },
+  harpy: { hp: 2, flying: true, weak: ["archer"], color: "bat", art: (t) => [[1, t % 4 < 2 ? "\\o/" : "/o\\"], [HEAD, " v "]] },
+  orc: { hp: 3, color: "orc", art: (t) => [[HEAD, "[o]"], [BODY, "<#\\"], [FEET, walk(t)]] },
+  gargoyle: { hp: 3, resist: ["archer"], weak: ["artificer"], color: "stone", art: (t) => [[HEAD, t % 4 < 2 ? "<o>" : "-o-"], [BODY, "/#\\"], [FEET, "/ \\"]] },
+  troll: { hp: 4, weak: ["paladin"], color: "troll", art: (t) => [[HEAD, " 0 "], [BODY, "<##>"], [FEET, t % 4 < 2 ? "/  \\" : " || "]] },
+  golem: { hp: 4, resist: ["archer", "wanderer"], weak: ["artificer"], color: "stone", art: (t) => [[HEAD, "[==]"], [BODY, "[##]"], [FEET, walk(t, "/  \\", " || ")]] },
+  mimic: { hp: 2, resist: ["archer"], color: "mimic", art: (t) => t < START - 12 ? [[FEET, "[==]"]] : [[BODY, "/vv\\"], [FEET, "[^^]"]] },
+  // ── the dark ──
+  ghost: { hp: 2, flying: true, resist: ["archer"], weak: ["paladin"], color: "ghost",
+           art: (t) => [[HEAD, " .-."], [BODY, "(o o)"], [FEET, t % 4 < 2 ? " ^^^" : "^^^ "]] },
+  necromancer: { hp: 3, weak: ["paladin"], color: "bat", art: (t) => [[HEAD, t % 8 < 4 ? " o!" : " o;"], [BODY, "/|\\"], [FEET, " M "]] },
+  treant: { hp: 4, resist: ["archer"], weak: ["wanderer", "mage"], color: "tree", art: (t) => [[1, "\\^^/"], [HEAD, "<oo>"], [BODY, " ## "], [FEET, t % 4 < 2 ? "/  \\" : " || "]] },
+  // ── bosses: many blows, and loot when they fall ──
+  ogre: { hp: 5, boss: true, color: "ogre", art: (t) => [[1, " (o)"], [HEAD, "<###>"], [BODY, " ### "], [FEET, walk(t, "/   \\", " | | ")]] },
+  whelp: { hp: 5, boss: true, resist: ["archer"], weak: ["mage"], color: "dragon",
+           art: (t) => [[HEAD, t % 4 < 2 ? "<\\^/ " : "</^\\ "], [BODY, "<{##}~"], [FEET, walk(t, " /  \\", "  ||  ")]] },
+  hydra: { hp: 6, boss: true, color: "slime",                                                      // loses a head at a time
+           art: (t, hp) => [[1, ["", "", "  o", "  o o", "o o o", "o o o", "o o o"][hp]!], [HEAD, hp > 3 ? "\\|/" : hp > 1 ? " |/" : "  |"], [BODY, "{###}"], [FEET, walk(t, "/   \\", " | | ")]] },
+  lich: { hp: 6, boss: true, resist: ["archer"], weak: ["paladin"], color: "bones",
+          art: (t) => [[1, " ^ "], [HEAD, t % 6 < 3 ? "(o)" : "(-)"], [BODY, "/#\\"], [FEET, " M "]] },
+  // ── obstacles: the answer opens the way, then the party walks across ──
+  log: { hp: 1, answer: "warrior", color: "wood", art: () => [[FEET, "=##=#="]], solved: [[FEET, "=.  .="]], solvedColor: "wood" },
+  river: { hp: 1, answer: "mage", color: "water", art: (t) => [[FEET, t % 4 < 2 ? "~~=~~~~=" : "~=~~~=~~"]], solved: [[FEET, "========"]], solvedColor: "ice" },
+  gate: { hp: 1, answer: "artificer", color: "iron", art: () => [[1, "_____"], [HEAD, "|###|"], [BODY, "|#o#|"], [FEET, "|###|"]],
+          solved: [[1, "_____"], [HEAD, "|   |"], [BODY, "|   |"], [FEET, "|   |"]], solvedColor: "iron" },
+  web: { hp: 1, answer: "wanderer", color: "web", art: () => [[1, "\\ | /"], [HEAD, " \\|/ "], [BODY, "--*--"], [FEET, " /|\\ "]],
+         solved: [[FEET, " ' . "]], solvedColor: "flame" },
+  chasm: { hp: 1, answer: "paladin", color: "stone", art: () => [[FEET, "_      _"]], solved: [[FEET, "_======_"]], solvedColor: "light" },
+  boulder: { hp: 1, answer: "warrior", color: "stone", art: () => [[BODY, " ___ "], [FEET, "(@@@)"]], solved: [[FEET, " . o "]], solvedColor: "stone" },
+};
+/** The road when no quest is in trouble: creatures and obstacles in turn, a boss every so often. */
 const QUIET_ROAD: FoeKind[] = [
-  "bat", "log", "wolves", "slime", "river", "spider", "skeleton", "gate", "wisp", "ogre",
-  "web", "mimic", "ghost", "chasm", "bat", "boulder", "slime", "whelp",
+  "bat", "log", "wolves", "slime", "river", "spider", "skeleton", "gate", "rats", "ogre",
+  "web", "imp", "bandit", "wisp", "chasm", "mimic", "harpy", "hydra",
+  "snake", "boulder", "kobold", "ghost", "gargoyle", "river", "necromancer", "golem", "treant", "whelp",
+  "goblin", "log", "orc", "lich",
 ];
 /** The encounters in order: each creature a troubled quest sends comes first in its turn, the road fills the rest. */
 export function roadOf(party: Party): FoeKind[] {
@@ -211,6 +244,65 @@ export function roadOf(party: Party): FoeKind[] {
     out.push(QUIET_ROAD[i % QUIET_ROAD.length]!);
   }
   return out;
+}
+
+type ShotInFlight = { hero: number; from: number; hit: number };
+type Blow = { t: number; hero: number; damage: number };
+export type Fight = {
+  shots: ShotInFlight[]; blows: Blow[]; swings: number[];
+  /** when it falls, and who felled it */ death?: number; killer?: number;
+  /** when a creature nobody could stop passes over or through the party */ escape?: number;
+  hpAt: (t: number) => number;
+};
+/**
+ * The whole fight, decided before it is drawn. Ranged heroes fire whenever the creature is in
+ * front of them and their rhythm allows; each shot's landing tick comes from its speed and the
+ * creature's walk. At the front the warrior swings every few ticks. Blows are applied in tick
+ * order; a shot that would land after the death simply vanishes in the burst.
+ */
+export function fight(heroes: readonly Hero[], kind: FoeKind): Fight {
+  const foe = FOES[kind];
+  const width = heroes.length * 3 + (heroes.length - 1);
+  const rel = (n: number) => n * STEP - width + 3;                     // a hero's hand, relative to the front
+  const foeAt = (s: number) => START - s;
+  const resist = new Set(foe.resist ?? []), weak = new Set(foe.weak ?? []);
+  // an obstacle yields only to its answer; the warrior clears it when that hero is not on the road
+  const solver = foe.solved ? (heroes.includes(foe.answer!) ? foe.answer! : "warrior") : undefined;
+  const hurts = (hero: Hero) => (solver ? hero === solver : !resist.has(hero));
+  const dmg = (hero: Hero) => (weak.has(hero) ? 2 : 1);
+  const shots: ShotInFlight[] = [], blows: Blow[] = [], swings: number[] = [];
+  const nextFire = heroes.map((_, n) => 4 + (heroes.length - 1 - n));   // the back of the line takes a beat longer
+  for (let s = 0; s < FIGHT; s++) {
+    heroes.forEach((hero, n) => {
+      const shot = FIGURES[hero].shot;
+      if (!shot || s < nextFire[n]!) return;
+      if (solver !== undefined && hero !== solver) return;             // only the one who knows how works on an obstacle
+      if (foeAt(s) <= rel(n) + 3) return;                                // it is already past this hero
+      let hit = -1;
+      for (let k = s; k < FIGHT; k++) if (rel(n) + Math.floor((k - s) * shot.speed) + shot.glyph.length >= foeAt(k)) { hit = k; break; }
+      if (hit < 0) return;
+      shots.push({ hero: n, from: s, hit });
+      if (hurts(hero)) blows.push({ t: hit, hero: n, damage: dmg(hero) });
+      nextFire[n] = s + shot.every;
+    });
+    if (s >= MELEE && (s - MELEE) % SWING === 0) {
+      const w = heroes.length - 1;                                       // the warrior stands at the front
+      swings.push(s);
+      if (!foe.flying && hurts(heroes[w]!)) blows.push({ t: s + 1, hero: w, damage: dmg(heroes[w]!) });
+    }
+  }
+  blows.sort((a, b) => a.t - b.t);
+  let hp = foe.hp, death: number | undefined, killer: number | undefined;
+  const kept: Blow[] = [];
+  for (const b of blows) {
+    hp -= b.damage; kept.push(b);
+    if (hp <= 0) { death = b.t; killer = b.hero; break; }
+  }
+  // nothing could touch it: a flyer swoops over the party, anything else slips through
+  const escape = death === undefined ? MELEE : undefined;
+  const over = death ?? escape!;
+  const hpAt = (t: number) => Math.max(0, foe.hp - kept.filter((b) => b.t <= t).reduce((sum, b) => sum + b.damage, 0));
+  return { shots: shots.filter((x) => x.from < over), blows: kept, swings: swings.filter((s) => s <= over), death, killer, escape, hpAt };
 }
 
 /** One frame: stars and a moon, two layers of forest, the party walking right, a fight. */
@@ -250,37 +342,22 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
   const front = left + width;                                // the column just ahead of the warrior
   const heroX = (n: number) => left + n * STEP;
 
-  // the encounter of the moment: a creature a quest in trouble sent, or whatever the road brings
+  // the encounter of the moment, and how the fight goes
   const t = tick % FIGHT;
   const round = Math.floor(tick / FIGHT);
   const road = roadOf(party);
   const kind = road[round % road.length]!;
-  const foeOf = FOES[kind];
-  const first = foeOf(0);
+  const foe = FOES[kind];
+  const f = fight(heroes, kind);
   const foeX = (s: number) => front + START - s;
-  const wide = Math.max(...first.rows.map(([, r]) => r.length));
-  // who answers: the hero this encounter belongs to if they walk with us, else the warrior up close
-  const answerer = heroes.lastIndexOf(first.answer);
-  const shooter = answerer >= 0 ? answerer : heroes.length - 1;
-  const shot = FIGURES[heroes[shooter]!]!.shot;
-  const shotAt = 4 + (heroes.length - 1 - shooter);          // the back of the line takes a beat longer to see it
-  const melee = START - 3;                                   // it reaches the warrior's blade
-  let hit = melee;
-  if (shot) {
-    for (let s = shotAt; s < melee; s++) {
-      if (heroX(shooter) + 3 + Math.floor((s - shotAt) * shot.speed) + shot.glyph.length >= foeX(s)) { hit = s; break; }
-    }
-  }
-  const shotLands = shot !== undefined && hit < melee;
-  const tough = first.tough !== undefined && shotLands;      // a boss or a pack: the shot only staggers it
-  const end = tough ? melee : hit;                           // when the encounter is over
-  const swinging = (!shotLands || tough) && t >= end - 2 && t <= end + 1;
-  const casting = shotLands && t >= shotAt - 2 && t <= shotAt + 1;
-  const solved = first.solved !== undefined;
+  const wide = Math.max(...foe.art(0, foe.hp).map(([, r]) => r.length));
+  const end = f.death ?? f.escape!;                          // when the encounter is over
+  const alive = t < end;
+  const solved = foe.solved !== undefined;
 
-  // what stands in the way of the forest: the party, and the foe or its burst
+  // what stands in the way of the forest: the party, and the creature or its burst
   const boxes: Array<[number, number]> = [[left - 1, left + width + 1]];
-  if (solved) boxes.push([foeX(t) - 2, foeX(t) + wide + 1]);                       // terrain stays on the road
+  if (solved || f.escape !== undefined) boxes.push([foeX(t) - 2, foeX(t) + wide + 1]);   // it stays on the road
   else if (t < end + BURST) boxes.push([foeX(Math.min(t, end)) - 2, foeX(Math.min(t, end)) + wide + 1]);
   const blocked = (x: number, w: number) => boxes.some(([b0, b1]) => x + w > b0 && x <= b1);
 
@@ -316,26 +393,30 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
 
   // an obstacle lies on the road: drawn under the party, so they walk across what the answer made of it
   if (solved) {
-    const done = t >= end;
-    const art = done ? first.solved! : foeOf(t).rows, color = palette[done ? first.solvedColor ?? first.color : first.color];
+    const art = alive ? foe.art(t, 1) : foe.solved!, color = palette[alive ? foe.color : foe.solvedColor ?? foe.color];
     for (const [row, line] of art) text(row, foeX(t), line, color);
-    if (done && t < end + BURST) text(HEAD, foeX(end) + 1, t < end + 2 ? "\\*/" : " . ", palette.star);
+    if (!alive && t < end + BURST) text(HEAD, foeX(end) + 1, t < end + 2 ? "\\*/" : " . ", palette.star);
   }
 
   const stride = Math.floor(tick / 2) % 2;
   const sparkle = ["*", ".", "x", "'"][Math.floor(tick / 3) % 4]!;   // no "+": that is the paladin's mark
   const flicker = ["'", "`", "'", "\""][Math.floor(tick / 2) % 4]!;
+  const casting = new Set(f.shots.filter((x) => t >= x.from - 1 && t <= x.from + 1).map((x) => x.hero));
+  const swinging = alive && f.swings.some((s) => t >= s - 1 && t <= s + 1);
+  const cheering = f.death !== undefined && f.killer !== undefined && t >= f.death && t < f.death + 6 ? f.killer : -1;
   heroes.forEach((hero, n) => {
     const fig = FIGURES[hero]!;
     const x = heroX(n);
     const color = palette[hero];
     let top = fig.top, body = fig.body;
     if (hero === "warrior" && n === heroes.length - 1 && swinging) { top = " o "; body = "/|-"; put(BODY, x + 3, "-", color); }
+    if (n === cheering) { top = "\\" + top.slice(1); put(1, x + 1, (t - f.death!) % 2 ? "*" : "'", palette.star); }   // an arm up, a star over the head
     [...top].forEach((ch, i) => {
       // the mage's star turns while they walk and flares when they cast; the torch flickers
-      if (hero === "mage" && ch === "*") return put(HEAD, x + i, casting && n === shooter ? "@" : sparkle, palette.star);
-      if (hero === "wanderer" && ch === "'") return put(HEAD, x + i, flicker, palette.flame);
-      if (hero === "paladin" && ch === "+") return put(HEAD, x + i, casting && n === shooter ? "*" : "+", palette.light);
+      if (hero === "mage" && ch === "*") return put(HEAD, x + i, casting.has(n) ? "@" : sparkle, palette.star);
+      if (hero === "wanderer" && ch === "'") return put(HEAD, x + i, casting.has(n) ? "," : flicker, palette.flame);
+      if (hero === "paladin" && ch === "+") return put(HEAD, x + i, casting.has(n) ? "*" : "+", palette.light);
+      if (hero === "archer" && ch === ")" && casting.has(n)) return put(HEAD, x + i, "}", color);
       put(HEAD, x + i, ch, color);
     });
     [...body].forEach((ch, i) => put(BODY, x + i, ch, color));
@@ -343,23 +424,33 @@ export function partyFrame(columns: number, tick: number, palette: PartyPalette,
     [...own].forEach((ch, i) => put(FEET, x + i, ch, color));
   });
 
-  // the creature walks in, staggers if it is tough, and falls in a little burst
-  if (!solved && t < end) {
-    const foe = foeOf(t), x = foeX(t);
-    const rows = tough && t >= hit ? first.tough! : foe.rows;
-    const color = tough && t >= hit && t < hit + 2 ? palette.star : palette[foe.color];   // flashes when the shot lands
-    for (const [row, line] of rows) text(row, x, line, color);
-    if (tough && t >= hit && t < hit + 3) text(1, x + 1, "!", palette.star);
-  } else if (!solved && t < end + BURST) {
-    const x = foeX(end), rows = (tough ? first.tough! : first.rows).map(([r]) => r);
-    const row = rows[Math.floor(rows.length / 2)] ?? BODY;
-    for (const r of rows) clear(r, x - 1, x + wide);
-    text(row, x + Math.max(0, Math.floor(wide / 2) - 2), t < end + 2 ? "\\*/" : " . ", palette.star);
+  // the creature walks in, flinches at every blow, and falls in a burst (or passes over the party)
+  if (!solved) {
+    const hp = f.hpAt(t);
+    const flinch = f.blows.some((b) => t === b.t || t === b.t + 1);
+    if (alive || f.escape !== undefined) {
+      const x = foeX(t);
+      const lift = f.escape !== undefined && t >= f.escape ? -2 : 0;      // it swoops over the heads
+      for (const [row, line] of foe.art(t, Math.max(1, hp))) text(row + lift, x, line, flinch && alive ? palette.star : palette[foe.color]);
+      if (foe.hp > 1 && alive) {                                            // its life, as dots over its head
+        const top = Math.min(...foe.art(t, Math.max(1, hp)).map(([r]) => r)) - 1;
+        if (top >= 0) text(top, x, ".".repeat(hp), palette.star);
+      }
+      if (flinch && alive) text(1, x + wide, "!", palette.star);
+    } else if (t < end + BURST) {
+      const x = foeX(end), rows = foe.art(end, 1).map(([r]) => r);
+      const row = rows[Math.floor(rows.length / 2)] ?? BODY;
+      for (const r of rows) clear(r, x - 1, x + wide);
+      const by = f.killer !== undefined ? FIGURES[heroes[f.killer]!]!.shot?.color : undefined;
+      text(row, x + Math.max(0, Math.floor(wide / 2) - 2), t < end + 2 ? "\\*/" : foe.boss ? " $ " : " . ", palette[by ?? "star"]);
+    }
   }
-  // the arrow, the spell, the flask or the light in flight
-  if (shotLands && shot && t >= shotAt && t < hit) {
-    const x = heroX(shooter) + 3 + Math.floor((t - shotAt) * shot.speed);
-    text(shot.row, x, shot.glyph, palette[shot.color]);
+  // arrows, spells, flasks, light and a torch in flight
+  for (const s of f.shots) {
+    if (t < s.from || t >= Math.min(s.hit, end)) continue;
+    const shot = FIGURES[heroes[s.hero]!]!.shot!;
+    const x = heroX(s.hero) + 3 + Math.floor((t - s.from) * shot.speed);
+    if (x > front) text(shot.row, x, shot.glyph, palette[shot.color]);      // shown once it clears the party's heads
   }
 
   const bytes = new Uint8Array(size * 12);
