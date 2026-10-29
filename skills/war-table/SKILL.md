@@ -25,7 +25,7 @@ guild ask "Ship the chooser now or after the icons?" \
 guild board wait <id> --timeout 3600
 ```
 
-Guild builds the page, opens it and waits. Use the long way below when the decision needs pictures: variants, before and after, a diagram, numbers.
+Guild builds the page, opens it and waits. When the question is about a design frame, a screen or a screenshot, the picture goes on the board: `--image "<path>=<caption>"`, once per picture (the Figma export, the screen today). Naming a file in the text is not showing it; `guild ask` refuses a text that names a `.png` without an `--image`. Use the long way below when the decision needs more than a question and pictures: variants side by side, a diagram, numbers.
 
 ## Decision pages: show what each choice leads to (`guild decide`)
 

@@ -139,10 +139,22 @@ has "the answer is stored" "$(cat "$GUILD_HOME/quests/alpha/boards/$board/decisi
 out=$(GUILD_QUEST=alpha "$GUILD" board wait "$board" --timeout 5)
 has "wait returns the answer" "$out" "go with alpha"
 
+# a question about a frame shows the frame; naming a .png in the text is refused
+printf '\x89PNG\r\n\x1a\n' > "$TMP/Html → Body.png"
+out=$(GUILD_QUEST=alpha "$GUILD" ask "Draw the checkbox column Body.png shows?" --option "a=No" --option "b=Yes" --no-open 2>&1 || true)
+has "a named picture without --image is refused" "$out" "names a picture (Body.png)"
+is "the refused ask leaves no board" "$(ls "$GUILD_HOME/quests/alpha/boards" | wc -l | tr -d ' ')" "1"
+out=$(GUILD_QUEST=alpha "$GUILD" ask "Draw the checkbox column Body.png shows?" --option "a=No" --option "b=Yes" --image "$TMP/Html → Body.png=Option A frame" --no-open 2>&1)
+pb=$(ls -t "$GUILD_HOME/quests/alpha/boards" | head -1)
+has "the picture is on the board" "$(cat "$GUILD_HOME/quests/alpha/boards/$pb/content.html")" '<img src="pics/01-html-body.png" alt="Option A frame">'
+has "the picture is served beside the page" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/b/alpha/$pb/pics/01-html-body.png")" "200"
+curl -s -X POST "http://127.0.0.1:4899/b/alpha/$pb/reply" -d '{"answers":{"choice":"a"},"message":"no boxes"}' >/dev/null
+sleep 1
+
 # a decision cannot be escalated as plain text
 "$GUILD" status alpha needs-decision "Should we rename the module?" >/dev/null 2>&1
 boards=$(ls "$GUILD_HOME/quests/alpha/boards" | wc -l | tr -d ' ')
-is "plain-text escalation builds a board" "$boards" "2"
+is "plain-text escalation builds a board" "$boards" "3"
 out=$(curl -s "http://127.0.0.1:4899/b/alpha/$board/../../../etc/passwd")
 hasnt "the server refuses path traversal" "$out" "root:"
 

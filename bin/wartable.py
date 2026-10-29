@@ -1348,9 +1348,14 @@ ASK_PAGE = """<!doctype html>
  .opt.suggested { border-left-color:#e0af68; }
  .opt.suggested .id { color:#e0af68; }
  .hint { color:var(--dim); font-size:13px; margin-top:28px; border-top:1px solid var(--line); padding-top:14px; }
+ .pics { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin:0 0 26px; }
+ .pics figure { margin:0; }
+ .pics img { display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:8px; background:#fff; }
+ .pics figcaption { color:var(--dim); font-size:13px; margin-top:6px; }
 </style></head><body>
 <h1>__QUESTION__</h1>
 __DETAIL__
+__PICTURES__
 __OPTIONS__
 <p class="hint">Choose in the panel (beside this page, or below it on a narrow window). Notes and screenshots go there too.</p>
 </body></html>
@@ -1382,9 +1387,39 @@ def cmd_ask(args):
                       f'{" · suggested" if suggested else ""}</div>'
                       f'<div class="label">{_esc(o["label"])}</div>{why}</div>')
     detail = detail_html(args.get("detail") or "")
+
+    # A picture the question talks about has to be on the board, not only named in the text.
+    pics = args.get("image") or []
+    if isinstance(pics, str):
+        pics = [pics]
+    if not pics:
+        spoken = " ".join([question, args.get("detail") or ""] + [o["label"] + " " + o["why"] for o in options])
+        named = re.findall(r"[^\s\"'`()]+\.(?:png|jpe?g|webp|gif|svg)\b", spoken, re.I)
+        if named:
+            raise SystemExit(f"guild ask: the text names a picture ({named[0]}) but the board would show none. "
+                             f"Pass it: --image \"<path>=<caption>\" (repeat for more). The guildmaster judges a screen by seeing it.")
+
+    tmp = os.path.join(GUILD_HOME, ".ask-tmp")
+    subprocess.run(["rm", "-rf", tmp])
+    os.makedirs(os.path.join(tmp, "pics"), exist_ok=True)
+    figures = []
+    for n, item in enumerate(pics, 1):
+        src, _, caption = item.partition("=")
+        src = os.path.expanduser(src.strip())
+        if not os.path.isfile(src):
+            raise SystemExit(f"guild ask: --image not found: {src}")
+        ext = os.path.splitext(src)[1].lower() or ".png"
+        name = f"{n:02d}-{re.sub(r'[^a-z0-9]+', '-', os.path.splitext(os.path.basename(src))[0].lower()).strip('-') or 'picture'}{ext}"
+        subprocess.run(["cp", src, os.path.join(tmp, "pics", name)], check=True)
+        caption = caption.strip()
+        cap = f"<figcaption>{md_inline(caption, auto_code=True)}</figcaption>" if caption else ""
+        figures.append(f'<figure><img src="pics/{name}" alt="{_esc(caption)}">{cap}</figure>')
+    pictures = f'<div class="pics">{"".join(figures)}</div>' if figures else ""
+
     page = (ASK_PAGE.replace("__TITLE__", _esc(args.get("title") or question[:60]))
             .replace("__QUESTION__", _esc(question))
             .replace("__DETAIL__", detail)
+            .replace("__PICTURES__", pictures)
             .replace("__OPTIONS__", "\n".join(blocks)))
 
     question_id = "choice"
@@ -1397,8 +1432,6 @@ def cmd_ask(args):
         "options": [{"id": o["id"], "label": o["label"], "why": o["why"]} for o in options],
     }]}
 
-    tmp = os.path.join(GUILD_HOME, ".ask-tmp")
-    os.makedirs(tmp, exist_ok=True)
     page_path, dec_path = os.path.join(tmp, "page.html"), os.path.join(tmp, "decisions.json")
     with open(page_path, "w") as f:
         f.write(page)
@@ -1406,6 +1439,8 @@ def cmd_ask(args):
         json.dump(decisions, f, indent=2)
 
     args["html"], args["decisions"] = page_path, dec_path
+    if figures:
+        args["assets"] = True                     # the pics folder travels with the page
     args.setdefault("title", question[:60])
     cmd_open(args)
 
@@ -1447,10 +1482,10 @@ def main():
             if not isinstance(args.get(key), list):  # keep what a repeated flag collected
                 args[key] = True
         elif key:
-            if key == "option":
-                if not isinstance(args.get("option"), list):
-                    args["option"] = []
-                args["option"].append(token)
+            if key in ("option", "image"):
+                if not isinstance(args.get(key), list):
+                    args[key] = []
+                args[key].append(token)
             else:
                 args[key] = token
             key = None

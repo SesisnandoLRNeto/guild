@@ -64,7 +64,7 @@ guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--as
                                     (--wrapup marks it as the quest's end-of-work report)
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
-guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
+guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id] [--image "path=caption"]...
                                     put the question on the war table as a page and open it (inside a quest)
 guild pool list|drop [repo]          the warm worktree pool quests are started from
 guild new [dir] [name] [--harness H] [--model M | --tier T] [--resume SESSION]
@@ -1258,7 +1258,7 @@ cmd_ask() {
   fi
   need_quest "$slug"
   dagger_guard "$slug"
-  [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]'
+  [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id] [--image "path=caption"]...'
   local question="$1"; shift
   python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$question" "$@"
 }
