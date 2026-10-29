@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guild Campaign</title>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 <style>
   :root {
     --wood-1: #2a1d14; --wood-2: #22170f; --wood-line: #1a110b; --frame: #4a3322;
@@ -63,7 +66,8 @@
     padding: 7px 12px 6px; box-shadow: 0 3px 0 rgba(0, 0, 0, .3);
   }
   .colhead h2 { margin: 0; font-size: 16px; font-variant: small-caps; letter-spacing: .05em; display: flex; justify-content: space-between; }
-  .colhead h2 .n { background: rgba(0, 0, 0, .3); border-radius: 999px; padding: 0 8px; font-size: 13px; }
+  .colhead h2 { align-items: flex-start; }
+  .colhead h2 .n { background: rgba(0, 0, 0, .3); border-radius: 999px; padding: 0 8px; font-size: 13px; align-self: flex-start; line-height: 22px; margin-top: 1px; }
   .colhead p { margin: 1px 0 0; font-size: 11.5px; color: var(--hint); font-style: italic; }
   .lane {
     grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 14px;
@@ -97,6 +101,11 @@
   .key { font: 700 11.5px/1 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; letter-spacing: .03em; color: var(--ink-dim); }
   .alert { margin: 6px 0 0; font-size: 12.5px; font-weight: 700; color: var(--bad); overflow-wrap: anywhere; }
   .alert.turn { color: #9a5a0c; }
+  .alert .gi-icon { width: 16px; height: 16px; margin-right: 5px; vertical-align: -3px; }
+  .alert .plain { font-weight: 400; color: var(--ink-dim); }
+  .quip { margin: 3px 0 0; font-size: 12px; font-style: italic; color: var(--ink-dim); }
+  .colhead .gi-icon { width: 16px; height: 16px; margin-right: 6px; vertical-align: -2px; color: var(--gold); }
+  .banner .gi-icon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; color: var(--gold); }
   .what { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .card .actions { display: none; }
   .card:hover .actions, .card:focus-within .actions, .card.pinned .actions { display: flex; }
@@ -118,6 +127,8 @@
     background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .35), transparent 45%), var(--seal, var(--common));
     box-shadow: 0 0 0 2px rgba(0, 0, 0, .12), 0 2px 3px rgba(0, 0, 0, .35); transform: rotate(-8deg);
   }
+  .seal { width: 46px; height: 46px; grid-auto-rows: auto; gap: 1px; line-height: 1; font-size: 6.5px; letter-spacing: .02em; }
+  .seal .gi-icon { width: 17px; height: 17px; }
   .seal.legendary { --seal: var(--gold); } .seal.epic { --seal: var(--epic); }
   .seal.rare { --seal: var(--rare); } .seal.common { --seal: var(--common); }
   .what { margin: 6px 0 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
@@ -185,18 +196,68 @@
     .toolbar .note { margin-left: 0; width: 100%; }
   }
   @media (prefers-reduced-motion: reduce) { .card, .state.working::before { transition: none; animation: none; } }
+
+  /* ── the realm: the same board on dark stone, gold frames, and the races on the cards ─────── */
+  html.realm {
+    --paper: #241d2b; --paper-2: #17121c; --ink: #e9dcc0; --ink-dim: #a8987a; --rule: #4a3f52;
+    --sign: #1b1520; --sign-text: #e9dcc0; --hint: #a8987a; --frame: #8a6a1e; --gold: #d9a441;
+    --working: #7fbf5a; --turn: #e0a93a; --bad: #e0573f; --done: #8fb35a; --common: #6a6072; --glow: rgba(217, 164, 65, .45);
+  }
+  html.realm header { display: none; }   /* the hero banner carries the title now */
+  html.realm .toolbar, html.realm .summary, html.realm .threads { max-width: 1180px; margin: 0 auto; }
+  html.realm main { max-width: 1180px; margin: 0 auto; }
+  html.realm .colhead { background: linear-gradient(180deg, #2a2230, #15111a); border: 1px solid var(--frame); border-radius: 3px;
+    box-shadow: inset 0 0 0 1px #000, 0 4px 10px rgba(0, 0, 0, .5); }
+  html.realm .colhead h2 { color: var(--gold); }
+  html.realm .colhead h2 .n { background: rgba(217, 164, 65, .18); color: #f3cf6c; }
+  html.realm .lane { border-top: 1px solid var(--frame); }
+  html.realm .lane h3 { color: #f3cf6c; }
+  html.realm .card { border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .18), 0 6px 14px rgba(0, 0, 0, .5); border-left-width: 4px; }
+  html.realm .card:hover { box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .35), 0 10px 20px rgba(0, 0, 0, .6); }
+  html.realm .card.working { box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .18), 0 0 0 1px var(--glow), 0 6px 14px rgba(0, 0, 0, .5); }
+  html.realm .key { color: var(--gold); }
+  html.realm .alert.turn { color: var(--turn); }
+  html.realm .seal { width: auto; height: auto; transform: none; background: none; box-shadow: none; color: var(--gold); gap: 3px;
+    font-size: 9px; letter-spacing: .06em; }
+  html.realm .seal .gi-icon { display: none; }
+  html.realm .alert .race { margin-right: 7px; vertical-align: -9px; }
+  html.realm .actions a, html.realm .actions button { background: rgba(0, 0, 0, .35); color: var(--ink); border-color: var(--rule); }
+  html.realm .actions a:hover, html.realm .actions button:hover { background: var(--gold); color: #2a1d14; border-color: var(--gold); }
+  html.realm .actions .go { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; border-color: #6e4e10; font-weight: 700; }
+  html.realm .post input { background: rgba(0, 0, 0, .35); }
+  html.realm .post button { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; }
+  html.realm .label.plain { background: rgba(217, 164, 65, .16); color: var(--ink); }
+  html.realm .grade { background: rgba(217, 164, 65, .22); }
+  html.realm .party { border-top-color: var(--rule); }
+  html.realm .party li b { color: #c9a0ff; }
+  html.realm .banner { display: none; }
+  html.realm .toast { background: #2a2230; border: 1px solid var(--frame); }
+  html.realm .lane form input { background: rgba(0, 0, 0, .35); }
+  html.realm .empty, html.realm .cell .dash { color: var(--hint); }
+  html.realm .more { border-color: var(--rule); }
+  html.realm .tchip { background: rgba(0, 0, 0, .35); }
 </style>
 </head>
 <body>
+<section class="rm-hero rm-frame" aria-label="The realm">
+  <div>
+    <p class="rm-kicker">The war table</p>
+    <h1 class="rm-title">The Guild Campaign</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub">One row per story, its quests moving from the tavern to the treasury. Dwarves at the forge, elves at the gate, the high elf quartermaster sending them out; orcs, trolls and goblins where it hurts. <a href="/treasury">The treasury</a> shows what it cost.</p>
+    <nav class="rm-nav" style="margin-top:12px"><a href="/docket"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a></nav>
+  </div>
+  <div class="rm-party" id="realm-party" aria-label="Who is on the road"></div>
+</section>
 <header>
   <div>
     <h1>The Guild Campaign</h1>
-    <p class="sub">One row per story, its tickets moving left to right. Everything running right now. <a href="/treasury" style="color:var(--gold)">The treasury</a> shows what it cost.</p>
+    <p class="sub">One row per story, its quests moving from the tavern to the treasury. Archmages, knights and scouts on the road; orcs, trolls and goblins where it hurts. <a href="/treasury" style="color:var(--gold)">The treasury</a> shows what it cost.</p>
   </div>
   <div class="tally">
-    <div class="banner"><b id="n-agents">0</b><span>on the road</span></div>
-    <div class="banner"><b id="n-waiting">0</b><span>await you</span></div>
-    <div class="banner"><b id="n-todo">0</b><span>idle / posted</span></div>
+    <div class="banner"><b id="n-agents">0</b><span><i class="gi-icon gi-map" aria-hidden="true"></i>on the road</span></div>
+    <div class="banner"><b id="n-waiting">0</b><span><i class="gi-icon gi-crystal" aria-hidden="true"></i>await your word</span></div>
+    <div class="banner"><b id="n-todo">0</b><span><i class="gi-icon gi-mug" aria-hidden="true"></i>at the tavern</span></div>
   </div>
 </header>
 <div class="toolbar" role="toolbar" aria-label="Filter cards">
@@ -251,7 +312,7 @@ const STATE_WORD = { "needs-decision": "your call", "checks-green": "checks gree
   "checks-baseline": "baseline", "trial-pass": "trial passed", "trial-skip": "trial skipped", "planned": "building" };
 
 function kindLabel(c) {
-  if (c.orchestrator) return "orchestrator";
+  if (c.orchestrator) return "quartermaster";
   if (c.kind === "quest") return c.phase === "plan" ? "quest, planning" : "quest";
   return { session: "session", jira: "ticket", todo: "your to-do" }[c.kind] || c.kind;
 }
@@ -266,11 +327,42 @@ function niceTitle(c) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+const race = rmRace;   // a race portrait from races.svg in its gold ring (realm.js)
+const RACE_WORD = { road: "on the road", waiting: "await your word", trial: "at the gate" };
+const HORDE_WORD = { orc: "slew a quest", troll: "hold a bridge", goblin: "in the tests", undead: "told no tale" };
+const quests = (n) => `${n} quest${n === 1 ? "" : "s"}`;
+// the hero banner: who walks the realm now, by race, and the creatures the troubled quests met
+function realmParty(cards) {
+  const guild = {}, horde = {};
+  for (const c of cards) {
+    if (c.kind === "todo" || c.id.startsWith("closed:")) continue;
+    if (stateClass(c.state) === "bad") { if (c.lore && c.lore.race) horde[c.lore.race] = (horde[c.lore.race] || 0) + 1; continue; }
+    if (c.klass && c.klass.race && ["road", "waiting", "trial"].includes(c.column)) {
+      const g = guild[c.klass.race] = guild[c.klass.race] || { n: 0, cols: {} };
+      g.n += 1; g.cols[c.column] = (g.cols[c.column] || 0) + 1;
+    }
+  }
+  const out = Object.entries(guild).sort((a, b) => b[1].n - a[1].n).map(([k, g]) => {
+    const cols = Object.entries(g.cols).sort((a, b) => b[1] - a[1]);
+    const live = "Right now: " + cols.map(([c, n]) => `${quests(n)} ${RACE_WORD[c]}`).join(", ") + ".";
+    return rmFigure(k, g.n, RACE_WORD[cols[0][0]], live, { plural: true });
+  });
+  out.push(...Object.entries(horde).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+    rmFigure(k, n, HORDE_WORD[k] || "", `Right now: ${quests(n)}. The card below says which.`, { plural: true })));
+  const html = out.join("") || rmFigure("human", null, "nobody on the road", "The realm is quiet. Suspicious.", { name: "Quiet realm", dim: true });
+  // Compare with what we built last time, not with innerHTML: the browser rewrites entities when it
+  // serializes, so that comparison never matched and the figures were rebuilt on every refresh,
+  // which killed the hover (tooltip and animation) under the mouse.
+  if (realmParty.last !== html) { realmParty.last = html; $("#realm-party").innerHTML = html; }
+}
+
 function tilt(id) { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 5) - 2) * 0.35; }
 
 function cardHtml(c) {
   const sc = stateClass(c.state);
-  const seal = c.model ? `<div class="seal ${c.rank || "common"}" title="${esc(c.model)}${c.rank ? " (" + c.rank + ")" : ""}">${esc(c.model.replace(/^(opus|sonnet|haiku|fable).*$/, "$1").slice(0, 6))}</div>` : "";
+  const k = c.klass;
+  const seal = k ? `<div class="seal ${c.rank || "common"}" title="${esc(k.name)}: ${esc(k.blurb || "")}${c.model ? " (" + esc(c.model) + (c.rank ? ", " + c.rank : "") + ")" : ""}">${race(k.race, "small")}<i class="gi-icon gi-${esc(k.icon)}" aria-hidden="true"></i><span>${esc(k.name)}</span></div>`
+    : c.model ? `<div class="seal ${c.rank || "common"}" title="${esc(c.model)}">${esc(c.model.slice(0, 6))}</div>` : "";
   const meta = [`<span class="state ${sc}">${esc(STATE_WORD[c.state] || c.state)}</span>`];
   if (c.ticket && c.kind === "jira" && c.ticket !== c.title) meta.push(`<span>${esc(c.ticket)}</span>`);
   if (c.repo) meta.push(`<span>${esc(c.repo)}</span>`);
@@ -304,8 +396,12 @@ function cardHtml(c) {
   }
   const labels = pills.length ? `<div class="labels">${pills.join("")}</div>` : "";
   const tone = sc === "bad" ? "bad" : sc === "turn" ? "turn" : sc === "working" ? "working" : "";
-  const alert = sc === "bad" ? `<p class="alert">${esc(ALERT[c.state] || c.state)}${c.what ? ": " + esc(c.what) : ""}</p>`
-    : c.column === "waiting" ? `<p class="alert turn">Your call${c.what ? ": " + esc(c.what) : ""}</p>` : "";
+  const L = c.lore;
+  const creature = (cls) => L
+    ? `<p class="alert ${cls}">${race(L.race, "small horde")}<i class="gi-icon gi-${esc(L.icon)}" aria-hidden="true"></i>${esc(L.line)} <span class="plain">(${esc(L.plain)})</span>${c.what ? ": " + esc(c.what) : ""}</p>${L.quip ? `<p class="quip">${esc(L.quip)}</p>` : ""}`
+    : "";
+  const alert = sc === "bad" ? (creature("") || `<p class="alert">${esc(ALERT[c.state] || c.state)}${c.what ? ": " + esc(c.what) : ""}</p>`)
+    : c.column === "waiting" ? (creature("turn") || `<p class="alert turn">Your call${c.what ? ": " + esc(c.what) : ""}</p>`) : "";
   const keyLine = c.ticket && c.kind !== "jira" ? c.ticket : kindLabel(c);
   return `<article class="card ${c.pinned ? "pinned" : ""} ${tone ? "tone-" + tone : ""}" style="--tilt:0deg" data-kind="${esc(c.kind)}" data-id="${esc(c.id)}" data-threads="${threads.join(" ")}">
     ${c.pinned ? '<span class="pinhead" title="Pinned"></span>' : ""}
@@ -319,12 +415,12 @@ function cardHtml(c) {
   </article>`;
 }
 
-const COLS = [
-  { key: "todo", title: "To do", hint: "not started, idle, or stopped" },
-  { key: "road", title: "In progress", hint: "an agent is working" },
-  { key: "waiting", title: "Needs you", hint: "a decision only you can make" },
-  { key: "trial", title: "In review", hint: "PR open, waiting for review" },
-  { key: "done", title: "Done", hint: "merged or closed this week" },
+let COLS = [
+  { key: "todo", title: "The Tavern", hint: "to do: not started, idle, or stopped", icon: "mug" },
+  { key: "road", title: "On the Road", hint: "in progress: an agent is working", icon: "map" },
+  { key: "waiting", title: "The Oracle", hint: "needs you: a decision only you can make", icon: "crystal" },
+  { key: "trial", title: "The Castle Gate", hint: "in review: PR open, waiting for the gatekeeper", icon: "gate" },
+  { key: "done", title: "The Treasury", hint: "done: merged or closed this week", icon: "chest" },
 ];
 const DONE_SHOWN = 3;
 let renaming = null;
@@ -332,7 +428,9 @@ let renaming = null;
 function render() {
   if (!data) return;
   const byId = {};
+  if (data.columns.every((col) => col.title)) COLS = data.columns.map((col) => ({ key: col.key, title: col.title, hint: col.hint, icon: col.icon }));
   data.columns.forEach((col) => col.cards.forEach((c) => { byId[c.id] = c; }));
+  realmParty(Object.values(byId));
   const keep = (c) => c && (filter === "all" || c.kind === filter);
   const count = {};
   COLS.forEach((k) => { count[k.key] = 0; });
@@ -340,12 +438,12 @@ function render() {
   lanes.forEach((l) => l.list.forEach((c) => { count[c.column] += 1; }));
 
   const bad = lanes.reduce((n, l) => n + l.list.filter((c) => stateClass(c.state) === "bad").length, 0);
-  $("#summary").innerHTML = [`<b>${count.done}</b> done`, `<b>${count.road}</b> in progress`,
-    `<b>${count.waiting}</b> need you` + (bad ? ` <span class="bad">(${bad} blocked or stopped)</span>` : ""),
-    `<b>${count.trial}</b> in review`, `<b>${count.todo}</b> to do`].join(" · ");
+  $("#summary").innerHTML = [`<b>${count.done}</b> in the treasury`, `<b>${count.road}</b> on the road`,
+    `<b>${count.waiting}</b> await your word` + (bad ? ` <span class="bad">(${bad} met an orc, a troll or worse)</span>` : ""),
+    `<b>${count.trial}</b> at the gate`, `<b>${count.todo}</b> at the tavern`].join(" · ");
 
   const draft = $("#post-input")?.value || "";
-  let html = COLS.map((k) => `<div class="colhead"><h2>${k.title} <span class="n">${count[k.key]}</span></h2><p>${k.hint}</p></div>`).join("");
+  let html = COLS.map((k) => `<div class="colhead"><h2><span>${k.icon ? `<i class="gi-icon gi-${esc(k.icon)}" aria-hidden="true"></i>` : ""}${esc(k.title)}</span><span class="n">${count[k.key]}</span></h2><p>${esc(k.hint)}</p></div>`).join("");
   for (const l of lanes) {
     const done = l.list.filter((c) => c.column === "done").length, total = l.list.length;
     const title = l.title || l.code;
@@ -366,7 +464,7 @@ function render() {
       html += `<div class="cell" data-col="${k.title}">${cards.map(cardHtml).join("") || '<div class="dash">—</div>'}${more}</div>`;
     }
   }
-  if (!lanes.length) html += `<div class="lane"><span class="status">Nothing on the board.</span></div>`;
+  if (!lanes.length) html += `<div class="lane"><span class="status">Nothing on the board. The tavern is quiet.</span></div>`;
   $("#board").innerHTML = `<div class="grid">${html}</div>`;
   const input = $("#post-input");
   if (input && input.value !== draft) input.value = draft;

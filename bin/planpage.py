@@ -145,8 +145,20 @@ PAGE = """<!doctype html>
  .next h3 { margin: 0 0 6px; font-size: 15px; } .next ol { margin: 0; padding-left: 20px; font-size: 14px; }
  .hint { color: var(--dim); font-size: 13px; margin-top: 18px; }
  @media (max-width: 760px) { .minute, .ta, .cmp, .next { grid-template-columns: 1fr; } }
+ /* the realm: the cards sit on dark stone like every other page, not on see-through parchment */
+ html.realm.rm-dark .minute .m, html.realm.rm-dark .ta > div, html.realm.rm-dark .cmp .col, html.realm.rm-dark .next div {
+   background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; color: var(--rm-text);
+   box-shadow: inset 0 0 0 1px rgba(217, 164, 65, .10), 0 6px 14px rgba(0, 0, 0, .45); }
+ html.realm.rm-dark .minute .m { border-top-color: var(--rm-gold); }
+ html.realm.rm-dark .minute .m.pain { border-top-color: #e0573f; } html.realm.rm-dark .minute .m.expect { border-top-color: #8fb35a; }
+ html.realm.rm-dark .ta > div.today { border-left-color: #a8987a; } html.realm.rm-dark .ta > div.after { border-left-color: #8fb35a; }
+ html.realm.rm-dark .minute b, html.realm.rm-dark .row b { color: #f3cf6c; }
+ html.realm.rm-dark .lead2.warn { color: #e0a93a; }
+ html.realm.rm-dark .tablewrap th, html.realm.rm-dark .sec th { background: rgba(217, 164, 65, .10); color: #f3cf6c; }
+ html.realm.rm-dark .tablewrap td, html.realm.rm-dark .sec td { border-color: #4a3f52; }
+ html.realm.rm-dark pre.mermaid { background: #f3e7c9; border: 1px solid #8a6a1e; border-radius: 4px; }
 </style></head><body>
-<div class="kicker">__QUEST__ · understand it, then approve</div>
+<div class="kicker">__QUEST__ · read the map, then give the order</div>
 <h1>Understand the plan</h1>
 <p class="summary">__SUMMARY__</p>
 <h2>In one minute</h2>

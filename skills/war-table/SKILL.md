@@ -25,7 +25,7 @@ guild ask "Ship the chooser now or after the icons?" \
 guild board wait <id> --timeout 3600
 ```
 
-Guild builds the page, opens it and waits. Use the long way below when the decision needs pictures: variants, before and after, a diagram, numbers.
+Guild builds the page, opens it and waits. When the question is about a design frame, a screen or a screenshot, the picture goes on the board: `--image "<path>=<caption>"`, once per picture (the Figma export, the screen today). Naming a file in the text is not showing it; `guild ask` refuses a text that names a `.png` without an `--image`. Use the long way below when the decision needs more than a question and pictures: variants side by side, a diagram, numbers.
 
 ## Decision pages: show what each choice leads to (`guild decide`)
 
@@ -82,16 +82,16 @@ Write `decisions.json` beside the page and pass `--decisions`:
 - A short "what I already ruled out and why".
 - Numbers when they exist: bundle size, query count, render time, token cost.
 
-**Wrap-up report** (after the trial, before or with the PR). Open it with `--wrapup`, which marks it as the quest's report and leaves the quest working instead of waiting on a decision. A code quest cannot report `done` without one.
+**Wrap-up report** (after the trial, before or with the PR). Open it with `--wrapup`, which marks it as the quest's report and leaves the quest working instead of waiting on a decision. A code quest cannot report `done` without one. The wrap-up stays hidden (no grading, not on the docket) until you report `done`, so settle the checklist and any open question first; a question asked after the wrap-up is posted would otherwise sit beside it. `--no-scenarios "<why>"` waives the checklist for good: a draft scenarios.json left behind no longer holds back the merge.
 
 Write it so someone who does not read code knows what happened in one minute. The war table already puts an "At a glance" strip on top (where the quest stands as a path of steps, cost, time, checks, trial, PR, grade), so do not repeat those numbers. Follow the template's order:
 
 1. **In plain words**: two to four sentences a product person can read. What people can do now that they could not before, who it is for, and a short yes/no list of what is and is not included. No file names, class names or code words here.
-2. **What it looks like**: real screenshots in before and after pairs, same viewport and same data (`guild shot`). Each caption says what changed for the user.
-3. **How it works**: one diagram (Mermaid flow, state machine or sequence) with one line under it saying what to notice. Prefer a picture to a paragraph whenever the point has arrows.
-4. **How we know it works**: a table of proofs in plain words ("a rate typed the old way still opens"), each with its result as `class="pass"` or `class="fail"`. Say what was checked, not the command.
-5. **Your decision**: merge as is, change something, or split a follow-up, and what happens after each. Point to the validation checklist (below): "ready to merge" waits for it.
-6. **For developers**, folded in `<details class="dev">`: the file list with one line each, performance numbers and how you measured them, pain points, the design choices you made alone with their reasons, what you ruled out, the quests this touches (`guild roster`), and the backend section below.
+2. **Through the spyglass** (what it looks like): real screenshots in before and after pairs, same viewport and same data (`guild shot`). Each caption says what changed for the user.
+3. **How the gears turn** (how it works): one picture drawn by guild, not by hand. Write a small spec and run `guild draw spec.json --into <page.html>` (the figure lands at `<!--GUILD-DRAW-->`, or right under this heading). Guild picks the form that fits and says why under the picture: a state machine when modes loop back with guards, a flow for a one-way path, an organogram for who contains or owns what, a rules table for conditions and outcomes (`guild draw --example` prints a spec; `"kind"` forces a form). A picture alone is not enough for the guildmaster: every move or rule that matters carries its **scene**, in the spec as `trigger` (the screen, form field or endpoint where it fires), `who` (the person doing it), `scenario` (an example in words, with the data that makes it happen), `result` (what that person sees) and `where` (`Class.method`). Guild numbers each scene on its arrow and lists them under the picture; hovering one lights the other. Write scenes from what you read in the code and the tests, never from a guess. Mermaid is still fine for a sequence between services or a quick sketch on a decision board.
+4. **Proof by trial** (how we know it works): a table of proofs in plain words ("a rate typed the old way still opens"), each with its result as `class="pass"` or `class="fail"`. Say what was checked, not the command.
+5. **Your ruling** (your decision): merge as is, change something, or split a follow-up, and what happens after each. Point to the validation checklist (below): "ready to merge" waits for it.
+6. **For the engineers' guild**, folded in `<details class="dev">`: the file list with one line each, performance numbers and how you measured them, the monsters you met (pain points), the design choices you made alone with their reasons, what you ruled out, the quests this touches (`guild roster`), and the backend section below.
 
 - **Backend: data model, impact and business rules.** When the change touches migrations, entities, services or validation, the report gets a drawn section. Guild builds it; you explain it:
   1. `guild impact --out /tmp/impact.html` gives a first look. Read what it found: the schema diff (every migration replayed on the base and on your branch), changed entities and fields, every module that uses what changed (the files you did *not* touch are the ones to double check), changed endpoints, and the code lines that look like rules.
@@ -152,9 +152,15 @@ How to write it (the guildmaster's model is a run sheet a colleague could follow
 - **Known gaps** are what the guildmaster should not report as bugs, each with why and where it is tracked.
 - Plain B1 English, no emojis, no em dashes.
 
+## The guild's voice
+
+The war table is a guild hall, and every page speaks like one. The vocabulary (`bin/lore.py`, `guild lore`): the guildmaster rules; the quartermaster sends parties out; the adventurers are classes by model (an Oracle on Fable, an Archmage on Opus, a Knight on Sonnet, a Scout on Haiku); helpers are squires; the behaviour validator is the Inquisitor. Trouble has a face: an orc for a failure, a troll for a block, goblins for red tests, a skull for a quest that stopped without a tale. Places are stages: the tavern (to do), the road (working), the oracle (your call), the castle gate (PR in review), the treasury (merged).
+
+Use it in headings and asides, never instead of the facts. A heading may say "Proof by trial"; the rows under it still say exactly what was checked and what came back. When a lore word could be misread, put the plain word next to it in brackets, as the template does. The "In plain words" block and the validation checklist's rows stay plain: they are for people who did not sign up for the game.
+
 ## Diagrams and screenshots
 
-- **Diagrams**: write Mermaid in `<pre class="mermaid">` blocks. The war table serves Mermaid itself, so it renders offline. Reach for it whenever the point has arrows: a state machine you want the guildmaster to approve before building it, a request flow, a sequence between services, or "what is actually happening" behind a hard topic.
+- **Diagrams**: business rules, modes, flows and ownership are drawn with `guild draw` (see "How the gears turn" above), which lays them out cleanly and carries the scenes. Mermaid in `<pre class="mermaid">` blocks stays for a sequence between services or a quick sketch; the war table serves Mermaid itself, so it renders offline.
 - **Prototypes first**: when a decision is about behaviour, draw the state machine or flow as the options themselves (one diagram per option) and let the guildmaster pick before any code exists.
 - **Screenshots**: `guild shot <url> --name before|after` takes them one way every time (headless, fixed viewport). Take the pair with identical flags, then put them side by side.
 

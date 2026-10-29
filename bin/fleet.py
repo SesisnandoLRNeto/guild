@@ -39,13 +39,10 @@ SUBAGENT_SECONDS = 120     # a subagent log touched in the last 2 minutes is sti
 SESSION_HOURS = 12         # idle sessions older than this leave the board
 DONE_DAYS = 7
 
-COLUMNS = [
-    ("todo", "Quest board", "Open and idle, stopped, or posted"),
-    ("road", "On the road", "Agents at work"),
-    ("waiting", "Awaiting orders", "A decision only you can make"),
-    ("trial", "In review", "PR open: waiting for review or merge"),
-    ("done", "Returned", "Merged, or closed, in the last week"),
-]
+# The five places a card can be, named by the lore (bin/lore.py); the hint keeps the plain meaning.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+COLUMNS = [(key, place, hint) for key, place, hint, _icon in __import__("lore").COLUMNS]
+COLUMN_ICON = {key: icon for key, _p, _h, icon in __import__("lore").COLUMNS}
 QUEST_COLUMN = {
     "working": "road", "checks-baseline": "road", "checks-green": "road", "checks-red": "road",
     "acceptance": "road", "message": "road", "planned": "road",
@@ -268,7 +265,7 @@ def quests():
             continue
         meta.update(state=state, note=note, since=since, dir=d)
         boards = os.path.join(d, "boards")
-        meta["open_boards"], meta["wrapup"] = [], ""
+        meta["open_boards"], meta["wrapup"], meta["why_board"] = [], "", ""
         if os.path.isdir(boards):
             for b in sorted(os.listdir(boards)):
                 bj = load_json(os.path.join(boards, b, "board.json"), None)
@@ -276,6 +273,8 @@ def quests():
                     continue                 # not a board (a folder left by a failed open)
                 if bj.get("wrapup"):
                     meta["wrapup"] = b
+                elif b.startswith("why-") and not os.path.exists(os.path.join(boards, b, "decision.json")):
+                    meta["why_board"] = b     # your words about why the quest exists: a note to fill, not a decision
                 elif not os.path.exists(os.path.join(boards, b, "decision.json")):
                     held = bj.get("held_until", "")
                     if not held or held <= time.strftime("%Y-%m-%d"):      # a held decision waits for its date
@@ -527,9 +526,14 @@ def set_pin(target, on):
 # ── the board ─────────────────────────────────────────────────────────────────
 
 def card(**kw):
+    import lore
     kw.setdefault("agents", [])
     kw.setdefault("links", [])
     kw.setdefault("rank", rank(kw.get("model")))
+    # who is on it (an Archmage, a Knight, a Scout) and what its state looks like (an orc, a troll,
+    # the castle gate), with the plain meaning beside each, so the board reads as one story
+    kw["klass"] = lore.klass(kw.get("model"), kw.get("tier", ""))
+    kw["lore"] = lore.lore(kw.get("state", ""), kw.get("column", ""), kw.get("pr"))
     kw["model"] = short_model(kw.get("model"))
     return kw
 
@@ -571,8 +575,13 @@ def board():
             v = scenarios.summary(q["slug"])
             links.append({"label": "validated" if v["certified"] else "validate again" if v["stale"] else f"validate {v['pass']}/{v['total']}",
                           "href": f"/q/{q['slug']}/validate", "hot": not v["certified"] and q["state"] in ("done", "trial-pass", "trial-skip")})
+        wt = (load_json(os.path.join(q["dir"], "meta.json"), {}) or {}).get("worktree", "")
+        if wt and os.path.isdir(wt):                                         # the map room: find any file, read its diff
+            links.append({"label": "files", "href": f"/q/{q['slug']}/files"})
         for b in q["open_boards"] if q["state"] not in ("done", "failed") else []:
             links.append({"label": "decide", "href": f"/b/{q['slug']}/{b}/"})
+        if q.get("why_board") and q["state"] not in ("done", "failed"):
+            links.append({"label": "why card", "href": f"/b/{q['slug']}/{q['why_board']}/"})
         pr_info = pr_of.get(q["slug"])
         pr = re.search(r"https?://\S+/pull/(\d+)", q["note"] or "")
         if pr_info and not pr_info.get("error"):
@@ -627,6 +636,10 @@ def board():
             column, state, what = "waiting", "asks you", s["question"] or (links and "a board is open on the war table") or ""
         else:
             column, state, what = "todo", "idle", (s["title"] if s["title"] and s["title"] != s["name"] else "") or prompt[:140]
+        # The quartermaster is always there; sitting idle is its normal state, not a to-do of
+        # yours. It comes back on the board the moment it works or asks you something.
+        if is_qm and column == "todo" and key not in pinned:
+            continue
         cards.append(card(
             id=key, kind="session", column=column, title=name, what=what,
             last=prompt[:140] if column != "road" and prompt[:140] != what else "",
@@ -670,7 +683,7 @@ def board():
         by_col[k].sort(key=lambda c: (0 if c.get("pinned") else 1, _neg(c.get("since", ""))))
     agents_live = sum(1 for c in cards if c["column"] == "road") + sum(
         len([a for a in c["agents"] if a["type"] not in {q["slug"] for q in qs}]) for c in cards)
-    return {"columns": [{"key": k, "title": t, "hint": h, "cards": by_col[k]} for k, t, h in COLUMNS],
+    return {"columns": [{"key": k, "title": t, "hint": h, "icon": COLUMN_ICON[k], "cards": by_col[k]} for k, t, h in COLUMNS],
             "counts": {"agents": agents_live, "waiting": len(by_col["waiting"]), "todo": len(by_col["todo"])},
             "threads": threads, "edges": edges, "lanes": lanes(cards, threads, parents),
             "jira_note": jira_note, "at": time.strftime("%H:%M:%S")}

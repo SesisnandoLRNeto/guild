@@ -53,6 +53,15 @@ def load(slug):
         return None
 
 
+def waiver(slug):
+    """Why the quest closed without a checklist (guild status done --no-scenarios), or "".
+    A waived checklist is not shown and does not hold back a merge, even if a draft of it exists."""
+    try:
+        return open(os.path.join(qdir(slug), "scenarios.waived")).read().strip() or "closed without a checklist"
+    except OSError:
+        return ""
+
+
 def state(slug):
     try:
         return json.load(open(os.path.join(qdir(slug), "validation.json")))
@@ -123,9 +132,10 @@ def summary(slug):
     """Counts, and whether the work is certified: every scenario passed (or skipped with a reason)
     on the commit the worktree is on now. A new commit after that makes the certificate stale."""
     spec = load(slug)
-    if not spec:
+    waived = waiver(slug)
+    if not spec or waived:
         return {"total": 0, "pass": 0, "fail": 0, "skip": 0, "open": 0, "complete": False, "exists": False,
-                "certified": False, "stale": False}
+                "certified": False, "stale": False, "waived": waived}
     marks = state(slug)
     ids = [s["id"] for s in scenario_list(spec) if s.get("id")]
     count = {k: sum(1 for i in ids if marks.get(i, {}).get("status") == k) for k in STATUSES}
@@ -157,6 +167,24 @@ def mark(slug, sid, status, note=""):
     return summary(slug)
 
 
+def mark_all(slug, note="passed with the Pass all button, not run one by one"):
+    """Mark every scenario still to run as passed, in one go. A fail or a skip already there is left
+    alone. The note says it was a bulk pass, so a certificate built this way never looks like a real
+    run of the list."""
+    spec, marks = load(slug), state(slug)
+    done = []
+    for s in scenario_list(spec):
+        sid = s.get("id")
+        if sid and not marks.get(sid, {}).get("status"):
+            marks[sid] = {"status": "pass", "note": note, "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            done.append(sid)
+    if done:
+        with open(os.path.join(qdir(slug), "validation.json"), "w") as f:
+            json.dump(marks, f, indent=2)
+        certify(slug)
+    return dict(summary(slug), passed_now=done, note=note)
+
+
 def certify(slug):
     """When the last scenario passes, write the certificate: when, what, and on which commit.
     Any mark that breaks the list (a fail, a cleared result) takes it away again."""
@@ -183,15 +211,16 @@ def certify(slug):
     return cert
 
 
-def stamp(s):
-    """The certificate as a line of HTML for the page."""
+def stamp(s, lore=False):
+    """The certificate as a line of HTML for the page. `lore` adds the guild's words on the live page;
+    the team's export stays plain."""
     c = s.get("certificate")
     if s.get("stale"):
-        return (f'<p class="cert stale"><b>Certificate out of date.</b> Validated on {esc(c["at"][:16].replace("T", " "))} at '
+        return (f'<p class="cert stale"><b>{"The gauntlet moved. " if lore else ""}Certificate out of date.</b> Validated on {esc(c["at"][:16].replace("T", " "))} at '
                 f'<code>{esc(c["commit"][:8])}</code>, but the branch has new commits since. Run the list again.</p>')
     if s.get("certified"):
         skipped = f', {len(c["skipped"])} skipped with a reason' if c.get("skipped") else ""
-        return (f'<p class="cert"><b>Validated.</b> {c["passed"]} of {c["total"]} passed{skipped}, on '
+        return (f'<p class="cert"><b>{"Gauntlet cleared. " if lore else ""}Validated.</b> {c["passed"]} of {c["total"]} passed{skipped}, on '
                 f'{esc(c["at"][:16].replace("T", " "))} at commit <code>{esc(c["commit"][:8])}</code>. Ready for the merge decision.</p>')
     return ""
 
@@ -292,11 +321,23 @@ def page(slug, meta=None, export=False, image=None, prs=None):
         if s.get("screen"):
             by_screen.setdefault(s["screen"], []).append(s["id"])
     pr_label = f"PR #{prs['number']}" if prs and prs.get("number") else ""
-    eyebrow = " · ".join(x for x in [os.path.basename(meta.get("repo", "")), meta.get("ticket", ""), pr_label,
-                                      "updated " + time.strftime("%d %b %Y")] if x)
+    eyebrow = " · ".join(x for x in [("" if export else "the gauntlet"), os.path.basename(meta.get("repo", "")),
+                                      meta.get("ticket", ""), pr_label, "updated " + time.strftime("%d %b %Y")] if x)
     back = "" if export else (f'<a class="btn back" href="{esc(report_url(slug) or "/campaign")}" id="back">'
                               f'&larr; Back to the {"report" if report_url(slug) else "campaign board"}</a>')
-    h = [f'<header>{back}<div class="eyebrow">{esc(eyebrow)}</div><h1>{esc(spec.get("title") or "Validate " + slug)}</h1>']
+    strip = "" if export else (
+        '<div class="rm-party gauntlet">'
+        + figure("dwarf", "built it", "The dwarf swears it works on its machine. The gauntlet is where you find out.")
+        + figure("goblin", "hide in the tests", "Every scenario still to run is a place a goblin can hide. Run them all; count what you find.")
+        + figure("human", "runs the gauntlet", "You. Pass, fail or skip each one; a fail goes back to the forge with your note, and the last pass writes the certificate.")
+        + '</div>')
+    # On the war table the header is a realm hero: title and buttons on the left, the three races on the
+    # right. The export for the team keeps the plain header.
+    nav = "" if export else (f'<nav class="nav">{back}<a class="btn" href="/q/{esc(slug)}/files">'
+                             '<i class="gi-icon gi-map" aria-hidden="true"></i>All the changes</a></nav>')
+    h = [('<header>' if export else '<header class="rm-hero rm-frame"><div>') + nav
+         + f'<div class="eyebrow">{esc(eyebrow)}</div><h1 class="rm-title">{esc(spec.get("title") or "Validate " + slug)}</h1>'
+         + ("" if export else '<div class="rm-rule"></div>')]
     if spec.get("lede"):
         h.append(f'<p class="lede">{rich(spec["lede"])}</p>')
     h.append('<div class="progress"><span id="count"></span><div class="bar" aria-hidden="true">'
@@ -305,14 +346,16 @@ def page(slug, meta=None, export=False, image=None, prs=None):
         h.append('<button class="btn" id="reset" type="button">Clear my ticks</button>')
     else:
         h.append('<button class="btn warn" id="sendfail" type="button" hidden>Send the failures to the adventurer</button>'
+                 '<button class="btn" id="passall" type="button" title="For testing the page itself: marks every '
+                 'scenario still to run as passed, and says so in each note.">Pass all</button>'
                  '<a class="btn" href="validate/export" download>Download for the team</a>')
     h.append('</div>')
-    h.append(f'<div id="cert">{stamp(summary(slug))}</div>')
+    h.append(f'<div id="cert">{stamp(summary(slug), lore=not export)}</div>')
     if export:
         done = summary(slug)
         h.append(f'<p class="note">The guildmaster ran this list: {done["pass"]} passed, {done["fail"]} failed, '
                  f'{done["skip"]} skipped, {done["open"]} not run. Their result shows on each scenario. Your ticks stay in your browser.</p>')
-    h.append('</header>')
+    h.append(('' if export else '</div>' + strip) + '</header>')
 
     tested = spec.get("tested") or ([{"what": meta.get("title") or slug, "ticket": meta.get("ticket", ""),
                                       "pr": f"#{prs['number']}" if prs else "", "state": (prs or {}).get("state", "")}] if meta else [])
@@ -390,16 +433,25 @@ def page(slug, meta=None, export=False, image=None, prs=None):
 
     script = EXPORT_JS.replace("__KEY__", json.dumps(f"guild-validate-{slug}")) if export else LIVE_JS
     return (PAGE_HEAD.replace("__TITLE__", esc(spec.get("title") or f"Validate {slug}")).replace("__THEME__", theme(export))
+            .replace('<html lang="en">', '<html lang="en">' if export else '<html lang="en" class="realm rm-dark">')
             + '<div class="wrap">' + "".join(h) + '</div><script>' + COPY_JS + script + '</script></body></html>')
 
 
 WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "web")
 
 
+def figure(race, sub, tip):
+    """One race of the gauntlet, for the strip on the war table page (realm.css draws the ring and the hover)."""
+    name = {"dwarf": "Dwarf", "goblin": "Goblins", "human": "Guildmaster"}[race]
+    horde = " horde" if race == "goblin" else ""
+    return (f'<figure data-tip="{esc(tip)}" data-race="{race}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
+            f'<figcaption>{name}<small>{esc(sub)}</small></figcaption></figure>')
+
+
 def theme(inline):
     """The guild's parchment theme: linked on the war table, copied in for the standalone export."""
     if not inline:
-        return '<meta name="color-scheme" content="light"><link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
+        return '<meta name="color-scheme" content="light"><link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/realm.css">'
     css = ""
     for name in ("icons.css", "theme.css"):
         try:
@@ -417,6 +469,8 @@ html:root body{max-width:1100px}
 *{box-sizing:border-box}
 .wrap{display:grid;gap:36px}
 header{display:grid;gap:12px;border-bottom:1px solid var(--line);padding-bottom:22px}
+.rm-party.gauntlet{justify-content:flex-start;gap:10px 22px;padding:12px 14px;border-radius:6px;background:linear-gradient(180deg,#241d2b,#17121c);border:1px solid #8a6a1e;box-shadow:inset 0 0 0 1px #000}
+.rm-party.gauntlet figcaption{color:#f3cf6c}.rm-party.gauntlet figcaption small{color:#a8987a}
 .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
 h1{margin:0}h2{margin:0}h3{margin:0}p{margin:0}
 .lede,.sub{color:var(--muted);max-width:75ch}.lede{font-size:16px}
@@ -464,6 +518,24 @@ footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padd
 .cert.stale{border-color:var(--warn);background:var(--warn-soft)}.cert.stale b{color:var(--warn)}
 .zoom{position:fixed;inset:0;background:rgba(0,0,0,.88);display:grid;place-items:center;z-index:9;cursor:zoom-out}.zoom img{max-width:96vw;max-height:94vh}
 @media (max-width:700px){.pair{grid-template-columns:1fr}.scen{grid-template-columns:28px minmax(0,1fr)}}
+/* the realm look on the war table (realm.css sets the tokens; the export keeps the parchment) */
+html.realm.rm-dark{--paper:rgba(0,0,0,.25);--ink:#e9dcc0;--muted:#a8987a;--accent-soft:rgba(217,164,65,.14);--ok-soft:rgba(127,191,90,.14);--bad-soft:rgba(176,65,46,.22);--warn-soft:rgba(224,169,58,.16);--code-bg:rgba(0,0,0,.4);--bg:#15111a}
+html.realm.rm-dark h1.rm-title{display:block;font-size:30px}
+html.realm.rm-dark header.rm-hero{display:flex;gap:18px 32px;padding:18px 26px 16px;margin:14px auto 22px;border-bottom:0}
+html.realm.rm-dark header.rm-hero>div:first-child{display:grid;gap:12px;flex:1 1 420px;min-width:0}
+html.realm.rm-dark .rm-party.gauntlet{background:none;border:0;box-shadow:none;padding:0;justify-content:flex-end}
+html.realm.rm-dark .nav{display:flex;gap:8px;flex-wrap:wrap}
+html.realm.rm-dark .btn{background:linear-gradient(180deg,#2a2230,#15111a);border-color:#8a6a1e;color:#e9dcc0;display:inline-flex;align-items:center;gap:6px}
+html.realm.rm-dark .btn .gi-icon{width:14px;height:14px}
+html.realm.rm-dark .btn[hidden]{display:none}
+html.realm.rm-dark .rm-party.gauntlet figure{width:112px}
+html.realm.rm-dark .btn:hover{color:#2a1d14}
+html.realm.rm-dark .btn.warn{background:#8a1c12;border-color:#b0412e;color:#fff5dc}
+html.realm.rm-dark .copy,html.realm.rm-dark .mk{background:#241d2b;color:#e9dcc0}
+html.realm.rm-dark .mnote{background:#0d0b10}
+html.realm.rm-dark .nname{fill:#e9dcc0}
+html.realm.rm-dark .screen figure,html.realm.rm-dark figure.shot{background:#000}
+html.realm.rm-dark .zoom{background:rgba(0,0,0,.92)}
 </style></head><body>"""
 
 COPY_JS = r"""
@@ -500,6 +572,19 @@ cards.forEach(function(s){
   s.querySelector('.mnote').addEventListener('change',function(){if(s.dataset.st)save(s,s.dataset.st)});});
 document.getElementById('sendfail').addEventListener('click',function(){var b=this;b.disabled=true;
   fetch('validate/send',{method:'POST',body:'{}'}).then(function(r){return r.json()}).then(function(o){b.textContent=o.error||o.did;});});
+var pa=document.getElementById('passall'),armed=0;
+pa.addEventListener('click',function(){
+  var left=cards.filter(function(s){return !s.dataset.st}).length;
+  if(!left){pa.textContent='Nothing left to pass';setTimeout(function(){pa.textContent='Pass all'},1600);return}
+  if(!armed){armed=1;pa.classList.add('warn');pa.textContent='Pass '+left+' without running them? Click again';
+    setTimeout(function(){if(armed){armed=0;pa.classList.remove('warn');pa.textContent='Pass all'}},4000);return}
+  armed=0;pa.classList.remove('warn');pa.disabled=true;pa.textContent='Passing...';
+  fetch('validate/markall',{method:'POST',body:'{}'}).then(function(r){return r.json()}).then(function(o){
+    pa.disabled=false;pa.textContent='Pass all';
+    if(o.error){alert(o.error);return}
+    (o.passed_now||[]).forEach(function(id){var s=document.getElementById('s-'+id);
+      if(s){s.dataset.st='pass';s.querySelector('.mnote').value=o.note||''}});
+    tally();document.getElementById('cert').innerHTML=o.stamp||'';});});
 tally();
 """
 

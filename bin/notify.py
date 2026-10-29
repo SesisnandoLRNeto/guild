@@ -79,7 +79,7 @@ def send(title, text, url=""):
 
 def on_event(slug, state, note):
     what = LOUD.get(state)
-    if state == "working" and note.startswith("wrap-up ready"):
+    if state == "wrapup":                 # the quest reported done with a wrap-up to grade
         what = "posted its wrap-up for your grade"
     elif state == "done" and "(no wrap-up)" in note:
         what = "is done"

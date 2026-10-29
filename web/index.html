@@ -1,34 +1,63 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>war table</title>
-<style>
-  :root { --bg: #0f1117; --panel: #161922; --line: #242835; --text: #e6e8ef; --dim: #9aa3b8; --accent: #7aa2f7; --ok: #7dcfa0; }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f7fa; --panel: #fff; --line: #e2e5ec; --text: #1b1f2a; --dim: #5c6478; --accent: #3a63c8; }
-  }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .wrap { max-width: 760px; margin: 48px auto; padding: 0 16px; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  p.sub { color: var(--dim); margin: 0 0 24px; }
-  ul.boards { list-style: none; padding: 0; margin: 0; }
-  ul.boards li { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
-  ul.boards li.waiting { border-left: 3px solid var(--accent); }
-  ul.boards li.answered { opacity: .6; }
-  ul.boards a { color: var(--text); text-decoration: none; font-weight: 600; }
-  ul.boards a:hover { color: var(--accent); }
-  .meta { display: block; color: var(--dim); font-size: 12px; font-family: ui-monospace, monospace; margin-top: 2px; }
-  li.empty { color: var(--dim); }
-</style>
+<title>The notice wall</title>
+<link rel="stylesheet" href="/icons.css">
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
+<style>
+  html:root body { max-width: 900px; background: none; box-shadow: none; padding: 0 16px 40px; color: var(--rm-text); }
+  html:root body::before { display: none; }
+  html:root h1 { display: none; }
+  p.sub { color: var(--dim); margin: 0 0 22px; font-style: italic; }
+  ul.boards { list-style: none; padding: 0; margin: 0; }
+  ul.boards li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start;
+    border: 1px solid var(--line); background: rgba(255,250,235,.62); border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; }
+  ul.boards li::before { content: none !important; }
+  ul.boards li.waiting { border-left: 4px solid #b5651d; }
+  ul.boards li.answered { opacity: .62; }
+  ul.boards .gi-icon { width: 22px; height: 22px; margin-top: 2px; color: #8a4b12; }
+  ul.boards li.answered .gi-icon { color: var(--dim); }
+  ul.boards a { color: var(--text); text-decoration: none; font-weight: 600; }
+  ul.boards a:hover { color: #8a4b12; }
+  .meta { display: block; color: var(--dim); font-size: 12px; font-family: ui-monospace, monospace; margin-top: 2px; }
+  .meta b { font-weight: 600; color: #9a5a0c; }
+  li.empty { color: var(--dim); display: block; }
+  .nav { display: flex; gap: 8px; margin: 0 0 18px; }
+  .nav a { font-size: 13px; text-decoration: none; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; background: rgba(255,250,235,.6); }
+  /* the realm: these come last so they win over the parchment values above */
+  ul.boards li { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; color: var(--rm-text); }
+  ul.boards li.waiting { border-left: 4px solid var(--rm-gold); }
+  ul.boards .gi-icon { color: var(--rm-gold); }
+  ul.boards a { color: var(--rm-text); }
+  ul.boards a:hover { color: var(--rm-gold-2); }
+  .meta { color: var(--rm-dim); }
+  .meta b { color: var(--rm-gold); }
+  .nav a { color: var(--rm-text); background: rgba(0, 0, 0, .35); border-color: var(--rm-line); }
+  .nav a:hover { color: var(--rm-gold-2); border-color: var(--rm-gold); }
+  ul.boards li.answered .gi-icon { color: var(--rm-dim); }
+</style>
 </head>
 <body>
-<div class="wrap">
-  <h1>War table</h1>
-  <p class="sub">Boards your adventurers put up. The ones on the left border are waiting for you.</p>
+  <section class="rm-hero rm-frame" aria-label="The notice wall">
+    <div>
+      <p class="rm-kicker">The war table</p>
+      <h1 class="rm-title">The notice wall</h1>
+      <div class="rm-rule"></div>
+      <p class="rm-sub">Every board your adventurers put up: the oracle's questions, why cards and the bards' tales. A gold edge means it waits for your word.</p>
+      <nav class="rm-nav" style="margin-top:12px"><a href="/docket"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a></nav>
+    </div>
+    <div class="rm-party" id="realm-party"></div>
+  </section>
+  <script>
+    document.getElementById("realm-party").innerHTML =
+      rmFigure("highelf", null, "pins the tales", "Every wrap-up here was read by the quartermaster first. Grade it anyway; elves are polite about dwarves.", { name: "High elf" }) +
+      rmFigure("human", null, "reads the wall", "A gold edge means a board waits for your word. The rest is history, and the bard's tales.", { name: "Guildmaster" });
+  </script>
+  <h1>The notice wall</h1>
   <!--BOARDS-->
-</div>
 </body>
 </html>

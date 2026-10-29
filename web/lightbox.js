@@ -1,11 +1,12 @@
-// The war table lightbox: click any picture on a board page to see it large.
+// The war table lightbox: click any picture on a board page to see it large. A drawn diagram
+// (mermaid, guild draw, the screen map) counts as a picture too: its SVG is copied into an image.
 // Wheel, + and - zoom; drag pans; 0 fits it back; arrows move between pictures;
 // F goes full screen; Esc or a click on the dark closes it.
 (function () {
   var MIN_SIZE = 80;   // smaller images are icons or badges, not pictures
   var css = document.createElement("style");
   css.textContent =
-    "img.gl-zoomable{cursor:zoom-in}" +
+    "img.gl-zoomable,svg.gl-zoomable{cursor:zoom-in}" +
     ".gl-box{position:fixed;inset:0;z-index:99999;background:rgba(20,13,8,.92);display:none;overflow:hidden;user-select:none}" +
     ".gl-box.on{display:block}" +
     ".gl-box img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;max-height:none;cursor:grab;box-shadow:0 10px 40px rgba(0,0,0,.6);background:#fff}" +
@@ -92,15 +93,29 @@
     }
   }
   function caption(img) {
-    var fig = img.closest("figure");
-    var fc = fig && fig.querySelector("figcaption");
+    var fig = img.closest("figure, .guild-draw, .mapbox, pre.mermaid");
+    var fc = fig && fig.querySelector("figcaption, .gd-title");
     return (fc ? fc.innerText : img.alt || img.title || "").trim();
+  }
+  var DIAGRAMS = "pre.mermaid svg, .guild-draw svg, .mapbox svg, figure > svg";
+  function isSvg(el) { return el.tagName && el.tagName.toLowerCase() === "svg"; }
+  /** An inline diagram as an image: a copy with explicit size and a parchment ground, so the text stays readable. */
+  function svgUrl(svg) {
+    var r = svg.getBoundingClientRect(), w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    var copy = svg.cloneNode(true);
+    copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    copy.setAttribute("width", w * 2); copy.setAttribute("height", h * 2);     // twice the size: sharp when zoomed in
+    if (!copy.getAttribute("viewBox")) copy.setAttribute("viewBox", "0 0 " + w + " " + h);
+    var ground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    ground.setAttribute("width", "100%"); ground.setAttribute("height", "100%"); ground.setAttribute("fill", "#f3e7c9");
+    copy.insertBefore(ground, copy.firstChild);
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(copy));
   }
   function show(i) {
     at = (i + pics.length) % pics.length;
     var img = pics[at];
     pic.onload = fit;
-    pic.src = img.currentSrc || img.src;
+    pic.src = isSvg(img) ? svgUrl(img) : (img.currentSrc || img.src);
     if (pic.complete) fit();
     cap.textContent = caption(img) + (pics.length > 1 ? "   (" + (at + 1) + " of " + pics.length + ")" : "");
     var many = pics.length > 1 ? "" : "none";
@@ -109,7 +124,7 @@
   }
   function open(img) {
     if (!box) build();
-    pics = [].filter.call(document.images, zoomable);
+    pics = [].filter.call(document.querySelectorAll("img, " + DIAGRAMS), zoomable);
     box.classList.add("on");
     show(Math.max(0, pics.indexOf(img)));
   }
@@ -120,14 +135,18 @@
   function zoomable(img) {
     if (box && box.contains(img)) return false;
     if (img.closest("a[href]")) return false;   // a linked image keeps its link
+    if (isSvg(img)) { var r = img.getBoundingClientRect(); return r.width >= MIN_SIZE && r.height >= 24; }   // a flow can be a thin strip
     return (img.naturalWidth || img.width) >= MIN_SIZE && (img.naturalHeight || img.height) >= MIN_SIZE;
   }
 
-  function mark() { [].forEach.call(document.images, function (img) { if (zoomable(img)) img.classList.add("gl-zoomable"); }); }
+  function mark() {
+    [].forEach.call(document.querySelectorAll("img, " + DIAGRAMS), function (img) { if (zoomable(img)) img.classList.add("gl-zoomable"); });
+  }
   document.addEventListener("click", function (e) {
-    var img = e.target.closest && e.target.closest("img");
+    var img = e.target.closest && e.target.closest("img, " + DIAGRAMS);
     if (img && zoomable(img)) { e.preventDefault(); open(img); }
   });
   window.addEventListener("load", mark);
   document.addEventListener("DOMContentLoaded", mark);
+  window.addEventListener("load", function () { setTimeout(mark, 1500); });   // mermaid draws after load
 })();

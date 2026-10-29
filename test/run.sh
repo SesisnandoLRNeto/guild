@@ -20,6 +20,7 @@ export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
 export GUILD_NO_WHY="1"          # the Why card has its own test below
 export GUILD_NO_ACCEPTANCE="test fixture"   # briefs here are one-liners; the refusal has its own test
+export GUILD_NO_PLAN="test fixture"         # the plan phase is default-on; its own tests clear this
 export GUILD_NO_NOTIFY="1"       # nor a notification
 export GUILD_NO_PR_SYNC="1"      # nor a call to GitHub
 export PATH="$TMP/stub:$PATH"
@@ -138,10 +139,22 @@ has "the answer is stored" "$(cat "$GUILD_HOME/quests/alpha/boards/$board/decisi
 out=$(GUILD_QUEST=alpha "$GUILD" board wait "$board" --timeout 5)
 has "wait returns the answer" "$out" "go with alpha"
 
+# a question about a frame shows the frame; naming a .png in the text is refused
+printf '\x89PNG\r\n\x1a\n' > "$TMP/Html → Body.png"
+out=$(GUILD_QUEST=alpha "$GUILD" ask "Draw the checkbox column Body.png shows?" --option "a=No" --option "b=Yes" --no-open 2>&1 || true)
+has "a named picture without --image is refused" "$out" "names a picture (Body.png)"
+is "the refused ask leaves no board" "$(ls "$GUILD_HOME/quests/alpha/boards" | wc -l | tr -d ' ')" "1"
+out=$(GUILD_QUEST=alpha "$GUILD" ask "Draw the checkbox column Body.png shows?" --option "a=No" --option "b=Yes" --image "$TMP/Html → Body.png=Option A frame" --no-open 2>&1)
+pb=$(ls -t "$GUILD_HOME/quests/alpha/boards" | head -1)
+has "the picture is on the board" "$(cat "$GUILD_HOME/quests/alpha/boards/$pb/content.html")" '<img src="pics/01-html-body.png" alt="Option A frame">'
+has "the picture is served beside the page" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/b/alpha/$pb/pics/01-html-body.png")" "200"
+curl -s -X POST "http://127.0.0.1:4899/b/alpha/$pb/reply" -d '{"answers":{"choice":"a"},"message":"no boxes"}' >/dev/null
+sleep 1
+
 # a decision cannot be escalated as plain text
 "$GUILD" status alpha needs-decision "Should we rename the module?" >/dev/null 2>&1
 boards=$(ls "$GUILD_HOME/quests/alpha/boards" | wc -l | tr -d ' ')
-is "plain-text escalation builds a board" "$boards" "2"
+is "plain-text escalation builds a board" "$boards" "3"
 out=$(curl -s "http://127.0.0.1:4899/b/alpha/$board/../../../etc/passwd")
 hasnt "the server refuses path traversal" "$out" "root:"
 
@@ -185,6 +198,9 @@ HTML
 out=$(GUILD_QUEST=alpha "$GUILD" board open --html "$TMP/wrap.html" --wrapup --title "alpha shipped" --no-open 2>&1)
 has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
 is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
+wb0=$(ls "$GUILD_HOME/quests/alpha/boards" | tail -1)
+has "before done, the wrap-up has no grading panel" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/")" "has not reported done yet"
+case "$(curl -s "http://127.0.0.1:4899/docket.json")" in *"alpha shipped"*) bad "and it is not on the docket" "listed" ;; *) ok "and it is not on the docket" ;; esac
 out=$("$GUILD" status alpha done "shipped it" 2>&1)
 has "a code quest needs its validation scenarios before done" "$out" "there is no scenarios.json"
 cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
@@ -195,6 +211,7 @@ cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
 JSON
 "$GUILD" status alpha done "shipped it" >/dev/null 2>&1
 is "with a wrap-up and scenarios, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+has "done announces the wrap-up" "$(tail -3 "$GUILD_HOME/events.log")" "wrap-up ready"
 vurl="http://127.0.0.1:4899/q/alpha/validate"
 has "the war table shows the checklist" "$(curl -s "$vurl")" "Call the endpoint."
 has "with the command to copy and what to expect" "$(curl -s "$vurl")" '<p class="expect"><b>Expect</b> 200 and <code>ok</code></p>'
@@ -207,6 +224,8 @@ root=sys.argv[1]
 for b in sorted(os.listdir(root)):
     if json.load(open(os.path.join(root,b,'board.json'))).get('wrapup'): print(b)" "$GUILD_HOME/quests/alpha/boards" | tail -1)
 has "a wrap-up asks for a grade" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" '"id": "grade"'
+has "a board page wears the realm" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'classList.add("realm","rm-dark")'
+has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'class="gg-party rm-party"'
 out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}')
 has "ready to merge waits for the validation" "$out" "Not ready to merge yet"
 [ -f "$GUILD_HOME/quests/alpha/grade.json" ] && bad "and nothing is recorded" "graded anyway" || ok "and nothing is recorded"
@@ -229,6 +248,50 @@ is "asking for changes puts the quest back to work" "$(cut -f1 "$GUILD_HOME/ques
 echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "fix the edge case"
 is "a new commit makes the certificate stale" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" summary alpha | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["stale"], d["certified"])')" "True False"
 has "and the page asks to run it again" "$(curl -s "$vurl")" "Certificate out of date"
+
+# The map room: find any file of the quest, read it with its changes marked, compare with any commit
+section "map room"
+printf 'a = 1\nb = 2\n' > "$WT/room.py"; git -C "$WT" add room.py; git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "room: first"
+printf 'a = 1\nb = 3\nc = 4\n' > "$WT/room.py"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" list alpha)
+has "the map room lists the changed file" "$(echo "$out" | python3 -c 'import json,sys;print([c["path"] for c in json.load(sys.stdin)["changed"]])')" "'room.py'"
+has "with its status and counts" "$(echo "$out" | python3 -c 'import json,sys;c=[c for c in json.load(sys.stdin)["changed"] if c["path"]=="room.py"][0];print(c["status"], c["add"], c["del"])')" "A 3 0"
+has "and every tracked file" "$(echo "$out" | python3 -c 'import json,sys;print("fix.txt" in json.load(sys.stdin)["files"])')" "True"
+has "and the quest's own commits" "$(echo "$out" | python3 -c 'import json,sys;print([c["subject"] for c in json.load(sys.stdin)["commits"]])')" "room: first"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha room.py)
+is "a new file is marked new on every line" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["lang"], d["lines"], d["marks"])')" "python 3 [['add', 1, 3]]"
+has "and its history names the quest's commit" "$(echo "$out" | python3 -c 'import json,sys;print([(l["subject"], l["quest"]) for l in json.load(sys.stdin)["log"]])')" "('room: first', True)"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha room.py HEAD)
+is "a file can be read as it was at a commit" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["rev"], d["lines"], repr(d["text"]))')" "HEAD 2 'a = 1\nb = 2\n'"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" diff alpha room.py HEAD)
+is "a diff against the last commit has the right rows" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["add"], d["del"], [(r["kind"], r["text"]) for r in d["rows"] if r["kind"] in ("add","del")])')" "2 1 [('del', 'b = 2'), ('add', 'b = 3'), ('add', 'c = 4')]"
+out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" diff alpha room.py)
+is "against the base, a new file is all additions" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["add"], d["del"])')" "3 0"
+has "a path outside the worktree is refused" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha ../../etc/passwd 2>/dev/null)" "no such file"
+has "a path that walks out through the worktree is refused" "$(curl -s "http://127.0.0.1:4899/q/alpha/files/show?path=room.py/../../../../etc/passwd")" "no such file"
+has "the war table serves the map room" "$(curl -s "http://127.0.0.1:4899/q/alpha/files")" "The Map Room"
+has "and its file list" "$(curl -s "http://127.0.0.1:4899/q/alpha/files.json")" '"room.py"'
+has "the campaign card links the map room" "$(python3 "$REPO/bin/fleet.py" json)" "/q/alpha/files"
+has "and the wrap-up's glance has a Files tile" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" "/q/alpha/files"
+git -C "$WT" checkout -q -- room.py     # leave the worktree clean for the sections below
+
+# Pass all: one click to mark everything still to run, for testing the page itself
+mkdir -p "$GUILD_HOME/quests/pall"
+echo '{"slug":"pall","repo":"/tmp/none","worktree":"/tmp/none"}' > "$GUILD_HOME/quests/pall/meta.json"
+echo '{"title":"pall","groups":[{"id":"A","title":"x","scenarios":[{"id":"A1","do":"one","expect":"ok"},{"id":"A2","do":"two","expect":"ok"},{"id":"A3","do":"three","expect":"ok"}]}]}' > "$GUILD_HOME/quests/pall/scenarios.json"
+purl="http://127.0.0.1:4899/q/pall/validate"
+has "the checklist has a Pass all button" "$(curl -s "$purl")" 'id="passall"'
+curl -s -X POST "$purl/mark" -d '{"id":"A2","status":"fail","note":"it broke"}' >/dev/null
+out=$(curl -s -X POST "$purl/markall" -d '{}')
+has "Pass all passes everything still to run" "$out" '"passed_now": ['
+has "and leaves a fail alone" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/pall/validation.json'))['A2']['status'])")" "fail"
+has "and says in the note it was not run one by one" "$(cat "$GUILD_HOME/quests/pall/validation.json")" "not run one by one"
+[ -f "$GUILD_HOME/quests/pall/certificate.json" ] && bad "a fail still blocks the certificate" "certified anyway" || ok "a fail still blocks the certificate"
+curl -s -X POST "$purl/mark" -d '{"id":"A2","status":"pass"}' >/dev/null
+has "with nothing failing, Pass all certifies" "$(cat "$GUILD_HOME/quests/pall/certificate.json")" '"passed": 3'
+is "running it again passes nothing new" "$(curl -s -X POST "$purl/markall" -d '{}' | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["passed_now"]))')" "0"
+has "the export has no Pass all button" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" export pall --out "$TMP/pall-v.html" && cat "$TMP/pall-v.html")" "Guildmaster: <b>pass</b>"
+[ -n "$(grep -c 'id=\"passall\"' "$TMP/pall-v.html" | grep '^0$')" ] && ok "and the team copy cannot bulk pass" || bad "and the team copy cannot bulk pass" "found the button"
 
 section "quartermaster guard"
 guard() { echo "$1" | GUILD_HOME="$GUILD_HOME" "$REPO/hooks/qm-guard.sh" >/dev/null 2>&1; echo $?; }
@@ -621,10 +684,13 @@ has "board pages get the picture lightbox" "$(curl -s "${url%/campaign}/b/$bq/$b
 has "and the lightbox is served" "$(curl -s "${url%/campaign}/lightbox.js")" "requestFullscreen"
 has "the treasury page is served" "$(curl -s "${url%/campaign}/treasury")" "The Treasury"
 tj=$(curl -s "${url%/campaign}/treasury.json")
+has "every quest in the treasury carries the kind of task it was" "$tj" '"kind": "'
+has "and how it was run" "$tj" '"mode": "'
+has "the treasury page reads tokens by model and the kinds of work on the period" "$(curl -s "${url%/campaign}/treasury")" 'id="kind-cost"'
 has "with daily spend by scope" "$tj" '"by_scope"'
 has "and every quest's cost" "$tj" '"quests"'
 has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
-has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '>PR open</li>'
+has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '<small>pr open</small></li>'
 
 
 
@@ -753,6 +819,8 @@ has "a flow per option" "$dp" '<pre class="mermaid">flowchart LR'
 has "the best value per criterion is marked" "$dp" 'class="best">yes &#10003;'
 has "a bar chart per measure" "$dp" 'class="bf best"'
 has "the answers include explain more and my own answer" "$(cat "$GUILD_HOME/quests/alpha/boards/$db/decisions.json")" '"id": "own"'
+has "the options are paths" "$dp" '<div class="oid">Path warn · suggested</div>'
+has "and the bard has a line under them" "$dp" 'class="bard"'
 
 # ── the docket: every open decision on one page ──────────────────────────────
 section "docket"
@@ -772,6 +840,33 @@ dj=$(curl -s "$base/docket.json")
 has "the docket lists every open decision" "$dj" "Pick a name"
 has "with its options" "$dj" '"recommended": "a"'
 has "the docket is the war table's front page" "$(curl -s "$base/")" "The Docket"
+# the lore: classes by model, creatures by state, places by column, one story on every page
+LO=$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin'); import lore
+print(lore.klass('claude-opus-5')['name'], lore.klass('claude-sonnet-5-5')['name'], lore.klass('haiku')['name'], lore.klass('claude-fable-5-1')['name'], lore.klass('', 'plan')['name'])
+print(lore.lore('failed')['line'], '|', lore.lore('blocked')['icon'], '|', lore.lore('done', 'trial', {'state':'open'})['line'], '|', lore.lore('done', '', {'state':'merged'})['line'])")
+is "models have classes: Archmage, Knight, Scout, Oracle, and a Sage for the plan tier" "$(echo "$LO" | head -1)" "Archmage Knight Scout Oracle Sage"
+is "the reviewer is an Elf and the trial step is the elves' court" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin'); import lore
+print(lore.ROLES['reviewer'][0], lore.STEP['Trial'][0], lore.quip('x') == lore.quip('x'))")" "Elf The elves' court True"
+has "the notice wall lists every board with its kind and an icon that can render" "$(curl -s "$base/boards")" 'icons.css'
+has "and says in words which ones wait" "$(curl -s "$base/boards")" '<b>awaits your word</b>'
+is "states have creatures and places, with the PR and the merge read from GitHub" "$(echo "$LO" | tail -1)" "Slain by an orc | troll | At the castle gate | Loot in the treasury"
+CJ=$(curl -s "$base/campaign.json")
+has "the campaign's columns are the lore's places" "$CJ" '"title": "The Tavern"'
+has "and keep the plain meaning as the hint" "$CJ" '"hint": "to do: not started, idle, or stopped"'
+has "a card carries its class" "$CJ" '"klass": {"name": "'
+has "the strip's steps are places, with the plain step under each" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('dk'))")" '<span class="gg-place">The forge</span><small>build</small>'
+echo '{"title":"dk","groups":[{"id":"A","title":"x","scenarios":[{"id":"A1","do":"one","expect":"ok"}]}]}' > "$dq/scenarios.json"
+has "the validation tile waits while the checks have not passed" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('dk'))")" 'the gauntlet opens once the checks pass'
+rm -f "$dq/scenarios.json"
+
 curl -s -X POST "$base/docket/rule" -d '{"quest":"dk","board":"200001","answers":{"c":"b"},"message":"B reads better"}' >/dev/null
 is "a ruling from the docket answers the board" "$(python3 -c "import json;print(json.load(open('$dq/boards/200001/decision.json'))['answers']['c'])")" "b"
 curl -s -X POST "$base/docket/hold" -d '{"quest":"dk","board":"200002","until":"2999-01-01","note":"after the release"}' >/dev/null
@@ -810,6 +905,65 @@ section "contract and behaviour"
 out=$(echo "make it faster" | GUILD_NO_ACCEPTANCE= "$GUILD" quest noacc --repo "$REPO_A" 2>&1)
 has "a brief with no Acceptance block is refused" "$out" "no Acceptance block"
 [ -d "$GUILD_HOME/quests/noacc" ] && bad "and nothing is left behind" "quest folder exists" || ok "and nothing is left behind"
+
+# the plan step: on by default, and a quest that skips it has to say why
+echo x | GUILD_NO_PLAN= "$GUILD" quest planq --repo "$REPO_A" >/dev/null 2>&1
+is "a quest plans before it builds" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/planq/meta.json'))['phase'])")" "plan"
+has "and the adventurer is told to plan first" "$(cat "$GUILD_HOME/quests/planq/prompt.md")" "You start in the plan phase"
+out=$(echo x | GUILD_NO_PLAN= "$GUILD" quest planq2 --repo "$REPO_A" --no-plan 2>&1)
+has "--no-plan without a reason is refused" "$out" "needs a reason"
+echo x | GUILD_NO_PLAN= "$GUILD" quest planq3 --repo "$REPO_A" --no-plan "one line fix" >/dev/null 2>&1
+is "with a reason it skips the plan" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/planq3/meta.json'))['phase'])")" ""
+has "and the reason is kept with the quest" "$(cat "$GUILD_HOME/quests/planq3/meta.json")" "one line fix"
+has "the glance says the step was skipped, and why" "$(curl -s http://127.0.0.1:4899/q/planq3/report 2>/dev/null; python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('planq3'))")" 'title="skipped: one line fix"'
+has "a step with nothing run is not painted green" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('planq3'))")" 'class="skip"'
+# --quick: one flag for all the gates, and the board still says what was skipped
+echo x | GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= GUILD_NO_WHY= "$GUILD" quest quickq --repo "$REPO_A" --quick "small fix, no time" >/dev/null 2>&1
+QM=$(cat "$GUILD_HOME/quests/quickq/meta.json" 2>/dev/null)
+has "--quick keeps the reason" "$QM" "small fix, no time"
+is "--quick skips the plan phase" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq/meta.json'))['phase'])")" ""
+has "--quick drops the acceptance contract" "$QM" '"no_acceptance": "small fix, no time"'
+has "--quick tells the adventurer the gates are off" "$(cat "$GUILD_HOME/quests/quickq/prompt.md")" "This is a quick quest"
+echo y | GUILD_NO_ACCEPTANCE= "$GUILD" quest quickq2 --repo "$REPO_A" --quick >/dev/null 2>&1
+has "--quick with no reason still records one" "$(cat "$GUILD_HOME/quests/quickq2/meta.json" 2>/dev/null)" "asked for a quick quest"
+echo z | GUILD_NO_PLAN= "$GUILD" quest quickq3 --repo "$REPO_A" --quick "fast" --plan >/dev/null 2>&1
+is "an explicit --plan beats --quick" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq3/meta.json'))['phase'])")" "plan"
+out=$("$GUILD" status quickq done "did it" 2>&1)
+has "a quick quest owes no validation checklist" "$out$(cat "$GUILD_HOME/quests/quickq/status" 2>/dev/null)" "no validation scenarios"
+has "the glance says the plan was skipped, and why" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('quickq'))")" 'title="skipped: small fix, no time"'
+WTQ=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/quickq/meta.json'))['worktree'])")
+git -C "$WTQ" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
+has "a quick quest's trial does not wait for a behaviour check" "$(cd "$WTQ" && GUILD_QUEST=quickq "$GUILD" trial pass "did it" 2>&1)" "trial pass recorded"
+
+# --epic-dagger: quick, and no interaction at all: it decides alone, opens the PR, reports done
+echo d | GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= GUILD_NO_WHY= "$GUILD" quest dag --repo "$REPO_A" --epic-dagger >/dev/null 2>&1
+DM=$(cat "$GUILD_HOME/quests/dag/meta.json" 2>/dev/null)
+has "--epic-dagger records its mark" "$DM" '"dagger": "the guildmaster marked it epic-dagger"'
+has "and runs as a quick quest underneath" "$DM" '"quick": "the guildmaster marked it epic-dagger"'
+has "the adventurer is told to decide alone and open the PR" "$(cat "$GUILD_HOME/quests/dag/prompt.md")" "This is an epic dagger"
+has "an epic dagger never asks the guildmaster" "$("$GUILD" status dag needs-decision "which color?" 2>&1)" "decides alone"
+has "nor opens a board" "$(GUILD_QUEST=dag "$GUILD" ask "which color?" 2>&1)" "decides alone"
+hasnt "and the question never reached the war table" "$(ls "$GUILD_HOME/quests/dag/boards" 2>/dev/null)" "20"
+WTD=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/dag/meta.json'))['worktree'])")
+git -C "$WTD" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
+has "the PR gate opens for an epic dagger with the honest line" "$(cd "$WTD" && echo '{"tool_input":{"command":"gh pr create --body \"Trial: skipped - epic dagger\""}}' | GUILD_QUEST=dag "$REPO/hooks/pr-gate.sh" 2>&1; echo "exit $?")" "exit 0"
+has "and still wants that line in the body" "$(cd "$WTD" && echo '{"tool_input":{"command":"gh pr create --body x"}}' | GUILD_QUEST=dag "$REPO/hooks/pr-gate.sh" 2>&1)" "Trial: skipped"
+"$GUILD" status dag done "PR #1" >/dev/null 2>&1
+has "done owes no wrap-up and no checklist" "$(cat "$GUILD_HOME/quests/dag/status" 2>/dev/null)" "(no wrap-up)"
+has "the strip shows the trial as skipped by the dagger, not missing" "$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import wartable; print(wartable.glance('dag'))")" 'title="skipped: epic dagger: the guildmaster marked it epic-dagger"'
+
 printf 'Intent: x\nAcceptance:\n- check: true\n- the page shows it\n' | GUILD_NO_ACCEPTANCE= "$GUILD" quest beh --repo "$REPO_A" >/dev/null 2>&1
 is "with one it starts, and the contract is sealed" "$(python3 -c "import json;print(len(json.load(open('$GUILD_HOME/quests/beh/acceptance.json'))['items']))")" "2"
 QB="$GUILD_HOME/quests/beh"; WTB=$(python3 -c "import json;print(json.load(open('$QB/meta.json'))['worktree'])")
@@ -851,6 +1005,15 @@ echo x | GUILD_NO_WHY= "$GUILD" quest whyq --repo "$REPO_A" >/dev/null 2>&1
 wb=$(ls "$GUILD_HOME/quests/whyq/boards" | grep '^why-' | head -1)
 [ -n "$wb" ] && ok "a new quest puts a Why card on the docket" || bad "a new quest puts a Why card on the docket" "no why board"
 has "the card asks the five questions" "$(cat "$GUILD_HOME/quests/whyq/boards/$wb/decisions.json")" '"id": "future"'
+# housekeeping gets no card: a PR review fix, a merge, a CI chore have no pain or rule of their own
+out=$(echo "Fix the Required review items on PR 12" | GUILD_NO_WHY= "$GUILD" quest pr12-review-fix --repo "$REPO_A" 2>&1)
+has "a PR review fix quest says it skipped the card" "$out" "why card: skipped"
+[ -z "$(ls "$GUILD_HOME/quests/pr12-review-fix/boards" 2>/dev/null | grep '^why-')" ] && ok "and puts no Why card on the docket" || bad "and puts no Why card on the docket"
+out=$(echo "Bring the branch up to date with main; resolve the conflicts in releases.json" | GUILD_NO_WHY= "$GUILD" quest abc-7-sync --repo "$REPO_A" 2>&1)
+has "a merge brief skips the card too" "$out" "the brief says housekeeping"
+out=$(echo "Bring the branch up to date with main" | GUILD_NO_WHY= "$GUILD" quest abc-8-sync --repo "$REPO_A" --why 2>&1)
+has "--why forces the card" "$out" "why card: on the docket"
+"$GUILD" close pr12-review-fix --force >/dev/null 2>&1; "$GUILD" close abc-7-sync --force >/dev/null 2>&1; "$GUILD" close abc-8-sync --force >/dev/null 2>&1
 has "the docket lists it" "$(curl -s http://127.0.0.1:4899/docket.json)" "Why card: whyq"
 is "a card does not park the quest" "$(cut -f1 "$GUILD_HOME/quests/whyq/status")" "working"
 curl -s -X POST "http://127.0.0.1:4899/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null
@@ -884,13 +1047,16 @@ has "old events move to a monthly file" "$(cat "$GUILD_HOME/events/2000-01.log")
 hasnt "and leave events.log" "$(cat "$GUILD_HOME/events.log")" "ancient"
 is "a reader's cursor still points at the end" "$(cat "$GUILD_HOME/.wait-cursor-test")" "$(wc -c < "$GUILD_HOME/events.log" | tr -d ' ')"
 has "history still sees the old events" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import eventlog;print(len(eventlog.lines()))")" "$(($(wc -l < "$TMP/events.before") + 1))"
-mkdir -p "$GUILD_HOME/quests/_archive/oldq-20000101120000/boards/1" "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots"
-echo '{"slug":"oldq"}' > "$GUILD_HOME/quests/_archive/oldq-20000101120000/meta.json"
-echo x > "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots/a.png"
-"$GUILD" tidy >/dev/null
-[ -f "$GUILD_HOME/quests/_archive/oldq-20000101120000/files.tar.gz" ] && [ ! -d "$GUILD_HOME/quests/_archive/oldq-20000101120000/shots" ] && ok "an old closed quest gets its boards and shots packed" || bad "an old closed quest gets its boards and shots packed"
-[ -f "$GUILD_HOME/quests/_archive/oldq-20000101120000/meta.json" ] && ok "and keeps its meta for history" || bad "and keeps its meta for history"
-rm -rf "$GUILD_HOME/quests/_archive/oldq-20000101120000" "$GUILD_HOME/.wait-cursor-test"
+OQ="$GUILD_HOME/quests/_archive/oldq-20000101120000"
+mkdir -p "$OQ/boards/1/shots" "$OQ/shots" "$OQ/design-v2"
+echo '{"slug":"oldq"}' > "$OQ/meta.json"
+echo '{"title":"Pick one"}' > "$OQ/boards/1/board.json"; echo '{"answers":{"c":"a"}}' > "$OQ/boards/1/decision.json"
+echo '<h1>dead</h1>' > "$OQ/boards/1/content.html"; echo x > "$OQ/boards/1/shots/a.png"; echo x > "$OQ/shots/a.png"; echo x > "$OQ/design-v2/a.png"
+out=$("$GUILD" tidy)
+[ ! -f "$OQ/boards/1/content.html" ] && [ ! -d "$OQ/boards/1/shots" ] && [ ! -d "$OQ/shots" ] && [ ! -d "$OQ/design-v2" ] && ok "a closed quest loses its dead pages and pictures" || bad "a closed quest loses its dead pages and pictures"
+[ -f "$OQ/meta.json" ] && [ -f "$OQ/boards/1/board.json" ] && [ -f "$OQ/boards/1/decision.json" ] && ok "and keeps its meta and each board's answer for history" || bad "and keeps its meta and each board's answer for history"
+has "tidy says how much it freed" "$out" "MB of dead pages"
+rm -rf "$OQ" "$GUILD_HOME/.wait-cursor-test"
 
 # ── backend impact: data model, impact, business rules ───────────────────────
 section "backend impact"
@@ -982,9 +1148,43 @@ has "the rule is in plain words" "$(cat "$TMP/wrap-b.html")" "A rate needs a cur
 GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
 "$GUILD" status cur done "PR" --no-scenarios "backend fixture, covered by alpha" >/dev/null 2>&1
 is "with the section and the rules explained, done goes through" "$(cut -f1 "$GUILD_HOME/quests/cur/status")" "done"
+has "a close without scenarios is recorded as a waiver" "$(cat "$GUILD_HOME/quests/cur/scenarios.waived" 2>/dev/null)" "backend fixture"
+cat > "$GUILD_HOME/quests/cur/scenarios.json" <<'JSON'
+{"title": "draft", "groups": [{"id": "A", "title": "x", "scenarios": [{"id": "A1", "do": "x", "expect": "y"}]}]}
+JSON
+wbc=$(ls "$GUILD_HOME/quests/cur/boards" | tail -1)
+out=$(curl -s -X POST "http://127.0.0.1:4899/b/cur/$wbc/reply" -d '{"answers":{"grade":"4","verdict":"merge"}}')
+case "$out" in *"Not ready to merge"*) bad "a waived checklist does not block the merge" "$out" ;; *) ok "a waived checklist does not block the merge" ;; esac
 "$GUILD" close cur --force >/dev/null 2>&1
 
 # the war table from a phone: a second listener that needs the key; pushes carry no details
+section "guild draw"
+"$GUILD" draw --example > "$TMP/spec.json"
+out=$("$GUILD" draw "$TMP/spec.json")
+has "a state machine is picked when the moves loop back" "$out" 'data-kind="state"'
+has "and the picture says why" "$out" "Drawn as a state machine"
+has "each scene is numbered under the picture" "$out" '<ol class="gd-scenes"><li data-scene="1">'
+has "with where it is triggered" "$out" "<dt>Triggered by</dt>"
+has "and the number sits on its arrow" "$out" 'class="gd-label" data-scene="1"'
+cat > "$TMP/org.json" <<'JSON'
+{"tree": {"label": "Project", "children": [{"label": "Objective"}, {"label": "Objective B", "children": [{"label": "Cohort"}]}]}}
+JSON
+has "a tree is drawn as an organogram" "$("$GUILD" draw "$TMP/org.json")" 'data-kind="org"'
+cat > "$TMP/rules.json" <<'JSON'
+{"rules": [{"when": "a day exists", "then": "the move is refused", "trigger": "the edit form", "where": "Service.move"}]}
+JSON
+out=$("$GUILD" draw "$TMP/rules.json")
+has "conditions are drawn as a rules table" "$out" 'data-kind="rules"'
+has "a rule with a trigger is a scene too" "$out" 'data-scene="1"'
+cat > "$TMP/flow.json" <<'JSON'
+{"edges": [{"from": "Open", "to": "Pick"}, {"from": "Pick", "to": "Save"}]}
+JSON
+has "a one-way path is a flow" "$("$GUILD" draw "$TMP/flow.json")" 'data-kind="flow"'
+printf '<!doctype html><body><h2>How the gears turn</h2>\n<p>x</p></body>' > "$TMP/page.html"
+"$GUILD" draw "$TMP/spec.json" --into "$TMP/page.html" >/dev/null
+has "--into lands the figure on the page" "$(cat "$TMP/page.html")" '<figure class="guild-draw"'
+is "right under the gears heading" "$(tr -d '\n' < "$TMP/page.html" | grep -o '</h2><figure class="guild-draw"' | head -1)" '</h2><figure class="guild-draw"'
+
 section "remote and notifications"
 cat > "$GUILD_HOME/local/remote.json" <<'JSON'
 {"remote": true, "bind": "127.0.0.1", "port": 4896, "key": "k3y-for-tests", "mac": false}
@@ -1178,6 +1378,19 @@ has "told to look at the roster and watch again" "$(cat "$GUILD_HOME/last-claude
 
 # ── side menus: one per window, never split from an empty id ─────────────────
 section "side menus"
+# a merged quest keeps a whole agent in memory for nothing: its tab closes by itself
+MT=$(python3 -c "
+import sys; sys.path.insert(0,'$REPO/bin')
+import os; os.environ['GUILD_HOME']='$GUILD_HOME'
+import watch
+qs = [{'slug':'m1','state':'done'}, {'slug':'m2','state':'working'}, {'slug':'m3','state':'trial-pass'}, {'slug':'qm','state':'done'}]
+pr = {'m1':{'state':'merged'}, 'm2':{'state':'merged'}, 'm3':{'state':'open'}, 'qm':{'state':'merged'}}
+print('[' + ','.join(watch.merged_tabs(qs, pr, {'m1','m2','m3','qm'})) + ']')
+print('[' + ','.join(watch.merged_tabs(qs, pr, {'m2'})) + ']')
+")
+is "a merged, finished quest's tab is closed" "$(echo "$MT" | head -1)" "[m1]"
+is "and a tab with no window left is not touched" "$(echo "$MT" | tail -1)" "[]"
+
 SB_SOCK="guild-sidebar-test"
 tmux -L "$SB_SOCK" -f /dev/null new-session -d -s guild -n qm -x 120 -y 30 "sleep 600"
 (

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="realm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,6 +37,8 @@
   .chip { font-size: 11px; border-radius: 3px; padding: 0 6px; background: rgba(90, 60, 30, .12); }
   .chip.review { background: var(--gold); color: #2a1d14; font-weight: 700; }
   .chip.qm { background: #5b3e28; color: var(--sign-text); }
+  .chip.klass { background: rgba(142, 91, 209, .18); }
+  .chip .gi-icon { width: 12px; height: 12px; margin-right: 3px; vertical-align: -2px; }
   .item a { color: #8a4b12; font-size: 12px; }
   .ruling .qt { font-size: 12px; color: var(--ink-dim); margin: 0 0 4px; font-variant: small-caps; letter-spacing: .03em; }
   .ruling .q + .q { margin-top: 10px; }
@@ -86,19 +88,59 @@
   .empty .gi-icon { margin-right: 6px; color: #8a4b12; }
   .qtext { width: 100%; min-height: 44px; font: inherit; font-size: 13px; padding: 5px 7px; border: 1px solid var(--rule, #cdb88e); border-radius: 3px; background: rgba(255,250,235,.7); }
   .drillnote { background: rgba(217,164,65,.22); border-left: 3px solid #b5651d; padding: 8px 12px; font-size: 14px; margin: 0 0 14px; }
+  /* ── the realm: the ledger on dark stone, gold frames, races on the chips ────────────────── */
+  html.realm {
+    --paper: #241d2b; --paper-2: #17121c; --ink: #e9dcc0; --ink-dim: #a8987a; --rule: #4a3f52; --sign: #1b1520; --sign-text: #e9dcc0;
+    --hint: #a8987a; --gold: #d9a441; --seal: #e0573f; --ok: #8fb35a; --held: #7a7290;
+  }
+  html.realm header { display: none; }
+  html.realm .sheet { box-shadow: none; }
+  html.realm h2 { color: #f3cf6c; }
+  html.realm h2 .gi-icon { color: var(--gold); }
+  html.realm th { border-bottom-color: var(--rule); }
+  html.realm .item a { color: var(--gold); }
+  html.realm .chip { background: rgba(217, 164, 65, .14); color: var(--ink); }
+  html.realm .chip.review { background: linear-gradient(180deg, #f3cf6c, #c08a22); color: #2a1d14; }
+  html.realm .chip.qm { background: #3b2a4e; }
+  html.realm .chip.klass { background: rgba(142, 91, 209, .28); display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 3px; }
+  html.realm .opts button { background: rgba(0, 0, 0, .35); color: var(--ink); }
+  html.realm .opts button:hover { border-color: var(--gold); }
+  html.realm .opts button[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #2a1d14; }
+  html.realm .opts button[aria-pressed="true"].rec::after { background: #2a1d14; }
+  html.realm textarea, html.realm input[type=date], html.realm .qtext { background: rgba(0, 0, 0, .35); color: var(--ink); color-scheme: dark; }
+  html.realm tr.ready td { background: rgba(217, 164, 65, .10); }
+  html.realm td.n .num::before { background: linear-gradient(160deg, #c08a22, #6e4e10); }
+  html.realm .bar { background: #15111a; border-top: 1px solid #8a6a1e; }
+  html.realm .bar button { background: linear-gradient(180deg, #f3cf6c, #c08a22); }
+  html.realm .drillnote { background: rgba(217, 164, 65, .14); border-left-color: var(--gold); }
+  html.realm .hold button, html.realm .back { color: var(--ink); }
+  html.realm .picked { color: var(--ok); }
+  html.realm .empty .gi-icon { color: var(--gold); }
 </style>
 <link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
 </head>
 <body>
+<section class="rm-hero rm-frame" aria-label="The oracle's hall">
+  <div>
+    <p class="rm-kicker">The war table</p>
+    <h1 class="rm-title">The Docket</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub">The oracle's hall. High elves, dwarves and gnomes wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
+    <nav class="rm-nav" style="margin-top:12px"><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a></nav>
+  </div>
+  <div class="rm-party" id="realm-party" aria-label="Who waits"></div>
+</section>
 <header>
   <div>
     <h1><span class="gi-icon gi-scroll" aria-hidden="true"></span>The Docket</h1>
-    <p class="sub">The adventurers await your word, guildmaster. One ruling per row: pick, add a note, or hold it until a date. Then send them all.</p>
+    <p class="sub">The oracle's hall. Archmages, knights and scouts wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
   </div>
   <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a></nav>
 </header>
 
-<section class="sheet" aria-labelledby="h-open">
+<section class="sheet rm-frame" aria-labelledby="h-open">
   <p class="drillnote" id="drillnote" hidden></p>
   <h2 id="h-open"><span class="gi-icon gi-swords" aria-hidden="true"></span>Awaiting your ruling</h2>
   <p class="lead">Decisions first, then finished work waiting for your grade. A little crown marks the adventurer's suggestion.</p>
@@ -108,13 +150,13 @@
   </table>
 </section>
 
-<section class="sheet" aria-labelledby="h-held">
+<section class="sheet rm-frame" aria-labelledby="h-held">
   <h2 id="h-held"><span class="gi-icon gi-hourglass" aria-hidden="true"></span>Held in the vault</h2>
   <p class="lead">Parked until their date. The quartermaster brings each one back to you when its day comes.</p>
   <table><tbody id="held"></tbody></table>
 </section>
 
-<section class="sheet" aria-labelledby="h-recent">
+<section class="sheet rm-frame" aria-labelledby="h-recent">
   <h2 id="h-recent"><span class="gi-icon gi-crown" aria-hidden="true"></span>Recent rulings</h2>
   <table class="recent"><tbody id="recent"></tbody></table>
 </section>
@@ -128,16 +170,17 @@
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const $ = (s) => document.querySelector(s);
 const key = (i) => `${i.quest}/${i.board}`;
+const race = rmRace;   // realm.js
 let data = null;
 const picks = {}, notes = {};          // survive the refresh: what you chose but did not send yet
 
 function rowHtml(i, n) {
   const k = key(i);
   const chips = [
-    i.wrapup ? `<span class="chip review">review</span>` : "",
-    i.pseudo ? `<span class="chip qm">quartermaster</span>` : `<span class="chip">${esc(i.quest)}</span>`,
+    i.wrapup ? `<span class="chip review"><i class="gi-icon gi-chest" aria-hidden="true"></i>the bard's tale: grade it</span>` : "",
+    i.pseudo ? `<span class="chip qm"><i class="gi-icon gi-horn" aria-hidden="true"></i>quartermaster</span>` : `<span class="chip">${esc(i.quest)}</span>`,
     i.ticket ? `<span class="chip">${esc(i.ticket)}</span>` : "",
-    i.model ? `<span class="chip">${esc(i.model)}</span>` : "",
+    i.klass ? `<span class="chip klass" title="${esc(i.model || "")}">${race(i.klass.race, "small")}<i class="gi-icon gi-${esc(i.klass.icon)}" aria-hidden="true"></i>${esc(i.klass.name)}</span>` : i.model ? `<span class="chip">${esc(i.model)}</span>` : "",
   ].join("");
   const qs = (i.questions || []).map((q) => {
     const chosen = (picks[k] || {})[q.id];
@@ -163,8 +206,18 @@ function isReady(i) {
   return qs.every((q) => (p[q.id] || "").toString().trim());
 }
 
+function realmParty(open) {
+  const by = {};
+  for (const i of open) { const r = i.pseudo ? "highelf" : i.klass && i.klass.race; if (r) by[r] = (by[r] || 0) + 1; }
+  const figs = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+    rmFigure(k, n, n === 1 ? "waits for your word" : "wait for your word", `Right now: ${n} ruling${n === 1 ? "" : "s"} on the docket from them.`));
+  const html = figs.join("") || rmFigure("human", null, "nobody waits", "The hall is quiet. Enjoy it while it lasts.", { name: "Quiet hall", dim: true });
+  if (realmParty.last !== html) { realmParty.last = html; $("#realm-party").innerHTML = html; }   // keep the hover alive across refreshes
+}
+
 function render() {
   const open = data.open || [];
+  realmParty(open);
   const dn = $("#drillnote");
   dn.hidden = !(data.drill && data.drill.due);
   if (data.drill && data.drill.due) dn.innerHTML = `<b>This week's rule drill</b>: ${data.drill.count} question${data.drill.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a> &middot; <a href="/rules">the rule book</a>`;

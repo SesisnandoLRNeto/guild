@@ -50,6 +50,7 @@ guild is a small control plane around agent CLIs. It adds no server of its own e
 | trial | pre-PR gate for one commit | `hooks/pr-gate.sh`, `bin/shims/gh`, `skills/trial` |
 | war table / board / docket | local web server / one decision or report page / the list of open decisions | `bin/wartable.py`, `web/` |
 | campaign board | kanban of quests, sessions and tickets | `bin/fleet.py`, `web/campaign.html` |
+| map room | find any file of a quest, read it with its changes marked, compare with the base or any commit | `bin/files.py`, `web/files.html` |
 | cockpit | tmux on its own server, with a side menu | `config/guild.tmux.conf`, `bin/watch.py` |
 
 Code map: `bin/guild` is the CLI (Bash); every `bin/*.py` is one area (war table, fleet, ledger, checks, lessons, budget, impact, harness, Jira, Jev, machines). Python uses only the standard library.
@@ -81,6 +82,7 @@ guild up ~/Workspace
 |---|---|
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
 | `guild quest <slug> --repo PATH [--ticket KEY] [--harness NAME] [--tier T \| --model M] [--plan] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>`. See [Routing](#routing-which-model-does-which-work) |
+| `guild quest ... --quick ["<why>"]` / `--epic-dagger ["<why>"]` | Quick: no plan, no acceptance contract, no Why card, no validation checklist, trial skipped; a wrap-up is still owed. Epic dagger: all of that and no interaction at all. The adventurer never asks or opens a board, decides alone (choices listed in the PR body under "Decisions taken alone"), opens the PR and reports done. Only the guildmaster's own `--epic-dagger` (or the Jira label `epic-dagger`) means this flag; the quartermaster never skips a step on its own, and a PR review-fix quest keeps every step |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
@@ -109,6 +111,7 @@ guild up ~/Workspace
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
 | `guild story "<name>" TICKET...` | Name the campaign board row those tickets sit in (an empty name removes it) |
 | `guild validate <slug>` / `guild validate export <slug> [--out F]` | The quest's end-to-end checklist, run before a merge; a standalone copy for the team |
+| `guild files <slug>` | The map room at `/q/<slug>/files`: a finder like an editor's (type part of a name, changed files first), the file with the quest's changes marked in the margin, a diff against the base branch or any commit, and the file's history. Also the "files" link on a campaign card and the Files tile on a report |
 | `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
 | `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
@@ -118,6 +121,7 @@ guild up ~/Workspace
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
+| `guild draw <spec.json> [--into PAGE]` | Draws a picture for a page from a small spec and picks the form: a state machine, a flow, an organogram or a rules table. Each move or rule carries its scene (where it is triggered, who, the scenario, what they see, where in the code), numbered on the arrow and listed under the picture |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
@@ -165,6 +169,24 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 **Grading the result.** Every wrap-up page asks you for a grade (1 to 5) and a verdict: ready to merge, needs changes, or split a follow-up. "Needs changes" sends your notes straight back to the adventurer, which carries on. The grade stays with the quest (`grade.json`), the campaign board shows it (or a red "grade it" until you do), and `guild retro` compares grades by model, tier and harness, so routing in `dispatch.json` follows your judgment, not only whether checks passed.
 
+## The lore
+
+The war table is a guild hall, and its pages speak like one. `guild lore` prints the whole bestiary (`bin/lore.py`); the plain meaning always sits next to the flavour, so nothing has to be decoded.
+
+| On the page | What it means |
+|---|---|
+| Guildmaster, Quartermaster | You; the agent that sends parties out and reads their reports |
+| Oracle, Archmage, Knight, Scout, Artificer | The adventurer's class, from its model: Fable, Opus, Sonnet, Haiku, Codex. A tier names it when the model is not known (plan is a Sage) |
+| Squire, Inquisitor, Elf | A helper quest; the behaviour validator; the code reviewer (the elves read every diff at the trial) |
+| The Tavern, On the Road, The Oracle, The Castle Gate, The Treasury | The campaign's columns: to do, in progress, needs you, PR in review, merged or closed |
+| The call, the map, the forge, the gauntlet, the elves' court, the gate, the treasury | A quest's steps on the At-a-glance strip: asked, plan, build, checks, trial, PR open, merged |
+| Path A, Path B; the bard | The options on a decision board; the one dry line under them |
+| The notice wall | The list of every board (`/boards`) |
+| An orc, a troll, goblins, a skull | Failed; blocked; checks failing; stopped without a report |
+| The bard's tale | A wrap-up waiting for your grade |
+
+Pages people outside the guild receive (the validation export for the team) stay plain.
+
 ## Costs and history
 
 Claude Code writes a session log per working directory. A quest owns its worktree, so those are its logs: guild reads the token usage from them and prices it.
@@ -198,7 +220,7 @@ How costs are counted: Claude Code writes one log line per content block of a re
 
 Three habits, built in, so the rules behind the work reach you whole: why each exists, what it changes, and what comes next.
 
-**The Why card.** Every quest starts by putting a card on the docket with five questions you answer in your own words: the **pain** (who suffers today, one real example), the **rule** (in one sentence), the **decision** (who decided, what was rejected), the **impact** (what changes, for which users, data or money) and the **future** (what it unlocks or blocks). The AI never fills it in: thinking first is the point. Your answers are kept in `why.json` and top the quest's plan and wrap-up, so you judge the result against your own why. The adventurer then checks your card against the ticket, the spec and the code, and raises up to three challenges on the war table where something contradicts it or is missing. `--no-why` skips it; helpers never get one.
+**The Why card.** Every quest starts by putting a card on the docket with five questions you answer in your own words: the **pain** (who suffers today, one real example), the **rule** (in one sentence), the **decision** (who decided, what was rejected), the **impact** (what changes, for which users, data or money) and the **future** (what it unlocks or blocks). The AI never fills it in: thinking first is the point. Your answers are kept in `why.json` and top the quest's plan and wrap-up, so you judge the result against your own why. The adventurer then checks your card against the ticket, the spec and the code, and raises up to three challenges on the war table where something contradicts it or is missing. Only a feature or an implementation gets the card: a PR review fix, a merge, a CI or conflict chore has no pain or rule of its own, so `guild quest` skips the card there (it reads the slug and the brief, `python3 bin/why.py wanted <slug>` shows the call) and says so. `--why` forces the card, `--no-why` drops it; helpers never get one.
 
 **The rule book.** Every backend wrap-up explains its business rule changes in a rules file (`guild impact --rules`): the rule, before, after, where, why, and an example with real values, its source and the tests that prove it. `guild rules` gathers them from every quest, live and closed, into one book per area, with search and the history of each rule (which quests changed it, and when).
 
@@ -479,9 +501,9 @@ The cockpit runs on its own tmux server, socket `guild`, with `config/guild.tmux
 
 ## Calm mode: the party on the road
 
-While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a tiny party where the spinner was: an orange archer, a cyan mage and a red knight walking right through a night forest (stars and a moon, near and far pines drifting at different speeds, bushes and grass). Enemies come in from the right, one at a time, and each hero has their own: a bat flies in and the archer shoots it, a slime crawls in and the mage throws a spell, a skeleton marches in and the knight cuts it down. Five rows, plain ASCII, colors follow your dark or light theme. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
+While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a party where the spinner was: the sessions running right now, one hero each by model, walking right through a night forest (stars and a moon, near and far pines drifting at different speeds, bushes and grass). Sonnet walks as an orange archer, Opus as a cyan mage, Fable as a gold paladin, Haiku as a red warrior, Codex as a violet artificer, and a model the guild does not know as a wanderer with a torch. Two are always there: the mage is the quartermaster itself (it runs on Opus), and a warrior always leads: when no session runs on Haiku, the guild's own guard takes the front. The road is a fixed sequence of 32 encounters, one every ten seconds. Quests in trouble send their own creature first in their turn (a goblin for red checks, a troll for a blocked quest, an orc for a failed one); between them the road brings bats, slimes, skeletons, wolves, spiders, wisps, ghosts, rats, harpies, imps, snakes, bandits, kobolds, gargoyles, a golem, a necromancer, a treant, a mimic that looks like a chest until it bites, and four bosses (an ogre, a dragon whelp, a hydra that loses a head per blow, a lich) that drop loot. A fight is an exchange: every ranged hero fires in volleys while the creature comes (arrows, spells, flasks, light, a thrown torch), creatures have hit points shown as dots over their heads, some blows do nothing to them (arrows pass through a ghost, no sword reaches a bat) and others count double (ice on the whelp, light on the undead), and what is still alive at the front meets the warrior's sword. Whoever lands the last blow gets the kill and a star over their head; a flying thing nobody stopped swoops over the party and is gone. Some stretches are obstacles instead: a fallen log, a river, a locked gate, a web, a chasm, a boulder; the hero who knows how opens the way (the mage freezes the river, the artificer picks the gate, the paladin bridges the chasm, the wanderer's torch burns the web, the warrior clears the log and the boulder) and the party walks across. Five rows, plain ASCII, colors follow your dark or light theme. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
 
-It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Verified on Claude Code 2.1.280; the API may change between releases.
+It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Since Claude Code 2.1.309 a mod loads only in a folder you trusted (the "Yes, I trust this folder" answer): the quartermaster runs in your home folder, so trust it once or the party never shows; `guild calm status` says when that is the case. Verified on Claude Code 2.1.309; the API may change between releases.
 
 ## The trial
 
