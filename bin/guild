@@ -972,8 +972,8 @@ You run on a planning model now. Do not change code yet.
    \`## Not included\`, \`## Risks\` (each with what you do about it),
    and when they help \`## Words to know\`, \`## Questions for you\` (each with options), \`## Files\`.
    If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs from theirs, say so in the plan instead of hiding it. \`guild plan ready\` refuses a plan without the required sections.
-2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\` (add \`--grill\` when the plan makes choices the guildmaster may not share: the page then asks them to agree point by point; guild does it by itself for a feature with a Why card and five or more steps). Write \`## After this plan\`, \`## How it will be built\`, \`## Not included\` and \`## Risks\` as lists, one claim per item: each item becomes a point they mark. Guild renders plan.md as the approval page and says what each answer leads to. Then wait with \`guild board wait <id>\`.
-3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If they ask to explain more, answer their questions inside plan.md (in the section each one is about, plainly) and ask again; if they ask for a change, update the plan and ask again.
+2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. The page asks the guildmaster to agree point by point, and they can approve only when every point is Agree. Write \`## After this plan\`, \`## How it will be built\`, \`## Not included\` and \`## Risks\` as lists, one claim per item: each item becomes a point they mark. Write \`## Questions for you\` too, one question per item, for every choice you made that they may not share and every guess you made about the ticket: the goal is that they really understand what is going on and why, so question them. Then wait with \`guild board wait <id>\`.
+3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. Until then, the answer comes back with their marks: for each **Not sure**, answer it inside plan.md, in the section it is about, in plain words, with an example when it helps; for each **Change**, change the plan. If an answer shows they read the task differently, add a question about it. Then \`guild plan ready\` again. Repeat until they approve; points they agreed stay agreed, and changed ones show as new.
 PLAN
 
   { echo "#!/usr/bin/env bash"
@@ -1625,7 +1625,7 @@ case "${1:-}" in
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
-  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\" [--grill]  (inside a quest, after writing plan.md)"
+  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\"  (inside a quest, after writing plan.md)"
         me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
         dagger_guard "$me"
         python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" "${@:3}" ;;

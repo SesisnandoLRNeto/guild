@@ -232,8 +232,13 @@ function reviewText() {
 
 async function send(ended) {
   const missing = QUESTIONS.filter(q => q.required !== false && answers[q.id] === undefined);
-  if (review && answers.choice === "go" && review.points.some(p => p.mark === "change" || p.mark === "unsure")
-      && !confirm("Some points are marked Change or Not sure. Approve anyway?")) return;
+  const notAgreed = review ? review.points.filter(p => p.mark !== "agree").length : 0;
+  if (answers.choice === "go" && notAgreed) {            // the plan is approved only when you agree to every point
+    const st = document.getElementById("state");
+    st.textContent = `${notAgreed} point(s) are not on Agree yet. Mark them, or pick Explain more or Change it.`;
+    st.style.color = "#a8322a";
+    return;
+  }
   if (missing.length && !confirm(`${missing.length} question(s) not answered. Send anyway?`)) return;
   document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = true;
   const message = [box.value.trim(), reviewText()].filter(Boolean).join("\n\n");

@@ -892,12 +892,17 @@ rv=$(python3 -c "
 import sys; sys.path.insert(0, '$REPO/bin'); import planpage as p
 small = p.split('## How it will be built\n1. a\n2. b\n')
 big = p.split('## How it will be built\n' + ''.join(f'{i}. step {i}\n' for i in range(1, 6)))
-print(p.wants_review(small, {'pain': 'x'}), p.wants_review(big, {'pain': 'x'}), p.wants_review(big, None), p.wants_review(small, None, True))")
-is "the point by point review is kept for the plans worth it" "$rv" "False True False True"
-out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save" --grill)
+print(p.wants_review(small, {'pain': 'x'}), p.wants_review(big, None), p.wants_review(p.split('')))")
+is "every plan gets the point by point review, with or without a Why card" "$rv" "True True False"
+has "so the first plan page already asks point by point" "$page" "Agree, point by point"
+has "and approving needs every point on Agree" "$page" "approve only when every point is Agree"
+has "a plan asked again keeps your agreed points by quest" "$page" 'guild-review:pl"'
+has "and marks new or changed points" "$page" 'class="rv-new"'
+has "the panel refuses Approve until every point is agreed" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" "are not on Agree yet"
+has "the adventurer is told to question you and answer each doubt in the plan" "$(cat "$GUILD_HOME/quests/pl/prompt.md" 2>/dev/null || grep -h "Questions for you" "$REPO/bin/guild")" "for each **Not sure**, answer it inside plan.md"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save")
 pb=$(echo "$out" | awk '/board id:/ {print $3}')
 page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
-has "--grill asks you to agree point by point" "$page" "Agree, point by point"
 has "each claim is a numbered point" "$page" 'data-id="1.1"'
 has "and the board knows it carries a review" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"review": true'
 has "the panel sends your marks with the answer" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" "Plan review: "

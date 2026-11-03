@@ -72,7 +72,8 @@ def longer(md):
 
 
 # The agreement review: every claim of the plan as a point you agree with, want changed, or are not
-# sure about. It grills the plan in your favour, so it is kept for the plans worth it.
+# sure about. Every plan gets it: the plan is approved only when every point is Agree, and each
+# Change or Not sure goes back to the adventurer, who answers it in plan.md and asks again.
 REVIEW_GROUPS = [("understood", "What it understood"), ("after", "What changes"), ("how", "How it will be built"),
                  ("scope", "Not included"), ("risks", "Risks"), ("questions", "Questions for you")]
 
@@ -122,12 +123,9 @@ def review_points(parts):
     return out
 
 
-def wants_review(parts, why_card, force=False):
-    """Not every plan: when asked (--grill), or a feature you wrote a Why card for that has five or more
-    build steps or questions for you. A small fix keeps the plain approve, explain or change."""
-    if force:
-        return True
-    return bool(why_card) and (len(list_items(parts.get("how", ""))) >= 5 or bool(parts.get("questions")))
+def wants_review(parts, why_card=None, force=False):
+    """Every plan with points to mark. The Why card stays optional: the review works without it."""
+    return force or bool(review_points(parts))
 
 
 def review_html(quest, groups):
@@ -190,9 +188,10 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
 
 REVIEW = """<section class="review" id="review">
 <h2>Agree, point by point</h2>
-<p class="lead2">This plan is worth a closer look. Mark each point: <b>Agree</b>, <b>Change</b> or <b>Not sure</b>.
-A change or a doubt asks for a short note. Your marks go to the adventurer with your answer on the right, and
-the answer is picked for you from them (you can still change it).</p>
+<p class="lead2">Mark each point: <b>Agree</b>, <b>Change</b> or <b>Not sure</b>. A change or a doubt asks for a
+short note. You can approve only when every point is Agree. Until then your marks go back to the adventurer, it
+answers in the plan, and you get this page again: points you agreed stay agreed, new or changed ones are marked
+<span class="rv-new">new</span>.</p>
 <p class="rv-nav">__NAV__</p>
 __POINTS__
 <div class="rv-bar"><span><b class="c-agree">0</b> agree</span><span><b class="c-change">0</b> change</span>
@@ -207,6 +206,8 @@ __POINTS__
        padding: 10px 14px; margin: 0 0 8px; background: var(--card); }
  .rv-n { font-family: ui-monospace, monospace; font-size: 12px; color: var(--dim); padding-top: 3px; }
  .rv-t { margin: 0 0 8px; }
+ .rv-new { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #e0b84a; border: 1px solid #e0b84a;
+           border-radius: 999px; padding: 0 7px; margin-left: 6px; }
  .rv-btns button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: inherit;
                    border-radius: 999px; padding: 3px 12px; margin-right: 6px; cursor: pointer; }
  .rv-note { display: none; box-sizing: border-box; width: 100%; margin-top: 8px; font: inherit; font-size: 14px; }
@@ -225,9 +226,24 @@ __POINTS__
 </style>
 <script>
 (function () {
-  var KEY = "guild-review:" + location.pathname, rows = [].slice.call(document.querySelectorAll(".rv")), marks = {};
-  try { marks = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch (e) {} }
+  // Marks live per quest and point text, so a plan asked again keeps what you agreed. A new round
+  // (another board) keeps only Agree: a doubt you had must be read again against the new answer.
+  var KEY = "guild-review:__KEY__", rows = [].slice.call(document.querySelectorAll(".rv")), marks = {}, store = {};
+  try { store = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+  var same = store.page === location.pathname, byText = store.marks || {};
+  var before = same ? store.before : store.texts;          // the texts of the round before this one
+  rows.forEach(function (r) {
+    var t = r.querySelector(".rv-t").textContent, m = byText[t];
+    r.dataset.text = t;
+    if (m && (same || m.mark === "agree")) marks[r.dataset.id] = m;
+    if (before && before.indexOf(t) < 0) r.querySelector(".rv-t").insertAdjacentHTML("beforeend", ' <span class="rv-new">new</span>');
+  });
+  function save() {
+    var keep = {};
+    rows.forEach(function (r) { if (marks[r.dataset.id]) keep[r.dataset.text] = marks[r.dataset.id]; });
+    var texts = rows.map(function (r) { return r.dataset.text; });
+    try { localStorage.setItem(KEY, JSON.stringify({ page: location.pathname, texts: texts, before: before || null, marks: keep })); } catch (e) {}
+  }
   function paint() {
     var c = { agree: 0, change: 0, unsure: 0 };
     rows.forEach(function (r) {
@@ -243,7 +259,7 @@ __POINTS__
     document.querySelector(".c-left").textContent = left + " of " + rows.length + " left";
     var list = rows.map(function (r) {
       var m = marks[r.dataset.id] || {};
-      return { id: r.dataset.id, point: r.querySelector(".rv-t").textContent, mark: m.mark || "", note: m.note || "" };
+      return { id: r.dataset.id, point: r.dataset.text, mark: m.mark || "", note: m.note || "" };
     });
     try { parent.postMessage({ type: "guild-review", points: list, total: rows.length }, location.origin); } catch (e) {}
   }
@@ -265,7 +281,7 @@ __POINTS__
     save(); paint();
   };
   document.querySelector(".rv-clear").onclick = function () { marks = {}; save(); paint(); };
-  paint();
+  save(); paint();
 })();
 </script>
 """
