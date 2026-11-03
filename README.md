@@ -93,7 +93,9 @@ guild up ~/Workspace
 | `guild check [slug] [--baseline]` | Run the brief's acceptance checks in the quest worktree (EDD) |
 | `guild check <slug> --reseal` | Accept a changed Acceptance block (you only, never an adventurer) |
 | `guild vision <repo>` / `guild vision status <repo>` | Collect a repo's evidence for its written vision |
-| `guild jira once\|watch\|status` | Start quests from your comments on tickets: `@guild` starts a guarded quest at once, `@quartermaster` asks first |
+| `guild reel <slug>` | What a quest did, as a short pixel-art explainer: the pain, the cause, before and after, the forge, the trial, the PR. Typed captions, an optional narrator voice, and "Save as video" (a 1280x720 .webm). The wrap-up has a "Watch the reel" button; `reel.json` in the quest folder lets the adventurer tell it in its own words |
+| `guild jira on\|once\|watch\|status` | Start quests from your comments on tickets: `@guild` starts a guarded quest at once, `@quartermaster` asks first |
+| `guild plan ready "<one line>" [--grill]` | Inside a quest: the plan approval page. A feature with a Why card and five or more steps (or `--grill`) also asks you to agree point by point; your marks pick the answer and go back with it |
 | `guild quest ... --guarded ["<why>"]` | No plan; the trial and the contract stay, and the guildmaster validates the branch end to end before `gh pr create` is allowed. The adventurer runs `guild validate ready`, then `guild validate wait` |
 | `guild shot <url> --name before\|after` | A screenshot taken the same way every time, filed under the quest |
 | `guild peek <slug> --calls` | The tool calls an adventurer actually ran, from its session log |

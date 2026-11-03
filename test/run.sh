@@ -211,6 +211,18 @@ cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
 JSON
 "$GUILD" status alpha done "shipped it" >/dev/null 2>&1
 is "with a wrap-up and scenarios, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
+# the reel: what the quest did, as scenes the pixel-art player tells
+reel=$(curl -s "http://127.0.0.1:4899/q/alpha/reel.json")
+has "the reel opens on the quest" "$reel" '"kind": "title"'
+has "and ends with where it stands" "$reel" '"kind": "result"'
+has "the proofs come from the checklist" "$reel" '"what": "Your validation"'
+has "the player page is served" "$(curl -s "http://127.0.0.1:4899/q/alpha/reel")" "Save as video"
+has "the wrap-up offers the reel" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/")" "/q/alpha/reel"
+echo '{"title": "Alpha, told by its knight", "scenes": [{"kind": "pain", "say": "Nobody could find alpha."}, {"kind": "note", "title": "A word", "say": "One more thing."}]}' > "$GUILD_HOME/quests/alpha/reel.json"
+reel=$(curl -s "http://127.0.0.1:4899/q/alpha/reel.json")
+has "an adventurer's reel.json tells it in its own words" "$reel" "Nobody could find alpha."
+has "and adds its own scenes" "$reel" "One more thing."
+is "an unknown quest has no reel" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/q/nope/reel.json")" "404"
 has "done announces the wrap-up" "$(tail -3 "$GUILD_HOME/events.log")" "wrap-up ready"
 vurl="http://127.0.0.1:4899/q/alpha/validate"
 has "the war table shows the checklist" "$(curl -s "$vurl")" "Call the endpoint."

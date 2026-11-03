@@ -110,6 +110,10 @@ Write it so someone who does not read code knows what happened in one minute. Th
   4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.
   `guild status done` refuses a backend quest whose wrap-up lacks this section or leaves rules unexplained. `--no-impact "<why>"` is the recorded escape.
 
+## The reel (optional)
+
+Guild builds a pixel-art reel of every quest from what it left behind (`guild reel <slug>`, and the "Watch the reel" button on the wrap-up). For a feature, you may tell the story better than the defaults: write `quests/<slug>/reel.json` with up to seven scenes, each `{"kind": "pain|cause|change|build|trial|result|note", "title", "say", "items", "before", "after"}`. `say` is what the narrator reads: one or two plain sentences a product person follows, no file names. A scene you write replaces the one guild would build; a `note` scene is added before the end.
+
 ## Validation scenarios (scenarios.json)
 
 Every code quest ends with an end-to-end checklist the guildmaster runs before any merge. Write it to `quests/<slug>/scenarios.json` (the quest folder is in your prompt); the war table shows it at `/q/<slug>/validate`, the At-a-glance strip links to it, and `guild status done` is refused without it (`--no-scenarios "<why>"` only when there is nothing a person can run). The guildmaster marks each scenario pass, fail or skip. When the last one passes, guild writes a certificate for the commit it was run on; a wrap-up cannot be graded "ready to merge" without a certificate for the current commit, so a new commit means the list is run again. Failed scenarios come back to you with the guildmaster's notes.

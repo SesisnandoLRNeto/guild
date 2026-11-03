@@ -692,6 +692,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(404, "not installed: run install.sh")
                 with open(target, "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            v = re.match(r"^/q/([A-Za-z0-9._-]+)/reel(\.json)?$", path)
+            if v:
+                if not os.path.isdir(os.path.join(QUESTS, v.group(1))):
+                    return self.send(404, "no such quest")
+                if not v.group(2):
+                    return self.send(200, open(os.path.join(WEB, "reel.html")).read())
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import reel
+                return self.send(200, json.dumps(reel.build(v.group(1))), "application/json")
             v = re.match(r"^/q/([A-Za-z0-9._-]+)/files(\.json|/show|/diff)?$", path)
             if v:
                 return self.files_get(v.group(1), v.group(2) or "", urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
@@ -896,6 +905,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qmeta = load_json_safe(os.path.join(QUESTS, quest, "meta.json")) or {}
         files_link = (f'<a class="hbtn" href="/q/{quest}/files"><i class="gi-icon gi-map" aria-hidden="true"></i>All the changes</a>'
                       if os.path.isdir(qmeta.get("worktree") or "") else "")
+        if meta.get("wrapup"):                    # the story of what was done, as a pixel-art reel
+            files_link += f'<a class="hbtn" href="/q/{quest}/reel"><i class="gi-icon gi-scroll" aria-hidden="true"></i>Watch the reel</a>'
         return (shell
                 .replace("{{TITLE}}", meta.get("title", board))
                 .replace("{{FILES}}", files_link)

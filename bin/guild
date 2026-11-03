@@ -80,6 +80,7 @@ guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the cam
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild reel <slug>                   what a quest did, as a pixel-art reel you can watch or save as a video
 guild validate ready | wait [--timeout S]   inside a guarded quest: put the checklist before the
                                     guildmaster, then block until it is validated or sent back
 guild files <slug>                  the map room: find any file of the quest, read it with its changes marked, compare with any commit
@@ -1639,6 +1640,10 @@ case "${1:-}" in
   campaign) shift; cmd_campaign "$@" ;;
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
+  reel) shift; need_quest "${1:-}"
+        port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+        echo "http://127.0.0.1:$port/q/$1/reel"
+        [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/reel" 2>/dev/null || true ;;
   files) shift; need_quest "${1:-}"
     port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
     echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/files" 2>/dev/null || true ;;
