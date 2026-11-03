@@ -614,12 +614,39 @@ def export(slug, meta=None, prs=None):
     return page(slug, meta, export=True, image=inline, prs=prs)
 
 
+def guard(slug):
+    """A guarded quest (guild quest --guarded) opens its PR only after the guildmaster validated the
+    branch: a certificate for the commit the PR will hold. Returns why the PR must wait, or ""."""
+    try:
+        meta = json.load(open(os.path.join(qdir(slug), "meta.json")))
+    except (OSError, ValueError):
+        return ""
+    if not meta.get("guarded"):
+        return ""
+    s = summary(slug)
+    if s["certified"]:
+        return ""
+    if not s["exists"]:
+        return ("this is a guarded quest: the guildmaster validates it before the PR. Write scenarios.json, "
+                "then guild validate ready, then guild validate wait")
+    if s["stale"]:
+        return ("the validation certificate is for an older commit. Run guild validate ready again, "
+                "so the guildmaster validates what the PR will hold")
+    return (f"the guildmaster has not validated this branch yet ({s['pass']}/{s['total']} passed, {s['fail']} failed). "
+            "Run guild validate ready if you have not, then guild validate wait")
+
+
 def main():
     args = sys.argv[1:]
     if len(args) < 2:
         raise SystemExit(__doc__)
     cmd, slug = args[0], args[1]
-    if cmd == "check":
+    if cmd == "guard":
+        why = guard(slug)
+        if why:
+            print(why)
+            raise SystemExit(1)
+    elif cmd == "check":
         frontend = "--frontend" in args
         for p in check(slug, frontend):
             print(p)

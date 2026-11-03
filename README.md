@@ -93,7 +93,8 @@ guild up ~/Workspace
 | `guild check [slug] [--baseline]` | Run the brief's acceptance checks in the quest worktree (EDD) |
 | `guild check <slug> --reseal` | Accept a changed Acceptance block (you only, never an adventurer) |
 | `guild vision <repo>` / `guild vision status <repo>` | Collect a repo's evidence for its written vision |
-| `guild jira once\|watch\|status` | Start quests from your `@quartermaster` comments on tickets |
+| `guild jira once\|watch\|status` | Start quests from your comments on tickets: `@guild` starts a guarded quest at once, `@quartermaster` asks first |
+| `guild quest ... --guarded ["<why>"]` | No plan; the trial and the contract stay, and the guildmaster validates the branch end to end before `gh pr create` is allowed. The adventurer runs `guild validate ready`, then `guild validate wait` |
 | `guild shot <url> --name before\|after` | A screenshot taken the same way every time, filed under the quest |
 | `guild peek <slug> --calls` | The tool calls an adventurer actually ran, from its session log |
 | `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
@@ -276,11 +277,17 @@ The key is stored with the quest, so `guild log` and `guild retro` can show whic
 
 ## Tickets that start themselves
 
-Comment `@quartermaster repo:work-api build the fair pay list` on a ticket, and a quest can start from it. This is the one part of guild that acts without you typing a command, so it is built around what it must never do:
+Comment on a ticket, and a quest starts from it. Two words:
+
+- **`@guild repo:work-api build the fair pay list`** starts a **guarded** quest at once, under the quartermaster's watch: no plan, straight to the build. Validation guards it instead. After the trial, the adventurer writes the end-to-end checklist and waits; you run it on the branch, and only then may it open the PR. A fail goes back with your notes. A new commit needs your validation again, so what you validated is what the PR holds.
+- **`@quartermaster ...`** asks first on the war table, and the quest plans first.
+
+This is the one part of guild that acts without you typing a command, so it is built around what it must never do:
 
 - **Only your comments count.** Anyone else mentioning the trigger is ignored, and remembered as ignored.
+- **No double work.** Before any start it checks whether someone is already on the ticket: a guild quest on that ticket under any name, the ticket assigned to someone else or already done, or a branch with the ticket key on origin. Any of these turns the start into a question on the war table that lists what it found, with "do not start" suggested.
 - **Ticket text never becomes a command.** `check:` lines come only from your comment; the ticket description is context, with any `check:` lines stripped.
-- **It asks first.** By default it puts "start a quest for SARA-812?" on the war table with the exact brief it would use. It starts only on your yes. `"autostart": true` skips the question and is capped by `max_active`.
+- **`@quartermaster` asks first.** It puts "start a quest for SARA-812?" on the war table with the exact brief it would use, and starts only on your yes. `"autostart": true` skips the question. `@guild` is your yes already written. Both are capped by `max_active`; `@guildmaster` or an email address does not count as `@guild`.
 - **It never writes to Jira.** Ticket comments stay yours. It tells you, with a desktop notification, when a quest it started is done, with the note (usually the PR).
 - It watches only the projects you list; the repo comes from `repo:<name>` or a per-project default, and an unknown repo is a question, not a guess.
 

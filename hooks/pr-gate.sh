@@ -25,6 +25,11 @@ if [ "$sha" != "$head" ]; then
   echo "Blocked: the trial ran on $sha but HEAD is now $head. Run the trial again for the new commits." >&2
   exit 2
 fi
+# A guarded quest waits for the guildmaster's validation of this very commit.
+if ! guard=$(python3 "$(dirname "$(realpath "$0")")/../bin/scenarios.py" guard "$slug"); then
+  echo "Blocked: $guard." >&2
+  exit 2
+fi
 if [ "$result" = "skip" ] && ! grep -q "Trial: skipped" <<< "$cmd"; then
   echo "Blocked: the trial was skipped ($note). Add a line 'Trial: skipped - $note' to the PR body so the reviewer sees it." >&2
   exit 2

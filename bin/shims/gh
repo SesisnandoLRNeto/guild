@@ -42,6 +42,11 @@ if [ "$is_pr_create" = 1 ] && [ -n "${GUILD_QUEST:-}" ]; then
     echo "guild: blocked. The trial ran on ${sha:0:8} but HEAD is ${head:0:8}. Run the trial again for the new commits." >&2
     exit 2
   fi
+  # A guarded quest waits for the guildmaster's validation of this very commit.
+  if ! guard=$(python3 "$(dirname "$self")/scenarios.py" guard "$GUILD_QUEST"); then
+    echo "guild: blocked. $guard." >&2
+    exit 2
+  fi
   # the generated contract section, for this contract and this HEAD (hand-written bodies drift)
   body_file="$(mktemp)"; prev=""
   for arg in "$@"; do
