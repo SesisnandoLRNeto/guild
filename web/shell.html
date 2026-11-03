@@ -202,11 +202,42 @@ box.addEventListener("paste", e => { for (const it of e.clipboardData.files) upl
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => { e.preventDefault(); for (const f of e.dataTransfer.files) upload(f); });
 
+// A plan page with the agreement review sends its marks here. They travel with the answer, and the
+// answer is picked from them until you pick one yourself.
+let review = null, picked = false;
+document.getElementById("questions").addEventListener("change", e => { if (e.isTrusted) picked = true; });
+window.addEventListener("message", e => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== "guild-review") return;
+  review = e.data;
+  answers.review = review.points;
+  const n = k => review.points.filter(p => p.mark === k).length;
+  let line = document.getElementById("reviewline");
+  if (!line) { line = el("p", "hint"); line.id = "reviewline"; document.getElementById("questions").appendChild(line); }
+  const left = review.total - n("agree") - n("change") - n("unsure");
+  line.textContent = `Your review: ${n("agree")} agree, ${n("change")} change, ${n("unsure")} not sure, ${left} left.`;
+  if (picked) return;
+  const want = n("change") ? "change" : n("unsure") ? "explain" : left === 0 ? "go" : null;
+  const input = want && document.querySelector(`label.opt[data-q="choice"][data-o="${want}"] input`);
+  if (input && !input.checked) { input.checked = true; input.dispatchEvent(new Event("change")); }
+});
+function reviewText() {
+  if (!review) return "";
+  const flagged = review.points.filter(p => p.mark === "change" || p.mark === "unsure");
+  const open = review.points.filter(p => !p.mark).length;
+  const head = `Plan review: ${review.points.filter(p => p.mark === "agree").length} agree, `
+    + `${review.points.filter(p => p.mark === "change").length} change, ${review.points.filter(p => p.mark === "unsure").length} not sure`
+    + (open ? `, ${open} not marked` : "") + ".";
+  return [head, ...flagged.map(p => `- [${p.mark === "change" ? "change" : "not sure"}] ${p.id} ${p.point}${p.note ? "\n  note: " + p.note : ""}`)].join("\n");
+}
+
 async function send(ended) {
   const missing = QUESTIONS.filter(q => q.required !== false && answers[q.id] === undefined);
+  if (review && answers.choice === "go" && review.points.some(p => p.mark === "change" || p.mark === "unsure")
+      && !confirm("Some points are marked Change or Not sure. Approve anyway?")) return;
   if (missing.length && !confirm(`${missing.length} question(s) not answered. Send anyway?`)) return;
   document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = true;
-  const r = await fetch("reply", { method: "POST", body: JSON.stringify({ answers, message: box.value, attachments, ended }) });
+  const message = [box.value.trim(), reviewText()].filter(Boolean).join("\n\n");
+  const r = await fetch("reply", { method: "POST", body: JSON.stringify({ answers, message, attachments, ended }) });
   const out = await r.json().catch(() => ({}));
   if (!r.ok || out.error) {                  // e.g. "ready to merge" before the validation checklist is green
     document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = false;

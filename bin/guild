@@ -59,7 +59,7 @@ guild check [slug] [--baseline]     run the brief's acceptance checks in the que
 guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
 guild vision <repo path>           collect a repo's merged, declined and reverted work (vision skill)
 guild vision status <repo>         is there a sealed vision for this repo
-guild jira once|watch|status       start quests from your comments on tickets: @guild starts a guarded
+guild jira on|once|watch|status    start quests from your comments on tickets: @guild starts a guarded
                                     quest at once, @quartermaster asks on the war table first
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
@@ -324,7 +324,20 @@ cmd_revive() {
 cmd_cost() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" cost "$@"; }
 cmd_log()  { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" log "$@"; }
 
-cmd_jira() { python3 "$GUILD_REPO/bin/jira_watch.py" "${1:-status}"; }
+cmd_jira() {
+  # on: the watcher tab in the running cockpit now, and on every guild up after (jira.json "watch": true)
+  if [ "${1:-}" = on ]; then
+    python3 "$GUILD_REPO/bin/jira_watch.py" check || exit 1
+    python3 -c "import json;p='$GUILD_HOME/local/jira.json';d=json.load(open(p));d['watch']=True;json.dump(d,open(p,'w'),indent=1)"
+    if tm has-session -t "$SESSION" 2>/dev/null && ! tm list-windows -t "$SESSION" -F '#W' | grep -qx jira; then
+      open_tab jira "$HOME" "guild jira watch; exec \$SHELL" --bg >/dev/null && echo "jira: watching, in the cockpit's jira tab"
+    else
+      echo "jira: watch is on; the next guild up opens its tab"
+    fi
+    return
+  fi
+  python3 "$GUILD_REPO/bin/jira_watch.py" "${1:-status}"
+}
 
 cmd_retro() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" retro "$@"; }
 
@@ -958,7 +971,7 @@ You run on a planning model now. Do not change code yet.
    \`## Not included\`, \`## Risks\` (each with what you do about it),
    and when they help \`## Words to know\`, \`## Questions for you\` (each with options), \`## Files\`.
    If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs from theirs, say so in the plan instead of hiding it. \`guild plan ready\` refuses a plan without the required sections.
-2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. Guild renders plan.md as the approval page and says what each answer leads to. Then wait with \`guild board wait <id>\`.
+2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\` (add \`--grill\` when the plan makes choices the guildmaster may not share: the page then asks them to agree point by point; guild does it by itself for a feature with a Why card and five or more steps). Write \`## After this plan\`, \`## How it will be built\`, \`## Not included\` and \`## Risks\` as lists, one claim per item: each item becomes a point they mark. Guild renders plan.md as the approval page and says what each answer leads to. Then wait with \`guild board wait <id>\`.
 3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If they ask to explain more, answer their questions inside plan.md (in the section each one is about, plainly) and ask again; if they ask for a change, update the plan and ask again.
 PLAN
 
@@ -1611,10 +1624,10 @@ case "${1:-}" in
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
-  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\"  (inside a quest, after writing plan.md)"
+  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\" [--grill]  (inside a quest, after writing plan.md)"
         me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
         dagger_guard "$me"
-        python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" ;;
+        python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" "${@:3}" ;;
   jev) shift
        if [ "${1:-}" = risk ] && [ -z "${2:-}" ]; then set -- risk "$(current_quest)"; fi
        python3 "$GUILD_REPO/bin/jev.py" "${@:-status}" ;;

@@ -1302,12 +1302,16 @@ def cmd_plan(args):
         contract = json.load(open(os.path.join(qdir, "acceptance.json")))
     except (OSError, ValueError):
         pass
-    page = planpage.render(quest, args.get("summary") or "", md, meta, why.load(quest), contract, go,
-                           md_to_html, md_inline, path)
+    why_card = why.load(quest)
+    review = planpage.wants_review(planpage.split(md), why_card, bool(args.get("grill")))
+    page = planpage.render(quest, args.get("summary") or "", md, meta, why_card, contract, go,
+                           md_to_html, md_inline, path, review=review)
     decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
                                 "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},
                                             {"id": "change", "label": "Change it", "why": "your notes go back; it replans"}]}]}
+    if review:
+        decisions["review"] = True
     if args.get("board"):                               # redo an open board in place (same id, same question)
         d = board_dir(quest, args["board"])
         open(os.path.join(d, "content.html"), "w").write(page)

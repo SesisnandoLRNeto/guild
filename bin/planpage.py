@@ -71,7 +71,85 @@ def longer(md):
     return bool(md.strip()) and first_lines(md) != flat
 
 
-def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path):
+# The agreement review: every claim of the plan as a point you agree with, want changed, or are not
+# sure about. It grills the plan in your favour, so it is kept for the plans worth it.
+REVIEW_GROUPS = [("understood", "What it understood"), ("after", "What changes"), ("how", "How it will be built"),
+                 ("scope", "Not included"), ("risks", "Risks"), ("questions", "Questions for you")]
+
+
+def plain(text):
+    """A Markdown line as plain words, for a point's title."""
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def list_items(md):
+    """Top-level list items of a section (a wrapped line joins its item); no list means one point."""
+    text = re.sub(r"```.*?```", "", md or "", flags=re.S)
+    items, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r"^(?:[-*]|\d+[.)])\s+(.*)", line)
+        if m:
+            cur = [m.group(1)]
+            items.append(cur)
+        elif cur is not None and line.startswith((" ", "\t")) and line.strip() and not re.match(r"^\s+(?:[-*]|\d+[.)])\s", line):
+            cur.append(line.strip())
+        elif not line.strip():
+            continue
+        elif cur is not None and not line.startswith((" ", "\t")):
+            cur = None
+    if items:
+        return [plain(" ".join(i)) for i in items if plain(" ".join(i))]
+    first = first_lines(md or "", 400)
+    return [plain(first)] if first else []
+
+
+def review_points(parts):
+    """[(group key, title, [(number, text, detail)])], numbered 1.1, 1.2, 2.1 ..."""
+    out, n = [], 0
+    for key, title in REVIEW_GROUPS:
+        if key == "understood":
+            texts = [t for t in (first_lines(parts.get("pain", ""), 300), first_lines(parts.get("cause", ""), 300)) if t]
+            texts = [plain(t) for t in texts]
+        else:
+            texts = list_items(parts.get(key, ""))
+        if not texts:
+            continue
+        n += 1
+        out.append((key, title, [(f"{n}.{i}", t) for i, t in enumerate(texts, 1)]))
+    return out
+
+
+def wants_review(parts, why_card, force=False):
+    """Not every plan: when asked (--grill), or a feature you wrote a Why card for that has five or more
+    build steps or questions for you. A small fix keeps the plain approve, explain or change."""
+    if force:
+        return True
+    return bool(why_card) and (len(list_items(parts.get("how", ""))) >= 5 or bool(parts.get("questions")))
+
+
+def review_html(quest, groups):
+    esc = html.escape
+    total = sum(len(points) for _, _, points in groups)
+    nav = " ".join(f'<a href="#rv-{k}">{i}. {esc(t)}</a>' for i, (k, t, _) in enumerate(groups, 1))
+    body = ""
+    for i, (key, title, points) in enumerate(groups, 1):
+        body += f'<h3 id="rv-{key}" class="rv-h">{i}. {esc(title)}</h3>'
+        for num, text in points:
+            body += (f'<div class="rv" data-id="{num}"><span class="rv-n">{num}</span><div class="rv-b">'
+                     f'<p class="rv-t">{esc(text)}</p><div class="rv-btns">'
+                     '<button type="button" data-m="agree">Agree</button>'
+                     '<button type="button" data-m="change">Change</button>'
+                     '<button type="button" data-m="unsure">Not sure</button></div>'
+                     '<textarea class="rv-note" rows="2" placeholder="What should change, or what is not clear?"></textarea>'
+                     '</div></div>')
+    return (REVIEW.replace("__NAV__", nav).replace("__POINTS__", body).replace("__TOTAL__", str(total))
+            .replace("__KEY__", esc(quest)))
+
+
+def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, review=False):
     parts = split(md)
     esc = html.escape
     card = lambda k, cls="": (f'<section class="sec {cls}"><h2>{TITLES[k]}</h2>{md_to_html(parts[k])}</section>'
@@ -105,8 +183,92 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
             .replace("__CONTRACT__", contract_html)
             .replace("__REST__", "".join(card(k) for k in ("pain", "cause", "how", "scope", "risks", "words", "questions", "files")
                                          if k not in ("pain", "cause") or longer(parts.get(k, ""))))
+            .replace("__REVIEW__", review_html(quest, review_points(parts)) if review else "")
             .replace("__IF_GO__", "".join(f"<li>{x}</li>" for x in go))
             .replace("__PATH__", esc(plan_path)))
+
+
+REVIEW = """<section class="review" id="review">
+<h2>Agree, point by point</h2>
+<p class="lead2">This plan is worth a closer look. Mark each point: <b>Agree</b>, <b>Change</b> or <b>Not sure</b>.
+A change or a doubt asks for a short note. Your marks go to the adventurer with your answer on the right, and
+the answer is picked for you from them (you can still change it).</p>
+<p class="rv-nav">__NAV__</p>
+__POINTS__
+<div class="rv-bar"><span><b class="c-agree">0</b> agree</span><span><b class="c-change">0</b> change</span>
+<span><b class="c-unsure">0</b> not sure</span><span class="c-left">__TOTAL__ of __TOTAL__ left</span>
+<button type="button" class="rv-all">Agree to the rest</button><button type="button" class="rv-clear">Clear marks</button></div>
+</section>
+<style>
+ .review { margin-top: 18px; }
+ .rv-nav a { margin-right: 12px; font-size: 14px; }
+ .rv-h { margin: 18px 0 8px; font-size: 16px; }
+ .rv { display: grid; grid-template-columns: 44px 1fr; gap: 8px; border: 1px solid var(--line); border-radius: 6px;
+       padding: 10px 14px; margin: 0 0 8px; background: var(--card); }
+ .rv-n { font-family: ui-monospace, monospace; font-size: 12px; color: var(--dim); padding-top: 3px; }
+ .rv-t { margin: 0 0 8px; }
+ .rv-btns button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: inherit;
+                   border-radius: 999px; padding: 3px 12px; margin-right: 6px; cursor: pointer; }
+ .rv-note { display: none; box-sizing: border-box; width: 100%; margin-top: 8px; font: inherit; font-size: 14px; }
+ .rv.change .rv-note, .rv.unsure .rv-note { display: block; }
+ .rv.agree { border-color: #5f9b4a; } .rv.agree button[data-m=agree] { border-color: #5f9b4a; color: #8fcf6a; }
+ .rv.change { border-color: #c9832e; } .rv.change button[data-m=change] { border-color: #c9832e; color: #f0a64a; }
+ .rv.unsure { border-color: #8a6fc9; } .rv.unsure button[data-m=unsure] { border-color: #8a6fc9; color: #b49cf0; }
+ .rv-bar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 10px 14px;
+           margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); font-size: 14px; z-index: 5; }
+ .rv-bar .c-agree { color: #8fcf6a; } .rv-bar .c-change { color: #f0a64a; } .rv-bar .c-unsure { color: #b49cf0; }
+ .rv-bar .c-left { color: var(--dim); margin-right: auto; }
+ .rv-bar button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+ html.realm.rm-dark .rv, html.realm.rm-dark .rv-bar { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; }
+ html.realm.rm-dark .rv.agree { border-color: #5f9b4a; } html.realm.rm-dark .rv.change { border-color: #c9832e; } html.realm.rm-dark .rv.unsure { border-color: #8a6fc9; }
+ html.realm.rm-dark .rv-note { background: rgba(0,0,0,.3); color: var(--rm-text); border: 1px solid #4a3f52; border-radius: 4px; }
+</style>
+<script>
+(function () {
+  var KEY = "guild-review:" + location.pathname, rows = [].slice.call(document.querySelectorAll(".rv")), marks = {};
+  try { marks = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch (e) {} }
+  function paint() {
+    var c = { agree: 0, change: 0, unsure: 0 };
+    rows.forEach(function (r) {
+      var m = marks[r.dataset.id] || {};
+      r.classList.remove("agree", "change", "unsure");
+      if (m.mark) { r.classList.add(m.mark); c[m.mark]++; }
+      var t = r.querySelector(".rv-note"); if (t.value !== (m.note || "")) t.value = m.note || "";
+    });
+    document.querySelector(".c-agree").textContent = c.agree;
+    document.querySelector(".c-change").textContent = c.change;
+    document.querySelector(".c-unsure").textContent = c.unsure;
+    var left = rows.length - c.agree - c.change - c.unsure;
+    document.querySelector(".c-left").textContent = left + " of " + rows.length + " left";
+    var list = rows.map(function (r) {
+      var m = marks[r.dataset.id] || {};
+      return { id: r.dataset.id, point: r.querySelector(".rv-t").textContent, mark: m.mark || "", note: m.note || "" };
+    });
+    try { parent.postMessage({ type: "guild-review", points: list, total: rows.length }, location.origin); } catch (e) {}
+  }
+  rows.forEach(function (r) {
+    r.querySelectorAll("button").forEach(function (b) {
+      b.onclick = function () {
+        var m = marks[r.dataset.id] || {};
+        m.mark = m.mark === b.dataset.m ? "" : b.dataset.m;
+        marks[r.dataset.id] = m; save(); paint();
+        if (m.mark === "change" || m.mark === "unsure") r.querySelector(".rv-note").focus();
+      };
+    });
+    r.querySelector(".rv-note").oninput = function (e) {
+      var m = marks[r.dataset.id] || {}; m.note = e.target.value; marks[r.dataset.id] = m; save(); paint();
+    };
+  });
+  document.querySelector(".rv-all").onclick = function () {
+    rows.forEach(function (r) { var m = marks[r.dataset.id] || {}; if (!m.mark) { m.mark = "agree"; marks[r.dataset.id] = m; } });
+    save(); paint();
+  };
+  document.querySelector(".rv-clear").onclick = function () { marks = {}; save(); paint(); };
+  paint();
+})();
+</script>
+"""
 
 
 PAGE = """<!doctype html>
@@ -170,6 +332,7 @@ __COMPARE__
 <p class="lead2">The acceptance contract, sealed when the quest started. The trial and the checks judge the work against it.</p>
 __CONTRACT__
 __REST__
+__REVIEW__
 <h2>What happens next</h2>
 <div class="next">
  <div class="go"><h3>Approve</h3><ol>__IF_GO__</ol></div>
