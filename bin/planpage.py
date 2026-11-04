@@ -46,14 +46,38 @@ def split(md):
     return {k: "\n".join(v).strip() for k, v in out.items()}
 
 
-def missing(md):
+# Not every plan needs every section. The shape says how much you must read to agree:
+#   small     a fix with a few steps: what will be done and how you will know it works
+#   standard  the pain, the cause, the change, the steps, the proof; you mark only the risks and questions
+#   full      everything, and every point is marked, until you agree to all of it
+SHAPES = ("small", "standard", "full")
+NEEDS = {"small": ["how", "expect"], "standard": ["pain", "cause", "after", "how", "expect"], "full": REQUIRED}
+SHAPE_LEAD = {"small": "A small plan: what will be done, and how you will know it works.",
+              "standard": "Read the change and the steps. Only the risks and the questions ask for your mark.",
+              "full": "A plan worth a close look: every point asks for your mark, and you approve when you agree to all of them."}
+
+
+def shape(parts, why_card=None, forced=""):
+    """small, standard or full, from what the plan holds; the adventurer can force one (--shape)."""
+    if forced in SHAPES:
+        return forced
+    steps = len(list_items(parts.get("how", "")))
+    questions = len(list_items(parts.get("questions", ""))) if parts.get("questions") else 0
+    if why_card or steps >= 6 or (questions and steps >= 4):
+        return "full"
+    if steps <= 3 and not questions and not parts.get("cause"):
+        return "small"
+    return "standard"
+
+
+def missing(md, kind=None):
     parts = split(md)
-    return [k for k in REQUIRED if not parts.get(k)]
+    return [k for k in NEEDS[kind or shape(parts)] if not parts.get(k)]
 
 
-def template():
+def template(kind="full"):
     """The skeleton the adventurer fills in, for the refusal message and the prompt."""
-    return "\n".join(f"## {TITLES[k]}{'' if req else ' (optional)'}\n<{hint}>" for k, _, req, hint in SECTIONS)
+    return "\n".join(f"## {TITLES[k]}{'' if k in NEEDS[kind] else ' (optional)'}\n<{hint}>" for k, _, req, hint in SECTIONS)
 
 
 def first_lines(md, limit=260):
@@ -72,8 +96,9 @@ def longer(md):
 
 
 # The agreement review: every claim of the plan as a point you agree with, want changed, or are not
-# sure about. Every plan gets it: the plan is approved only when every point is Agree, and each
-# Change or Not sure goes back to the adventurer, who answers it in plan.md and asks again.
+# sure about. The plan is approved only when every point shown is Agree, and each Change or Not
+# sure goes back to the adventurer, who answers it in plan.md and asks again. The shape decides
+# which points are shown (review_groups).
 REVIEW_GROUPS = [("understood", "What it understood"), ("after", "What changes"), ("how", "How it will be built"),
                  ("scope", "Not included"), ("risks", "Risks"), ("questions", "Questions for you")]
 
@@ -123,37 +148,55 @@ def review_points(parts):
     return out
 
 
-def wants_review(parts, why_card=None, force=False):
-    """Every plan with points to mark. The Why card stays optional: the review works without it."""
-    return force or bool(review_points(parts))
+def review_groups(parts, kind):
+    """The points you mark: none on a small plan, the risks and questions on a standard one, all on a full one."""
+    if kind == "small":
+        return []
+    groups = review_points(parts)
+    return groups if kind == "full" else [g for g in groups if g[0] in ("risks", "questions")]
 
 
-def review_html(quest, groups):
+def review_html(quest, groups, head="Agree, point by point", lead=None, change="Change", label="Plan review"):
+    """The point grid. A point is (number, text) or (number, text, detail html shown under it).
+    The findings page reuses it with Disagree in place of Change."""
     esc = html.escape
     total = sum(len(points) for _, _, points in groups)
     nav = " ".join(f'<a href="#rv-{k}">{i}. {esc(t)}</a>' for i, (k, t, _) in enumerate(groups, 1))
     body = ""
     for i, (key, title, points) in enumerate(groups, 1):
         body += f'<h3 id="rv-{key}" class="rv-h">{i}. {esc(title)}</h3>'
-        for num, text in points:
+        for num, text, *detail in points:
             body += (f'<div class="rv" data-id="{num}"><span class="rv-n">{num}</span><div class="rv-b">'
-                     f'<p class="rv-t">{esc(text)}</p><div class="rv-btns">'
+                     f'<p class="rv-t">{esc(text)}</p>{"".join(detail)}<div class="rv-btns">'
                      '<button type="button" data-m="agree">Agree</button>'
-                     '<button type="button" data-m="change">Change</button>'
+                     f'<button type="button" data-m="change">{esc(change)}</button>'
                      '<button type="button" data-m="unsure">Not sure</button></div>'
                      '<textarea class="rv-note" rows="2" placeholder="What should change, or what is not clear?"></textarea>'
                      '</div></div>')
-    return (REVIEW.replace("__NAV__", nav).replace("__POINTS__", body).replace("__TOTAL__", str(total))
+    page = REVIEW if lead is None else re.sub(r'<p class="lead2">.*?</p>', lambda m: f'<p class="lead2">{lead}</p>', REVIEW, count=1, flags=re.S)
+    return (page.replace("__HEAD__", esc(head)).replace("__LABEL__", esc(label)).replace("__CHANGE__", esc(change.lower()))
+            .replace("__NAV__", nav).replace("__POINTS__", body).replace("__TOTAL__", str(total))
             .replace("__KEY__", esc(quest)))
 
 
-def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, review=False):
+def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full"):
     parts = split(md)
     esc = html.escape
+    groups = review_groups(parts, kind)
     card = lambda k, cls="": (f'<section class="sec {cls}"><h2>{TITLES[k]}</h2>{md_to_html(parts[k])}</section>'
                               if parts.get(k) else "")
     minute = "".join(f'<div class="m {k}"><b>{label}</b><p>{md_inline(first_lines(parts.get(k, "")), auto_code=True)}</p></div>'
-                     for k, label in (("pain", "The pain"), ("cause", "Why it happens"), ("expect", "What you should expect")))
+                     for k, label in (("pain", "The pain"), ("cause", "Why it happens"), ("expect", "What you should expect"))
+                     if parts.get(k))
+    n = minute.count('<div class="m ')
+    minute = f'<h2>In one minute</h2><div class="minute n{n}">{minute}</div>' if minute else ""
+    if parts.get("today") or parts.get("after"):
+        ta = ('<h2>Today, and after this plan</h2><div class="ta">'
+              + (f'<div class="today"><h3>Today</h3>{md_to_html(parts["today"])}</div>' if parts.get("today") else "")
+              + (f'<div class="after"><h3>After this plan</h3>{md_to_html(parts["after"])}</div>' if parts.get("after") else "")
+              + "</div>")
+    else:
+        ta = ""
     if why_card:
         mine = "".join(f'<div class="row"><b>{esc(label)}</b><span>{esc(why_card.get(k) or "(left empty)")}</span></div>'
                        for k, label in (("pain", "Pain"), ("rule", "Rule"), ("decision", "Decision"), ("impact", "Impact"), ("future", "Future")))
@@ -164,31 +207,37 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
                    f'<div class="cmp"><div class="col yours"><h3>Your words</h3>{mine}</div>'
                    f'<div class="col plan"><h3>The plan\'s understanding</h3>{theirs}</div></div>')
     else:
-        compare = ('<p class="lead2 warn">No Why card yet for this quest, so there is nothing of yours to compare with. '
-                   f'<code>guild why open {esc(quest)}</code> puts it on the docket.</p>')
+        compare = ""                                    # the Why card is optional: no card, no block
     items = (contract or {}).get("items", [])
     if items:
         contract_html = "<ul class=\"contract\">" + "".join(
             f"<li><code>{esc(i['run'])}</code></li>" if i["kind"] == "check" else f"<li>{md_inline(i['text'], auto_code=True)}</li>"
             for i in items) + "</ul>"
     else:
+        contract_html = ""
+    if contract_html:
+        contract_html = ('<h2>What "done" means</h2><p class="lead2">The acceptance contract, sealed when the quest started. '
+                         'The trial and the checks judge the work against it.</p>' + contract_html)
+    elif kind != "small":
         contract_html = f"<p class=\"lead2 warn\">No acceptance contract: {esc(meta.get('no_acceptance') or 'none was written')}.</p>"
+    reel = (f'<p class="reel"><a href="/q/{esc(quest)}/reel" target="_blank">Watch the reel</a>: this plan as a short '
+            'animated story, if you would rather watch than read.</p>') if kind == "full" else ""
     return (PAGE.replace("__QUEST__", esc(quest)).replace("__SUMMARY__", md_inline(summary or "", auto_code=True))
+            .replace("__SHAPE__", SHAPE_LEAD[kind]).replace("__REEL__", reel)
             .replace("__MINUTE__", minute)
-            .replace("__TODAY__", md_to_html(parts.get("today", "")))
-            .replace("__AFTER__", md_to_html(parts.get("after", "")))
+            .replace("__TA__", ta)
             .replace("__COMPARE__", compare)
             .replace("__CONTRACT__", contract_html)
             .replace("__REST__", "".join(card(k) for k in ("pain", "cause", "how", "scope", "risks", "words", "questions", "files")
                                          if k not in ("pain", "cause") or longer(parts.get(k, ""))))
-            .replace("__REVIEW__", review_html(quest, review_points(parts)) if review else "")
+            .replace("__REVIEW__", review_html(quest, groups) if groups else "")
             .replace("__IF_GO__", "".join(f"<li>{x}</li>" for x in go))
             .replace("__PATH__", esc(plan_path)))
 
 
-REVIEW = """<section class="review" id="review">
-<h2>Agree, point by point</h2>
-<p class="lead2">Mark each point: <b>Agree</b>, <b>Change</b> or <b>Not sure</b>. A change or a doubt asks for a
+REVIEW = """<section class="review" id="review" data-label="__LABEL__" data-change="__CHANGE__">
+<h2>__HEAD__</h2>
+<p class="lead2">Mark each point below: <b>Agree</b>, <b>Change</b> or <b>Not sure</b>. A change or a doubt asks for a
 short note. You can approve only when every point is Agree. Until then your marks go back to the adventurer, it
 answers in the plan, and you get this page again: points you agreed stay agreed, new or changed ones are marked
 <span class="rv-new">new</span>.</p>
@@ -206,6 +255,7 @@ __POINTS__
        padding: 10px 14px; margin: 0 0 8px; background: var(--card); }
  .rv-n { font-family: ui-monospace, monospace; font-size: 12px; color: var(--dim); padding-top: 3px; }
  .rv-t { margin: 0 0 8px; }
+ .rv-d { font-size: 14px; margin: 0 0 8px; } .rv-d p { margin: 2px 0; } .rv-d .sev { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
  .rv-new { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #e0b84a; border: 1px solid #e0b84a;
            border-radius: 999px; padding: 0 7px; margin-left: 6px; }
  .rv-btns button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: inherit;
@@ -261,7 +311,9 @@ __POINTS__
       var m = marks[r.dataset.id] || {};
       return { id: r.dataset.id, point: r.dataset.text, mark: m.mark || "", note: m.note || "" };
     });
-    try { parent.postMessage({ type: "guild-review", points: list, total: rows.length }, location.origin); } catch (e) {}
+    var sec = document.getElementById("review");
+    try { parent.postMessage({ type: "guild-review", points: list, total: rows.length, label: sec.dataset.label,
+                               change: sec.dataset.change }, location.origin); } catch (e) {}
   }
   rows.forEach(function (r) {
     r.querySelectorAll("button").forEach(function (b) {
@@ -295,6 +347,9 @@ PAGE = """<!doctype html>
  .kicker { font-variant: small-caps; letter-spacing: .08em; color: var(--dim); font-size: 13px; }
  .summary { font-size: 17px; margin: 6px 0 18px; }
  .minute { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 8px; }
+ .minute.n1 { grid-template-columns: 1fr; } .minute.n2 { grid-template-columns: 1fr 1fr; }
+ .ta:has(> div:only-child) { grid-template-columns: 1fr; }
+ .reel a { font-weight: 600; }
  .minute .m { background: rgba(255,250,235,.62); border: 1px solid var(--line); border-top: 4px solid #8a4b12; border-radius: 4px; padding: 10px 14px; }
  .minute .m.pain { border-top-color: var(--bad); } .minute .m.expect { border-top-color: var(--ok); }
  .minute b { font-variant: small-caps; font-size: 14px; color: #4a2f1a; }
@@ -339,13 +394,11 @@ PAGE = """<!doctype html>
 <div class="kicker">__QUEST__ · read the map, then give the order</div>
 <h1>Understand the plan</h1>
 <p class="summary">__SUMMARY__</p>
-<h2>In one minute</h2>
-<div class="minute">__MINUTE__</div>
-<h2>Today, and after this plan</h2>
-<div class="ta"><div class="today"><h3>Today</h3>__TODAY__</div><div class="after"><h3>After this plan</h3>__AFTER__</div></div>
+<p class="lead2 shape">__SHAPE__</p>
+__REEL__
+__MINUTE__
+__TA__
 __COMPARE__
-<h2>What "done" means</h2>
-<p class="lead2">The acceptance contract, sealed when the quest started. The trial and the checks judge the work against it.</p>
 __CONTRACT__
 __REST__
 __REVIEW__

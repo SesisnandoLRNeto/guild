@@ -832,7 +832,7 @@ rm -f "$GUILD_HOME/.pr-cache.json"
 echo x | "$GUILD" quest pl --repo "$REPO_A" --plan >/dev/null 2>&1
 printf '# Plan\n\n## Goal\nParse on save.\n\n## Steps\n1. a\n' > "$GUILD_HOME/quests/pl/plan.md"
 out=$(GUILD_QUEST=pl "$GUILD" plan ready "x" 2>&1)
-has "a plan without the explainer sections is refused" "$out" "plan.md lacks: The pain, Why it happens, Today"
+has "a plan without what its shape needs is refused" "$out" "small plan, and plan.md lacks: What you should expect"
 has "and the refusal shows the sections to write" "$out" "## What you should expect"
 echo '{"pain":"finance edits rates by hand","rule":"parse on save","decision":"Kim","impact":"rate configs","future":"approvals"}' > "$GUILD_HOME/quests/pl/why.json"
 cat > "$GUILD_HOME/quests/pl/plan.md" <<'MD'
@@ -892,10 +892,13 @@ rv=$(python3 -c "
 import sys; sys.path.insert(0, '$REPO/bin'); import planpage as p
 small = p.split('## How it will be built\n1. a\n2. b\n')
 big = p.split('## How it will be built\n' + ''.join(f'{i}. step {i}\n' for i in range(1, 6)))
-print(p.wants_review(small, {'pain': 'x'}), p.wants_review(big, None), p.wants_review(p.split('')))")
-is "every plan gets the point by point review, with or without a Why card" "$rv" "True True False"
-has "so the first plan page already asks point by point" "$page" "Agree, point by point"
+std = p.split('## The pain\nx\n## Why it happens\ny\n## After this plan\nz\n## How it will be built\n1. a\n2. b\n3. c\n4. d\n## What you should expect\nok\n## Risks\n- r1\n')
+print(p.shape(small), p.shape(big), p.shape(std), p.shape(small, {'pain': 'x'}), p.shape(big, None, 'small'),
+      len(p.review_groups(small, 'small')), [g[0] for g in p.review_groups(std, 'standard')], p.missing('## How it will be built\n1. a\n## What you should expect\nok\n'))")
+is "the shape follows the plan: small, full by size or Why card, standard otherwise; --shape forces it" "$rv" "small standard standard full small 0 ['risks'] []"
+has "a plan with a Why card is full, and asks point by point" "$page" "Agree, point by point"
 has "and approving needs every point on Agree" "$page" "approve only when every point is Agree"
+has "a full plan offers the reel" "$page" "/q/pl/reel"
 has "a plan asked again keeps your agreed points by quest" "$page" 'guild-review:pl"'
 has "and marks new or changed points" "$page" 'class="rv-new"'
 has "the panel refuses Approve until every point is agreed" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" "are not on Agree yet"
@@ -905,8 +908,51 @@ pb=$(echo "$out" | awk '/board id:/ {print $3}')
 page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
 has "each claim is a numbered point" "$page" 'data-id="1.1"'
 has "and the board knows it carries a review" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"review": true'
-has "the panel sends your marks with the answer" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" "Plan review: "
+has "the panel sends your marks with the answer" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" 'review.label || "Plan review"'
+# a small plan: only what will be done and how you will know; no grid, no empty sections
+rm -f "$GUILD_HOME/quests/pl/why.json"
+cat > "$GUILD_HOME/quests/pl/plan.md" <<'MD'
+# Fix the typo
+## How it will be built
+1. Fix the label in `Header.tsx`.
+## What you should expect
+The header reads "Projects".
+MD
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Fix the header typo")
+pb=$(echo "$out" | awk '/board id:/ {print $3}')
+page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
+has "a small plan says it is small" "$page" "A small plan"
+hasnt "and has no point grid" "$page" 'class="rv"'
+hasnt "no Today and after block when the plan has neither" "$page" "Today, and after this plan"
+hasnt "no Why card nag when there is no card" "$page" "No Why card yet"
+hasnt "no reel on a small plan" "$page" "/q/pl/reel"
+has "the board records the shape" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"shape": "small"'
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "x" --shape huge 2>&1)
+has "a wrong --shape is refused" "$out" "--shape is one of"
+printf '## How it will be built\n1. a\n2. b\n3. c\n4. d\n' > "$GUILD_HOME/quests/pl/plan.md"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "x" 2>&1)
+has "a standard plan without the pain is refused, naming only what that shape needs" "$out" "standard plan, and plan.md lacks: The pain"
 "$GUILD" close pl --force >/dev/null 2>&1
+
+# findings: a code review as points you mark with your own eyes
+cat > "$TMP/findings.json" <<'J'
+{"title": "Review of PR 42", "pr": "#42", "findings": [
+ {"file": "src/a.ts", "line": 12, "summary": "The total ignores refunds", "failure_scenario": "a refunded order counts twice",
+  "severity": "high", "category": "correctness", "comment": "Refunds are not subtracted here."},
+ {"file": "src/b.ts", "line": 3, "summary": "Unused import", "severity": "low"}]}
+J
+out=$("$GUILD" findings "$TMP/findings.json" --quest pl-review)
+fb=$(echo "$out" | awk '/board id:/ {print $3}')
+fpage=$(cat "$GUILD_HOME/quests/pl-review/boards/$fb/content.html")
+has "each finding is a point to mark" "$fpage" "My findings, point by point"
+has "you can disagree with a finding" "$fpage" ">Disagree</button>"
+has "with its place in the code" "$fpage" "<code>src/a.ts:12</code>"
+has "and the comment it would leave" "$fpage" "Refunds are not subtracted here."
+has "grouped by how much it matters" "$fpage" "Must fix"
+has "nothing is posted: a draft waits for your word" "$(cat "$GUILD_HOME/quests/pl-review/boards/$fb/decisions.json")" '"id": "draft"'
+has "the marks travel as findings, with the agreed ones listed" "$(curl -s "http://127.0.0.1:4899/b/pl-review/$fb/")" "- [agree]"
+out=$("$GUILD" findings "$TMP/nothing.json" 2>&1)
+has "findings needs a file" "$out" "usage: guild findings"
 
 # decision pages: options as cards, cases, flows, numbers; refused when not ready
 cat > "$TMP/dspec.json" <<'J'
@@ -1126,6 +1172,12 @@ has "the card asks the five questions" "$(cat "$GUILD_HOME/quests/whyq/boards/$w
 # housekeeping gets no card: a PR review fix, a merge, a CI chore have no pain or rule of their own
 out=$(echo "Fix the Required review items on PR 12" | GUILD_NO_WHY= "$GUILD" quest pr12-review-fix --repo "$REPO_A" 2>&1)
 has "a PR review fix quest says it skipped the card" "$out" "why card: skipped"
+has "and it is a light quest: no plan, no contract, no checklist" "$out" "light quest (housekeeping"
+has "meta keeps why it is light" "$(cat "$GUILD_HOME/quests/pr12-review-fix/meta.json")" '"light": "housekeeping'
+out=$(echo "Fix the Required review items on PR 13" | GUILD_NO_WHY= GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= "$GUILD" quest pr13-review-fix --repo "$REPO_A" 2>&1)
+has "a housekeeping quest needs no Acceptance block and no plan" "$out" "light quest"
+hasnt "and does not start in the plan phase" "$(cat "$GUILD_HOME/quests/pr13-review-fix/prompt.md")" "You start in the plan phase"
+"$GUILD" close pr13-review-fix --force >/dev/null 2>&1
 [ -z "$(ls "$GUILD_HOME/quests/pr12-review-fix/boards" 2>/dev/null | grep '^why-')" ] && ok "and puts no Why card on the docket" || bad "and puts no Why card on the docket"
 out=$(echo "Bring the branch up to date with main; resolve the conflicts in releases.json" | GUILD_NO_WHY= "$GUILD" quest abc-7-sync --repo "$REPO_A" 2>&1)
 has "a merge brief skips the card too" "$out" "the brief says housekeeping"

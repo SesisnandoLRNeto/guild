@@ -101,6 +101,8 @@ guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest
                                     a lesson with verbatim quotes from two quests; you accept it on the docket
 guild lessons                       proposed, accepted and rejected lessons
 guild prs                           each quest's PR as GitHub sees it (state, review, checks)
+guild findings <findings.json>      a code review's findings on the war table: you mark each one
+                                    Agree, Disagree or Not sure; nothing is posted anywhere
 guild jev status|test|on|off|allow|block|risk
                                     Jev (TypeSafe) for small judgment calls; scopes: board, quests, global
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
@@ -803,6 +805,18 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   local brief_tmp="$GUILD_HOME/.brief-$slug-$$"
   if [ -n "$brief" ]; then cp "$brief" "$brief_tmp"; else cat > "$brief_tmp"; fi
   [ -s "$brief_tmp" ] || { rm -f "$brief_tmp"; die "empty brief"; }
+  # Housekeeping (a merge, conflicts, a review fix, a CI chore) has nothing to plan, accept or
+  # validate: the PR it serves already holds all of that. It gets no plan, no contract and no
+  # checklist; the trial stays, so the result is still reviewed and tested. --plan keeps the plan.
+  local light=""
+  if [ -z "$plan" ] && [ -z "$guarded" ] && [ -z "$quick" ] && [ -z "$parent" ] && [ -z "${GUILD_WHY:-}" ] \
+     && ! light=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$brief_tmp" 2>/dev/null); then
+    light="housekeeping: ${light#why card: skipped, }"
+    [ -n "$noplan" ] || noplan="$light"
+    [ -n "$noaccept" ] || noaccept="$light"
+  else
+    light=""
+  fi
   if [ -z "$parent" ] && [ -z "$noaccept" ] && [ "$(python3 "$GUILD_REPO/bin/checks.py" count "$brief_tmp")" = 0 ]; then
     rm -f "$brief_tmp"
     die "the brief has no Acceptance block, so there is no contract to judge the work against. Add one before any code:
@@ -880,7 +894,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
-           "no_plan": """$noplan""", "quick": """$quick""", "dagger": """$dagger""", "guarded": """$guarded""",
+           "no_plan": """$noplan""", "quick": """$quick""", "dagger": """$dagger""", "guarded": """$guarded""", "light": """$light""",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -963,16 +977,12 @@ QUICK
 ## You start in the plan phase
 
 You run on a planning model now. Do not change code yet.
-1. Read the brief and the code, then write the plan to \`$q/plan.md\`. The guildmaster reads it as an explainer before approving: the goal is that they understand why, what and how, with no misunderstanding left. Use these \`## \` sections, short and in plain words, each opening with its point:
-   \`## The pain\` (who suffers today, where, one real example with its evidence: a ticket quote, a log line, a screenshot path),
-   \`## Why it happens\` (the root cause in plain words, and where it lives, \`file:line\`),
-   \`## Today\` (how it works now) and \`## After this plan\` (how it will work: what is added, changed, removed; a \`\`\`mermaid flow on each side when the point has arrows),
-   \`## How it will be built\` (numbered steps, one idea each, names in backticks),
-   \`## What you should expect\` (what they will see when it works, and how the acceptance checks prove it),
-   \`## Not included\`, \`## Risks\` (each with what you do about it),
-   and when they help \`## Words to know\`, \`## Questions for you\` (each with options), \`## Files\`.
-   If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs from theirs, say so in the plan instead of hiding it. \`guild plan ready\` refuses a plan without the required sections.
-2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. The page asks the guildmaster to agree point by point, and they can approve only when every point is Agree. Write \`## After this plan\`, \`## How it will be built\`, \`## Not included\` and \`## Risks\` as lists, one claim per item: each item becomes a point they mark. Write \`## Questions for you\` too, one question per item, for every choice you made that they may not share and every guess you made about the ticket: the goal is that they really understand what is going on and why, so question them. Then wait with \`guild board wait <id>\`.
+1. Read the brief and the code, then write the plan to \`$q/plan.md\`. The guildmaster reads it to understand what is going on and to agree or disagree, so write only what they need for that. Pick the shape that fits the work:
+   - **small** (a fix with up to three steps, no open choice): \`## How it will be built\` and \`## What you should expect\` (what they will see when it works, and how it is proven). Nothing else unless it helps.
+   - **standard** (most work): add \`## The pain\` (who suffers, one real example with evidence), \`## Why it happens\` (the root cause, \`file:line\`) and \`## After this plan\` (what is added, changed, removed). Add \`## Today\`, \`## Risks\`, \`## Not included\`, \`## Questions for you\` only when they have something real to say.
+   - **full** (a feature, a business rule, six or more steps, or choices they may not share): every section, \`## Today\` against \`## After this plan\` with a \`\`\`mermaid flow when the point has arrows, \`## Not included\`, \`## Risks\` (each with what you do about it), and \`## Questions for you\` for every choice and every guess you made about the ticket.
+   Write the steps, risks, scope and questions as lists, one claim per item: each item can become a point they mark. Short, plain words. A section with nothing real to say is better left out. If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs, say so.
+2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. Guild picks the shape from what you wrote (a Why card, six or more steps, or questions with four or more steps make it full); \`--shape small|standard|full\` sets it. A small plan is approve, explain or change. A standard one asks them to mark only the risks and questions; a full one asks them to mark every point, and they can approve only when every point shown is Agree. Then wait with \`guild board wait <id>\`.
 3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. Until then, the answer comes back with their marks: for each **Not sure**, answer it inside plan.md, in the section it is about, in plain words, with an example when it helps; for each **Change**, change the plan. If an answer shows they read the task differently, add a question about it. Then \`guild plan ready\` again. Repeat until they approve; points they agreed stay agreed, and changed ones show as new.
 PLAN
 
@@ -1012,6 +1022,7 @@ PLAN
       echo "${why_word:-why card: skipped}"
     fi
   fi
+  [ -n "$light" ] && echo "light quest ($light): no plan, no acceptance contract, no checklist; the trial stays"
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -1038,6 +1049,9 @@ PY
 # Has this quest actually committed code? A report is only owed when something changed.
 quest_quick() { # slug: the reason a quest was started with --quick, or empty
   python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('quick',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+quest_light() { # slug: why a housekeeping quest has no plan, contract or checklist, or empty
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('light',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
 }
 quest_dagger() { # slug: the reason a quest was started with --epic-dagger, or empty
   python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('dagger',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
@@ -1105,6 +1119,7 @@ cmd_status() {
   done
   need_quest "$slug"
   [ -n "$(quest_quick "$slug")" ] && export GUILD_NO_SCENARIOS=1
+  [ -n "$(quest_light "$slug")" ] && export GUILD_NO_SCENARIOS=1
   if [ -n "$(quest_dagger "$slug")" ]; then
     export GUILD_NO_WRAPUP=1 GUILD_NO_SCENARIOS=1
     [ "$state" = needs-decision ] && dagger_guard "$slug"
@@ -1604,6 +1619,8 @@ case "${1:-}" in
   trial) shift; cmd_trial "$@" ;;
   board) shift; cmd_board "$@" ;;
   ask) shift; cmd_ask "$@" ;;
+  findings) shift; [ -f "${1:-}" ] || die "usage: guild findings <findings.json> [--quest <slug>]  (a code review's findings, marked point by point)"
+        python3 "$GUILD_REPO/bin/wartable.py" findings "$@" ;;
   decide) shift; d_slug=$(current_quest); [ -n "$d_slug" ] || { d_slug=quartermaster; ensure_pseudo_quest "$d_slug" "the fleet"; }
           [ -f "${1:-}" ] || die "usage: guild decide <spec.json>  (the war-table skill shows the format)"
           dagger_guard "$d_slug"
@@ -1625,7 +1642,7 @@ case "${1:-}" in
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
-  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\"  (inside a quest, after writing plan.md)"
+  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\" [--shape small|standard|full]  (inside a quest, after writing plan.md)"
         me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
         dagger_guard "$me"
         python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" "${@:3}" ;;

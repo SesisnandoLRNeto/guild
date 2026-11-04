@@ -110,6 +110,20 @@ Write it so someone who does not read code knows what happened in one minute. Th
   4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.
   `guild status done` refuses a backend quest whose wrap-up lacks this section or leaves rules unexplained. `--no-impact "<why>"` is the recorded escape.
 
+## Review findings (`guild findings`)
+
+When the guildmaster asks for a PR review, do not answer with a list in the terminal. Put the findings on the
+war table so they can check each one with their own eyes:
+
+```bash
+guild findings findings.json      # {"title", "summary", "pr", "findings": [{"file", "line", "summary",
+                                  #   "failure_scenario", "severity": "high|medium|low", "category", "comment"}]}
+```
+
+Each finding is a point they mark Agree, Disagree or Not sure. `summary` is one plain sentence; `comment` is the
+PR comment you would leave, word for word. The answer brings back the agreed points and what to do with them:
+fix them, draft PR comments (a draft only: never post without their word), show more, or keep as notes.
+
 ## The reel (optional)
 
 Guild builds a pixel-art reel of every quest from what it left behind (`guild reel <slug>`, and the "Watch the reel" button on the wrap-up). For a feature, you may tell the story better than the defaults: write `quests/<slug>/reel.json` with up to seven scenes, each `{"kind": "pain|cause|change|build|trial|result|note", "title", "say", "items", "before", "after"}`. `say` is what the narrator reads: one or two plain sentences a product person follows, no file names. A scene you write replaces the one guild would build; a `note` scene is added before the end.

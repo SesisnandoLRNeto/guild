@@ -1293,12 +1293,17 @@ def cmd_plan(args):
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import planpage
     import why
-    gaps = planpage.missing(md)
+    why_card = why.load(quest)
+    forced = args.get("shape") if isinstance(args.get("shape"), str) else ""
+    if forced and forced not in planpage.SHAPES:
+        raise SystemExit(f"guild plan: --shape is one of {', '.join(planpage.SHAPES)}")
+    kind = planpage.shape(planpage.split(md), why_card, forced)
+    gaps = planpage.missing(md, kind)
     if gaps:
-        raise SystemExit("guild plan: the guildmaster reads the plan as an explainer, and plan.md lacks: "
+        raise SystemExit(f"guild plan: this is a {kind} plan, and plan.md lacks: "
                          + ", ".join(planpage.TITLES[g] for g in gaps)
                          + ".\nWrite it in these sections (short, plain words; a ```mermaid block draws a diagram):\n\n"
-                         + planpage.template())
+                         + planpage.template(kind))
     build = meta.get("build_model") or meta.get("model") or "the build model"
     effort = meta.get("build_effort") or ""
     budget = meta.get("budget")
@@ -1313,14 +1318,14 @@ def cmd_plan(args):
         contract = json.load(open(os.path.join(qdir, "acceptance.json")))
     except (OSError, ValueError):
         pass
-    why_card = why.load(quest)
-    review = planpage.wants_review(planpage.split(md), why_card, bool(args.get("grill")))
+    review = bool(planpage.review_groups(planpage.split(md), kind))
     page = planpage.render(quest, args.get("summary") or "", md, meta, why_card, contract, go,
-                           md_to_html, md_inline, path, review=review)
+                           md_to_html, md_inline, path, kind=kind)
     decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
                                 "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},
                                             {"id": "change", "label": "Change it", "why": "your notes go back; it replans"}]}]}
+    decisions["shape"] = kind
     if review:
         decisions["review"] = True
     if args.get("board"):                               # redo an open board in place (same id, same question)
@@ -1335,6 +1340,73 @@ def cmd_plan(args):
     json.dump(decisions, open(os.path.join(tmp, "decisions.json"), "w"), indent=2)
     args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(tmp, "decisions.json"),
                 title=f"Approve the plan: {quest}")
+    cmd_open(args)
+
+
+FINDINGS_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>__TITLE__</title>
+<style> body { max-width: 980px; } .lead2 { color: var(--dim); font-size: 14px; margin: 0 0 10px; }
+ .sev.high { color: #c0392b; } .sev.medium { color: #b9770e; } .sev.low { color: var(--dim); }
+ .rv-d pre { white-space: pre-wrap; margin: 4px 0; font-size: 13px; }
+ html.realm.rm-dark .sev.high { color: #ff7a66; } html.realm.rm-dark .sev.medium { color: #f0b45a; }</style></head><body>
+<h1>__TITLE__</h1>
+<p class="summary">__SUMMARY__</p>
+__REVIEW__
+<p class="hint">Nothing is posted anywhere from this page. The points you agree with go back with your answer; a draft
+of PR comments is only a draft until you say to post it.</p>
+</body></html>
+"""
+SEVERITY = (("high", "Must fix"), ("medium", "Should fix"), ("low", "Worth a look"))
+
+
+def cmd_findings(args):
+    """A code review's findings as points you mark: Agree, Disagree or Not sure, with your eyes on each.
+    findings.json: {"title", "summary", "pr", "findings": [{"file", "line", "summary", "failure_scenario",
+    "severity": "high|medium|low", "category", "comment"}]}"""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import planpage
+    spec = json.load(open(args["file"]))
+    items = spec.get("findings") or []
+    if not items:
+        raise SystemExit("guild findings: no findings in " + args["file"])
+    esc = _html.escape
+    groups = []
+    for n, (sev, title) in enumerate([s for s in SEVERITY if any((f.get("severity") or "medium") == s[0] for f in items)], 1):
+        points = []
+        for i, f in enumerate([f for f in items if (f.get("severity") or "medium") == sev], 1):
+            where = f"{f.get('file', '')}" + (f":{f['line']}" if f.get("line") else "")
+            detail = (f'<div class="rv-d"><p><span class="sev {sev}">{esc(sev)}</span>'
+                      + (f" · {esc(f['category'])}" if f.get("category") else "")
+                      + (f" · <code>{esc(where)}</code>" if where else "") + "</p>"
+                      + (f"<p><b>When it breaks:</b> {esc(f['failure_scenario'])}</p>" if f.get("failure_scenario") else "")
+                      + (f"<p><b>Comment I would leave:</b></p><pre>{esc(f['comment'])}</pre>" if f.get("comment") else "")
+                      + "</div>")
+            points.append((f"{n}.{i}", f.get("summary", ""), detail))
+        groups.append((sev, title, points))
+    quest = args.get("quest") or os.environ.get("GUILD_QUEST") or "reviews"
+    lead = ("Mark each finding: <b>Agree</b> if you see the same problem, <b>Disagree</b> if it is wrong or not worth it, "
+            "<b>Not sure</b> if you want me to show more. A disagree or a doubt asks for a short note.")
+    review = planpage.review_html(f"findings:{quest}:{os.path.basename(args['file'])}", groups,
+                                  head="My findings, point by point", lead=lead, change="Disagree", label="Findings")
+    title = spec.get("title") or "Review findings"
+    summary = spec.get("summary") or ""
+    if spec.get("pr"):
+        summary = (summary + " " if summary else "") + f"PR: {spec['pr']}"
+    page = (FINDINGS_PAGE.replace("__TITLE__", esc(title)).replace("__SUMMARY__", md_inline(summary, auto_code=True))
+            .replace("__REVIEW__", review))
+    decisions = {"questions": [{"id": "next", "title": "What should I do with the points you agree with?", "type": "single",
+                                "options": [{"id": "fix", "label": "Fix them", "why": "I fix the agreed points on the branch"},
+                                            {"id": "draft", "label": "Draft PR comments", "why": "I write the comments for you to read; nothing is posted until you say so"},
+                                            {"id": "explain", "label": "Show me more", "why": "I answer your Not sure points here first"},
+                                            {"id": "keep", "label": "Keep as notes", "why": "nothing else happens"}]}],
+                 "review": True}
+    tmp = os.path.join(GUILD_HOME, ".findings-tmp")
+    os.makedirs(tmp, exist_ok=True)
+    open(os.path.join(tmp, "page.html"), "w").write(page)
+    json.dump(decisions, open(os.path.join(tmp, "decisions.json"), "w"), indent=2)
+    args.update(quest=quest, html=os.path.join(tmp, "page.html"), decisions=os.path.join(tmp, "decisions.json"),
+                title=title)
     cmd_open(args)
 
 
@@ -1513,6 +1585,9 @@ def main():
         args["quest"] = positional[0]
         args["summary"] = positional[1] if len(positional) > 1 else ""
         return cmd_plan(args)
+    if cmd == "findings":
+        args["file"] = positional[0]
+        return cmd_findings(args)
     if cmd == "ask":
         args["quest"] = positional[0]
         args["question"] = positional[1]

@@ -214,7 +214,7 @@ window.addEventListener("message", e => {
   let line = document.getElementById("reviewline");
   if (!line) { line = el("p", "hint"); line.id = "reviewline"; document.getElementById("questions").appendChild(line); }
   const left = review.total - n("agree") - n("change") - n("unsure");
-  line.textContent = `Your review: ${n("agree")} agree, ${n("change")} change, ${n("unsure")} not sure, ${left} left.`;
+  line.textContent = `Your review: ${n("agree")} agree, ${n("change")} ${review.change || "change"}, ${n("unsure")} not sure, ${left} left.`;
   if (picked) return;
   const want = n("change") ? "change" : n("unsure") ? "explain" : left === 0 ? "go" : null;
   const input = want && document.querySelector(`label.opt[data-q="choice"][data-o="${want}"] input`);
@@ -224,10 +224,13 @@ function reviewText() {
   if (!review) return "";
   const flagged = review.points.filter(p => p.mark === "change" || p.mark === "unsure");
   const open = review.points.filter(p => !p.mark).length;
-  const head = `Plan review: ${review.points.filter(p => p.mark === "agree").length} agree, `
-    + `${review.points.filter(p => p.mark === "change").length} change, ${review.points.filter(p => p.mark === "unsure").length} not sure`
+  const change = review.change || "change";
+  const head = `${review.label || "Plan review"}: ${review.points.filter(p => p.mark === "agree").length} agree, `
+    + `${review.points.filter(p => p.mark === "change").length} ${change}, ${review.points.filter(p => p.mark === "unsure").length} not sure`
     + (open ? `, ${open} not marked` : "") + ".";
-  return [head, ...flagged.map(p => `- [${p.mark === "change" ? "change" : "not sure"}] ${p.id} ${p.point}${p.note ? "\n  note: " + p.note : ""}`)].join("\n");
+  const agreed = review.label && review.label !== "Plan review"     // findings: the agreed ones are the list to act on
+    ? review.points.filter(p => p.mark === "agree").map(p => `- [agree] ${p.id} ${p.point}`) : [];
+  return [head, ...agreed, ...flagged.map(p => `- [${p.mark === "change" ? change : "not sure"}] ${p.id} ${p.point}${p.note ? "\n  note: " + p.note : ""}`)].join("\n");
 }
 
 async function send(ended) {
