@@ -480,7 +480,9 @@ def drill_due():
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import rulebook
         d = rulebook.drill()
-        return {"due": d["due"], "count": sum(1 for i in d["items"] if not i["answered"])}
+        w = rulebook.week()
+        return {"due": d["due"], "count": sum(1 for i in d["items"] if not i["answered"]),
+                "week_due": w["due"], "week_count": sum(1 for i in w["items"] if not i["mark"])}
     except Exception:
         return {"due": False, "count": 0}
 
@@ -670,6 +672,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
             if path in ("/rules", "/drill"):   # the rule book, and the weekly drill
                 return self.send(200, open(os.path.join(WEB, path.strip("/") + ".html")).read())
+            if path == "/rules/week":           # this week's rule changes, for you to confirm
+                return self.send(200, open(os.path.join(WEB, "rules-week.html")).read())
+            if path == "/rules/week.json":
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import rulebook
+                return self.send(200, json.dumps(rulebook.week()), "application/json")
             if path in ("/rules.json", "/drill.json"):
                 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
                 import rulebook
@@ -757,6 +765,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"ok": True}), "application/json")
             except Exception as e:
                 return self.send(500, json.dumps({"error": str(e)}), "application/json")
+        if path == "/rules/mark":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import rulebook
+            out = rulebook.mark(str(body.get("key", "")), str(body.get("mark", "")), body.get("note", ""))
+            return self.send(400 if out.get("error") else 200, json.dumps(out), "application/json")
         if path == "/drill/grade":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")

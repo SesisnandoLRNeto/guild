@@ -117,7 +117,8 @@ guild up ~/Workspace
 | `guild validate <slug>` / `guild validate export <slug> [--out F]` | The quest's end-to-end checklist, run before a merge; a standalone copy for the team |
 | `guild files <slug>` | The map room at `/q/<slug>/files`: a finder like an editor's (type part of a name, changed files first), the file with the quest's changes marked in the margin, a diff against the base branch or any commit, and the file's history. Also the "files" link on a campaign card and the Files tile on a report |
 | `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
-| `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
+| `guild rules` / `guild drill` | The rule book (every business rule the work changed, per business area) and this week's three-question drill |
+| `/rules/week` on the war table | This week's rule changes, drafted by the quests, grouped by business area. You mark each Agree, Wrong (with the real rule) or Not sure; a mark holds until the rule changes again. The docket says when it waits. It replaces the Why card, which is now optional (`guild quest --why`) |
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |

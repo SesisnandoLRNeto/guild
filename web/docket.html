@@ -219,8 +219,12 @@ function render() {
   const open = data.open || [];
   realmParty(open);
   const dn = $("#drillnote");
-  dn.hidden = !(data.drill && data.drill.due);
-  if (data.drill && data.drill.due) dn.innerHTML = `<b>This week's rule drill</b>: ${data.drill.count} question${data.drill.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a> &middot; <a href="/rules">the rule book</a>`;
+  const dd = data.drill || {};
+  dn.hidden = !(dd.due || dd.week_due);
+  dn.innerHTML = [
+    dd.week_due ? `<b>Rules changed this week</b>: ${dd.week_count} to confirm. Agree, Wrong or Not sure, one click each. <a href="/rules/week">Confirm them</a>` : "",
+    dd.due ? `<b>This week's rule drill</b>: ${dd.count} question${dd.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a>` : "",
+  ].filter(Boolean).join("<br>") + ` &middot; <a href="/rules">the rule book</a>`;
   $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5"><span class="gi-icon gi-potion" aria-hidden="true"></span>Nothing waits for your seal. The guild is on the road, or resting at the tavern.</td></tr>`;
   $("#held").innerHTML = (data.held || []).map((i) =>
     `<tr class="held"><td class="item"><b>${esc(i.title)}</b><div class="meta"><span class="chip">${esc(i.quest)}</span>${i.held_note ? esc(i.held_note) : ""}</div></td>

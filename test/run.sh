@@ -1165,9 +1165,13 @@ is "an open PR with no checks at all reads as no CI run" "$(python3 -c "import s
 
 # ── business rules: the Why card, the rule book, the weekly drill ─────────────
 section "why card, rule book, drill"
-echo x | GUILD_NO_WHY= "$GUILD" quest whyq --repo "$REPO_A" >/dev/null 2>&1
+out=$(echo x | GUILD_NO_WHY= "$GUILD" quest whyq0 --repo "$REPO_A" 2>&1)
+has "the Why card is optional: a feature quest does not open one by itself" "$out" "why card: optional, not opened"
+[ -z "$(ls "$GUILD_HOME/quests/whyq0/boards" 2>/dev/null | grep '^why-')" ] && ok "and puts nothing on the docket" || bad "and puts nothing on the docket"
+"$GUILD" close whyq0 --force >/dev/null 2>&1
+echo x | GUILD_NO_WHY= "$GUILD" quest whyq --repo "$REPO_A" --why >/dev/null 2>&1
 wb=$(ls "$GUILD_HOME/quests/whyq/boards" | grep '^why-' | head -1)
-[ -n "$wb" ] && ok "a new quest puts a Why card on the docket" || bad "a new quest puts a Why card on the docket" "no why board"
+[ -n "$wb" ] && ok "--why puts a Why card on the docket" || bad "--why puts a Why card on the docket" "no why board"
 has "the card asks the five questions" "$(cat "$GUILD_HOME/quests/whyq/boards/$wb/decisions.json")" '"id": "future"'
 # housekeeping gets no card: a PR review fix, a merge, a CI chore have no pain or rule of their own
 out=$(echo "Fix the Required review items on PR 12" | GUILD_NO_WHY= "$GUILD" quest pr12-review-fix --repo "$REPO_A" 2>&1)
@@ -1196,6 +1200,20 @@ cat > "$GUILD_HOME/quests/whyq/rules.json" <<'JSON'
 JSON
 has "the rule book gathers rules from every quest" "$(python3 "$REPO/bin/rulebook.py" list)" "A past start date is warned: BACKDATED warning"
 has "and serves them per area" "$(curl -s http://127.0.0.1:4899/rules.json)" '"tests": "BackdatedIT"'
+wk=$(curl -s http://127.0.0.1:4899/rules/week.json)
+has "the weekly digest lists the rule changed this week" "$wk" '"rule": "A past start date is warned"'
+has "grouped by business area, not by repo" "$wk" '"area": "Pay equations"'
+has "it is due while a fresh rule has no mark" "$wk" '"due": true'
+rk=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])['items'][0]['key'])" "$wk")
+is "a mark must be agree, wrong or unsure" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4899/rules/mark -d "{\"key\":\"$rk\",\"mark\":\"maybe\"}")" "400"
+curl -s -X POST http://127.0.0.1:4899/rules/mark -d "{\"key\":\"$rk\",\"mark\":\"wrong\",\"note\":\"it blocks, it does not warn\"}" >/dev/null
+wk=$(curl -s http://127.0.0.1:4899/rules/week.json)
+has "a Wrong mark keeps your note, and the rule book shows it" "$(curl -s http://127.0.0.1:4899/rules.json)" "it blocks, it does not warn"
+hasnt "and a marked rule leaves the digest" "$wk" '"rule": "A past start date is warned"'
+has "and the digest counts it" "$wk" '"wrong": 1'
+has "the page is served" "$(curl -s http://127.0.0.1:4899/rules/week)" "Rules Changed This Week"
+has "the docket says when the digest waits" "$(curl -s http://127.0.0.1:4899/docket)" "Rules changed this week"
+has "a rules file can name its own area" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import rulebook as r;print(r.business_area({'rule':'x','area':'Billing'},'repo'), r.business_area({'rule':'Archive is one-way','where':'src/com/appen/project/X.java'},'repo'), r.business_area({'rule':'Unit of pay','where':'com/appen/project/RateUom.java'},'repo'))")" "Billing Projects repo"
 dj=$(curl -s http://127.0.0.1:4899/drill.json)
 has "the drill asks from the example" "$dj" "Given a rate starting 2020-03-01: what happens?"
 has "with the truth to compare" "$dj" "201 with a BACKDATED warning"

@@ -33,8 +33,8 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                                     no questions, no boards, no wrap-up; build it and open the PR
                    [--guarded ["<why>"]]  no plan; build, trial, then the guildmaster validates the
                                     branch end to end before the PR may open (what @guild on Jira starts)
-                   [--why | --no-why]    the Why card comes with a feature or an implementation only;
-                                    a PR review fix, a merge or a CI chore gets none unless you pass --why
+                   [--why | --no-why]    the Why card is optional: --why puts one on the docket. Rule
+                                    changes are confirmed in the weekly digest (/rules/week)
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
@@ -1012,12 +1012,13 @@ PLAN
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
   # headless: another machine's guild asked for this quest; its tab lives over there
   [ -n "$headless" ] || open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
-  # the guildmaster writes why this quest exists, in their own words (helpers and remote copies skip it).
-  # Only a feature or an implementation deserves the card; a PR review fix, a merge or a CI chore has
-  # no pain or rule of its own (why.py wanted decides; --why forces the card, --no-why drops it).
+  # The Why card is optional: --why puts it on the docket. The rules themselves are owned another way:
+  # the quests draft every rule change, and the guildmaster confirms them once a week (/rules/week).
   if [ -z "${GUILD_NO_WHY:-}" ] && [ -z "$parent" ] && [ -z "$headless" ]; then
-    if [ -n "${GUILD_WHY:-}" ] || why_word=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$q/brief.md" 2>/dev/null); then
+    if [ -n "${GUILD_WHY:-}" ]; then
       python3 "$GUILD_REPO/bin/why.py" open "$slug" >/dev/null 2>&1 && echo "why card: on the docket for the guildmaster" || true
+    elif why_word=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$q/brief.md" 2>/dev/null); then
+      echo "why card: optional, not opened (--why opens one); its rule changes come to the weekly digest"
     else
       echo "${why_word:-why card: skipped}"
     fi
@@ -1330,7 +1331,7 @@ impact_missing() { # slug
      Nothing real to show? guild status $1 done --no-impact \"<why>\""
   elif grep -qE 'data-unexplained="[1-9]' "$page"; then
     echo "the wrap-up's impact section has rule changes nobody explained: write them in a rules file
-     ({\"rules\": [{\"rule\", \"before\", \"after\", \"where\", \"why\"}], \"note\": \"...\"}) and run guild impact --into <page> --rules <file> again"
+     ({\"rules\": [{\"rule\", \"area\", \"before\", \"after\", \"where\", \"why\"}], \"note\": \"...\"}; area is the business area, like Projects or Pay equations) and run guild impact --into <page> --rules <file> again"
   fi
 }
 

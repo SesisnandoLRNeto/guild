@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" class="realm rm-dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules This Week</title>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
+<style>
+  /* The weekly digest: the AI drafted every rule change; you confirm each one, grouped by business area. */
+  html:root body { max-width: 940px; }
+  .score { font-size: 14px; color: var(--dim); margin: 0 0 14px; }
+  .area { display: flex; align-items: baseline; gap: 12px; margin: 22px 0 8px; }
+  .area h2 { margin: 0; font-size: 18px; border: 0; }
+  .area button { white-space: nowrap; }
+  .area button { margin-left: auto; }
+  .r { background: rgba(255,250,235,.62); border: 1px solid var(--line); border-radius: 5px; padding: 12px 16px; margin: 0 0 10px; }
+  .r h3, html.realm .r h3 { margin: 0 0 6px; font-size: 16px; font-variant: normal; text-transform: none; letter-spacing: 0; line-height: 1.35; }
+  .r h3::before, html.realm .r h3::before { content: none; display: none; }
+  .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; margin-left: 6px; color: #b9770e; }
+  .tag.old { color: var(--dim); }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; margin: 6px 0; }
+  .ba div { border-left: 3px solid #9a8b72; padding: 2px 10px; } .ba div.after { border-left-color: var(--ok); }
+  .ba b { font-variant: small-caps; display: block; color: var(--dim); }
+  .meta { font-size: 12.5px; color: var(--dim); margin: 4px 0 8px; }
+  .why { font-size: 14px; margin: 4px 0; }
+  .btns button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 999px; padding: 3px 12px; margin-right: 6px; cursor: pointer; }
+  .r.agree { border-color: #5f9b4a; } .r.agree button[data-m=agree] { border-color: #5f9b4a; color: #8fcf6a; }
+  .r.wrong { border-color: #c0392b; } .r.wrong button[data-m=wrong] { border-color: #c0392b; color: #ff7a66; }
+  .r.unsure { border-color: #8a6fc9; } .r.unsure button[data-m=unsure] { border-color: #8a6fc9; color: #b49cf0; }
+  textarea { display: none; box-sizing: border-box; width: 100%; margin-top: 8px; font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,0,0,.2); color: inherit; }
+  .r.wrong textarea, .r.unsure textarea { display: block; }
+  .area button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .empty { color: var(--dim); font-style: italic; }
+  html.realm .r { background: linear-gradient(180deg, #241d2b, #17121c); border-color: #4a3f52; }
+  html.realm .r.agree { border-color: #5f9b4a; } html.realm .r.wrong { border-color: #c0392b; } html.realm .r.unsure { border-color: #8a6fc9; }
+  @media (max-width: 640px) { .ba { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Rules Changed This Week</h1>
+<p class="lead">The quests drafted these business rules from the code they changed. Mark each one: <b>Agree</b> if that is how it
+should work, <b>Wrong</b> if it is not (say what is right), <b>Not sure</b> to see it again next week. A mark holds until the
+rule changes again. <a href="/rules">The rule book</a> has every rule; <a href="/drill">the drill</a> asks you three a week.</p>
+<p class="score" id="score"></p>
+<div id="list"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const code = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
+let D = null;
+
+function example(x) {
+  if (!x) return "";
+  if (typeof x === "string") return x;
+  return [x.given && "Given " + x.given, x.then && "then " + x.then].filter(Boolean).join(", ");
+}
+function card(i) {
+  const m = i.mark || {};
+  const ex = example(i.example);
+  return `<div class="r ${esc(m.mark || "")}" data-k="${esc(i.key)}">
+    <h3>${code(i.rule)}<span class="tag ${i.fresh ? "" : "old"}">${i.fresh ? "this week" : "from before"}</span></h3>
+    ${i.before || i.after ? `<div class="ba"><div><b>Before</b>${code(i.before || "(new rule)")}</div><div class="after"><b>Now</b>${code(i.after || "")}</div></div>` : ""}
+    ${i.why ? `<p class="why"><b>Why:</b> ${code(i.why)}</p>` : ""}
+    ${ex ? `<p class="why"><b>Example:</b> ${code(ex)}</p>` : ""}
+    <p class="meta">${[i.ticket, i.quest, i.date, i.where && "in " + i.where, i.changes > 1 && `changed by ${i.changes} quests`].filter(Boolean).map(esc).join(" · ")}</p>
+    <div class="btns"><button type="button" data-m="agree">Agree</button><button type="button" data-m="wrong">Wrong</button><button type="button" data-m="unsure">Not sure</button></div>
+    <textarea rows="2" placeholder="What is the real rule, or what is not clear?">${esc(m.note || "")}</textarea>
+  </div>`;
+}
+function render() {
+  $("#score").textContent = `${D.week}: ${D.items.length} to look at now, ${D.left} of ${D.total} rules not confirmed yet `
+    + `(${D.agree} agreed, ${D.wrong} wrong, ${D.unsure} not sure).`;
+  const areas = {};
+  D.items.forEach((i) => (areas[i.area] = areas[i.area] || []).push(i));
+  $("#list").innerHTML = Object.entries(areas).map(([a, items]) =>
+    `<div class="area"><h2>${esc(a)}</h2><span class="score">${items.length}</span><button type="button" data-all="${esc(a)}">Agree to the rest</button></div>`
+    + items.map(card).join("")).join("") || `<p class="empty">Nothing to confirm: every rule is marked.</p>`;
+}
+async function send(k, mark, note) {
+  await fetch("/rules/mark", { method: "POST", body: JSON.stringify({ key: k, mark, note }) });
+  const i = D.items.find((x) => x.key === k);
+  i.mark = mark ? { mark, note } : null;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-m]");
+  if (b) {
+    const r = b.closest(".r"), cur = (D.items.find((x) => x.key === r.dataset.k).mark || {}).mark;
+    const mark = cur === b.dataset.m ? "" : b.dataset.m;
+    await send(r.dataset.k, mark, r.querySelector("textarea").value);
+    r.classList.remove("agree", "wrong", "unsure"); if (mark) r.classList.add(mark);
+    if (mark === "wrong" || mark === "unsure") r.querySelector("textarea").focus();
+    return;
+  }
+  const all = ev.target.closest("button[data-all]");
+  if (all) {
+    for (const i of D.items.filter((x) => x.area === all.dataset.all && !x.mark)) await send(i.key, "agree", "");
+    render();
+  }
+});
+document.addEventListener("change", (ev) => {           // a note is saved when you leave the box
+  const t = ev.target.closest(".r textarea"); if (!t) return;
+  const r = t.closest(".r"), m = (D.items.find((x) => x.key === r.dataset.k).mark || {}).mark;
+  if (m) send(r.dataset.k, m, t.value);
+});
+fetch("/rules/week.json", { cache: "no-store" }).then((r) => r.json()).then((d) => { D = d; render(); });
+</script>
+</body>
+</html>
