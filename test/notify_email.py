@@ -365,6 +365,40 @@ out = mailreply.poll(wartable.answer_board)
 check("a board with several questions gets a note to use the war table", out == ["several questions"] and answered("g1", "gamma") is None
       and "several questions" in plain(mails[-1]))
 
+# a budget (or lesson, or why) board is never answered by a stray word
+d = board("gamma", "bud", "Budget reached", [dict(QUESTION, id="choice", options=[{"id": "stop", "label": "Stop"}, {"id": "raise50", "label": "Raise"}])])
+meta = notify.load_json(os.path.join(d, "board.json"), {}); meta["kind"] = "budget"; json.dump(meta, open(os.path.join(d, "board.json"), "w"))
+tok, mid, subj = decision_mail("bud", "gamma", "war table ready: Budget reached -> http://127.0.0.1:4711/b/gamma/bud/")
+check("a budget board's mail does not invite a reply", "Answer by replying" not in plain(mails[-1]))
+inbox[:] = [reply(tok, mid, subj, "thanks, will do")]
+seen.clear()
+mails.clear()
+out = mailreply.poll(wartable.answer_board)
+check("a stray word does not answer a budget board (it would stop the quest)", out == ["several questions"] and answered("bud", "gamma") is None)
+
+# a stranger's mail with a guild subject stays unread, and is logged once
+inbox[:] = [reply(tok, mid, subj, "hi", sender="stranger@example.org")]
+seen.clear()
+before = events().count("another address (stranger@example.org)")
+mailreply.poll(wartable.answer_board)
+mailreply.poll(wartable.answer_board)
+check("a stranger's mail is left unread", seen == set())
+check("and logged once, not every poll", events().count("another address (stranger@example.org)") == before + 1)
+
+# a send that fails is kept for the next event
+tok, mid, subj = decision_mail()
+class Down2(SMTP):
+    def send_message(self, msg):
+        raise OSError("smtp down")
+notify.smtplib.SMTP_SSL = Down2
+mails.clear()
+notify.on_event("beta", "failed", "lost?")
+kept = notify.load_json(notify.QUEUE, [])
+check("a failed send keeps the event queued", len(kept) == 1 and kept[0]["slug"] == "beta")
+notify.smtplib.SMTP_SSL = SMTP
+notify.on_event("gamma", "failed", "after the outage")
+check("and the next event sends both", len(mails) >= 1 and "lost?" in plain(mails[-1]) and "after the outage" in plain(mails[-1]))
+
 # IMAP trouble never raises, and no tokens means no login
 tok, mid, subj = decision_mail()
 

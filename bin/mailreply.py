@@ -36,9 +36,12 @@ KEEP_DAYS = 14                   # a token nobody used in two weeks is dropped
 TAG = re.compile(r"\[guild\s+(\S+)\s+([A-Za-z0-9_-]+)\]")
 REF = re.compile(r"guild-ref:\s*([A-Za-z0-9_-]+)")
 LAST_ERROR = [""]
+IGNORED = set()
 
 
-def log(quest, note):
+def log(quest, note, quiet=False):
+    if quiet:
+        return
     with open(EVENTS, "a") as f:
         f.write(f"{datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}\t{quest or 'mail'}\temail-reply\t{note}\n")
 
@@ -99,21 +102,21 @@ def forget(tokens, token):
     tokens.pop(token, None)
 
 
-def handle(msg, tokens, to, answer_board):
+def handle(msg, tokens, to, answer_board, quiet=False):
     """Act on one message. Returns what was done, in a few words."""
     sender = parseaddr(msg.get("From", ""))[1].lower()
     if sender != to.lower():
-        log("", f"ignored a reply from another address ({sender or 'none'})")
+        log("", f"ignored a reply from another address ({sender or 'none'})", quiet)
         return "ignored: other address"
     subject = str(make_header(decode_header(msg.get("Subject", ""))))
     body = text_of(msg)
     tag, ref = TAG.search(subject), REF.search(body)
     if not tag or not ref or tag.group(2) != ref.group(1):
-        log("", "ignored a reply without its token")
+        log("", "ignored a reply without its token", quiet)
         return "ignored: no token"
     info = tokens.get(tag.group(2))
     if not info or info.get("board") != tag.group(1):
-        log("", "ignored a reply with a token guild did not send")
+        log("", "ignored a reply with a token guild did not send", quiet)
         return "ignored: unknown token"
     quest, board = info["quest"], info["board"]
     answers_to = msg.get("In-Reply-To", "").strip()
@@ -127,7 +130,8 @@ def handle(msg, tokens, to, answer_board):
         forget(tokens, tag.group(2))
         log(quest, f"reply to {board}: already answered")
         return "already answered"
-    if len(questions) != 1:
+    kind = notify.load_json(os.path.join(bdir, "board.json"), {}).get("kind")
+    if len(questions) != 1 or kind:               # budget, lesson, why: a stray word must not stop a quest
         notify.send_email(f"guild: {quest} needs the war table",
                           f"This board has several questions, so it cannot be answered by reply. Open the war table on your Mac"
                           f"{' or at ' + notify.war_link('/b/%s/%s/' % (quest, board)) if notify.tail_base() else ''}.")
@@ -157,7 +161,11 @@ def poll(answer_board):
     if not notify.email_events_on(cfg):
         return []
     tokens = notify.load_json(notify.TOKENS, {})
-    old = [t for t, i in tokens.items() if time.time() - float(i.get("created") or 0) > KEEP_DAYS * 86400]
+    def stale(i):
+        age = time.time() - float(i.get("created") or 0)
+        answered = os.path.exists(os.path.join(QUESTS, i.get("quest", ""), "boards", i.get("board", ""), "decision.json"))
+        return age > KEEP_DAYS * 86400 or (answered and age > 86400)     # a day to reply "already answered"
+    old = [t for t, i in tokens.items() if stale(i)]
     for t in old:
         forget(tokens, t)
     if not tokens:
@@ -174,12 +182,18 @@ def poll(answer_board):
             imap.select("INBOX")
             status, found = imap.search(None, "UNSEEN", "SUBJECT", '"[guild "')
             for num in (found[0].split() if status == "OK" and found and found[0] else []):
-                status, data = imap.fetch(num, "(RFC822)")
-                imap.store(num, "+FLAGS", "\\Seen")
+                status, data = imap.fetch(num, "(BODY.PEEK[])")
                 if status != "OK" or not data or not isinstance(data[0], tuple):
                     continue
+                raw = data[0][1][:300_000]               # no reply is that long
                 try:
-                    done.append(handle(email.message_from_bytes(data[0][1]), tokens, e["to"], answer_board))
+                    key = hash(raw)
+                    result = handle(email.message_from_bytes(raw), tokens, e["to"], answer_board, quiet=key in IGNORED)
+                    if result.startswith("ignored"):
+                        IGNORED.add(key)                 # not ours to mark read, and not worth logging twice
+                    else:
+                        imap.store(num, "+FLAGS", "\\Seen")
+                    done.append(result)
                 except Exception as err:         # one bad reply must not hide the next
                     log("", f"a reply could not be read: {type(err).__name__}")
         finally:

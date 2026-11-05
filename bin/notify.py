@@ -257,7 +257,7 @@ def event_item(slug, state, note, cfg=None):
                     rec = next((o for o in q["options"] if o.get("id") == q.get("recommended")), None)
                     if rec:
                         blocks.append(("p", f"Recommended: {rec['id']} ({clean(rec.get('label', ''), cfg)})"))
-            if len(questions) == 1:
+            if len(questions) == 1 and not meta.get("kind"):
                 blocks.append(("p", "Answer by replying to this email with an option letter (b, or b: a few words) or free text."))
             else:
                 blocks.append(("p", "This board has several questions: answer it on the war table."))
@@ -360,7 +360,7 @@ def queue_add(item):
     with locked():
         q = load_json(QUEUE, [])
         first = not q
-        stale = bool(q) and time.time() - q[0]["ts"] > STALE
+        stale = bool(q) and (time.time() - q[0]["ts"] > STALE or bool(q[0].get("retry")))
         q.append(item)
         save_json(QUEUE, q)
     return first, stale
@@ -391,7 +391,11 @@ def flush():
                 if lead["token"] in tokens:
                     tokens[lead["token"]]["msgid"] = msgid
                     save_json(TOKENS, tokens)
-        send_email(subject, text, html_body=page, msgid=msgid)
+        why = send_email(subject, text, html_body=page, msgid=msgid)
+        if why.startswith("email failed"):               # Gmail down: keep them, the next event sends them again
+            with locked():
+                again = [dict(i, retry=True) for i in group if time.time() - i["ts"] < 3600] + load_json(QUEUE, [])
+                save_json(QUEUE, again)
 
 
 def email_events_on(cfg=None):
