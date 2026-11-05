@@ -1622,6 +1622,12 @@ while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; esac
 done < <(python3 "$REPO/test/cockpit.py" "$REPO" "$CK" "guild-cockpit-test" 2>&1)
 
+# ── alerts and compaction ─────────────────────────────────────────────────────
+section "alerts and compaction"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "alerts test said: $line" ;; esac
+done < <(python3 "$REPO/test/alerts.py" "$REPO" 2>&1)
+
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"
 out=$("$GUILD" doctor 2>&1); code=$?

@@ -535,7 +535,16 @@ def docket_items():
     open_.sort(key=lambda i: (i["wrapup"], i["created"]))          # decisions first, then reviews
     held.sort(key=lambda i: i["held_until"])
     recent.sort(key=lambda i: i["at"], reverse=True)
-    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due()}
+    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due(), "alerts": alert_list(open_)}
+
+
+def alert_list(open_):
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import alerts
+        return [{"text": a["text"], "url": a["url"]} for a in alerts.current(open_) if not a["key"].startswith("board:")]
+    except Exception:
+        return []
 
 
 def hold_board(quest, board, until, note=""):
@@ -991,6 +1000,11 @@ def refresh_prs_forever():
             prs.refresh()
         except Exception:
             pass
+        try:                                   # PR follow-ups, Claude usage, questions waiting too long
+            import alerts
+            alerts.check(docket_items()["open"])
+        except Exception:
+            pass
         try:
             sweep()
         except Exception:
@@ -1002,6 +1016,18 @@ def refresh_prs_forever():
         except Exception:
             pass
         time.sleep(120)
+
+
+def compact_forever():
+    """Compact quests that wait for you just before their prompt cache goes cold."""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import alerts
+    while True:
+        try:
+            alerts.compact_idle()
+        except Exception:
+            pass
+        time.sleep(30)
 
 
 def auto_close_on():
@@ -1057,6 +1083,7 @@ def serve():
     serve_remote()
     if not os.environ.get("GUILD_NO_PR_SYNC"):
         threading.Thread(target=refresh_prs_forever, daemon=True).start()
+        threading.Thread(target=compact_forever, daemon=True).start()
     port = int(os.environ.get("GUILD_BOARD_PORT", "4711"))
     for candidate in range(port, port + 20):
         try:

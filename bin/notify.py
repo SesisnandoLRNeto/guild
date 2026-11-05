@@ -5,11 +5,19 @@
                                           that need you (a decision, a block, a failure, done)
   notify.py remote on|off|status|url      the war table on your Tailscale address, behind a key
   notify.py test                          send a test notification the configured ways
+  notify.py email <to> [from] | off       email alerts to <to>, sent from the Gmail account [from]
 
 Config: ~/.guild/local/remote.json
   {"remote": true, "bind": "100.x.y.z", "port": 4712, "key": "...",   written by `guild remote on`
    "mac": true,                                                         a macOS notification (default on)
-   "ntfy": "https://ntfy.sh/<your-private-topic>"}                      optional phone push, off by default
+   "ntfy": "https://ntfy.sh/<your-private-topic>",                      optional phone push, off by default
+   "email": {"to": "you@gmail.com", "from": "you@gmail.com"}}           optional email for alerts (alerts.py)
+
+Email goes through Gmail's SMTP server as "from", with a Gmail app password kept in the
+macOS Keychain (service "guild-email", account = the "from" address), never in a file:
+  security add-generic-password -s guild-email -a you@gmail.com -w
+Only alerts are emailed (PR follow-ups, Claude usage, a question waiting too long), not
+every quest event. An email carries the same short line as the push and a link without the key.
 
 The phone push carries only "<quest>: <what waits>" and a link, never the note, the ticket
 text or code: the topic is a third-party service.
@@ -17,6 +25,9 @@ text or code: the topic is a third-party service.
 import json
 import os
 import secrets
+import smtplib
+import ssl
+from email.message import EmailMessage
 import subprocess
 import sys
 import urllib.request
@@ -61,10 +72,43 @@ def docket_url(cfg=None):
         return ""
 
 
-def send(title, text, url=""):
+def email_password(sender):
+    try:
+        r = subprocess.run(["security", "find-generic-password", "-s", "guild-email", "-a", sender, "-w"],
+                           capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def send_email(title, text, url=""):
+    """Send one alert by email. Returns "" when sent, or why it was not."""
+    e = config().get("email") or {}
+    to, sender = e.get("to", ""), e.get("from") or e.get("to", "")
+    if not to:
+        return "no email set (guild notify email <address>)"
+    password = email_password(sender)
+    if not password:
+        return f"no app password in the Keychain for {sender} (security add-generic-password -s guild-email -a {sender} -w)"
+    msg = EmailMessage()
+    msg["Subject"], msg["From"], msg["To"] = title, sender, to
+    msg.set_content(text + ("\n\n" + url.split("?k=")[0] if url else "") + "\n\n(guild alert)")
+    try:
+        with smtplib.SMTP_SSL(e.get("host", "smtp.gmail.com"), int(e.get("port", 465)),
+                              context=ssl.create_default_context(), timeout=20) as smtp:
+            smtp.login(sender, password)
+            smtp.send_message(msg)
+        return ""
+    except (OSError, smtplib.SMTPException) as err:
+        return f"email failed: {type(err).__name__}"
+
+
+def send(title, text, url="", email=False):
     cfg = config()
     if os.environ.get("GUILD_NO_NOTIFY"):
         return
+    if email and cfg.get("email"):
+        send_email(title, text, url)  # a mail that fails must never break the guild either
     if cfg.get("mac", True) and sys.platform == "darwin":
         subprocess.run(["osascript", "-e", f"display notification {json.dumps(text)} with title {json.dumps(title)}"],
                        capture_output=True, timeout=5)
@@ -107,7 +151,8 @@ def remote(cmd):
     elif cmd == "status":
         print(f"remote: {'on at ' + cfg.get('bind', '?') + ':' + str(cfg.get('port', 4712)) if cfg.get('remote') else 'off'}"
               f" · mac notifications: {'on' if cfg.get('mac', True) else 'off'}"
-              f" · phone push: {'ntfy ' + cfg['ntfy'].split('/')[2] if cfg.get('ntfy') else 'off'}")
+              f" · phone push: {'ntfy ' + cfg['ntfy'].split('/')[2] if cfg.get('ntfy') else 'off'}"
+              f" · alert email: {(cfg.get('email') or {}).get('to') or 'off'}")
     else:
         raise SystemExit("usage: guild remote on|off|status|url|restart")
 
@@ -123,6 +168,20 @@ def main():
     elif args[0] == "test":
         send("guild", "Test from guild: notifications reach you.", docket_url())
         print("sent the ways configured in " + CONFIG)
+        if config().get("email"):
+            why = send_email("guild: test alert", "Test from guild: alerts reach this inbox.", docket_url())
+            print("email: " + (why or "sent to " + config()["email"]["to"]))
+    elif args[0] == "email" and len(args) > 1:
+        cfg = config()
+        if args[1] == "off":
+            cfg.pop("email", None)
+            print("alert email off")
+        else:
+            cfg["email"] = {"to": args[1], "from": args[2] if len(args) > 2 else args[1]}
+            print(f"alerts go to {args[1]}. Put a Gmail app password for {cfg['email']['from']} in the Keychain:\n"
+                  f"  security add-generic-password -s guild-email -a {cfg['email']['from']} -w\n"
+                  "then run `guild notify test`.")
+        save(cfg)
     else:
         raise SystemExit(__doc__)
 

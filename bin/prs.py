@@ -94,7 +94,8 @@ def fetch(url):
     token = token_for(owner)
     if token:
         env["GH_TOKEN"] = token
-    r = subprocess.run(["gh", "pr", "view", url, "--json", "state,isDraft,reviewDecision,mergedAt,title,statusCheckRollup"],
+    r = subprocess.run(["gh", "pr", "view", url, "--json",
+                        "state,isDraft,reviewDecision,mergedAt,title,statusCheckRollup,mergeable,author,reviews,comments"],
                        capture_output=True, text=True, timeout=30, env=env)
     if r.returncode:
         return {"error": (r.stderr or "gh failed").strip()[:200], "at": time.time()}
@@ -103,7 +104,31 @@ def fetch(url):
     review = {"APPROVED": "approved", "CHANGES_REQUESTED": "changes requested", "REVIEW_REQUIRED": "review required"}.get(
         d.get("reviewDecision") or "", "")
     return {"state": state, "review": review, "checks": checks(d.get("statusCheckRollup")), "title": d.get("title", ""),
-            "number": int(PR.search(url).group(3)), "at": time.time()}
+            "number": int(PR.search(url).group(3)), "conflict": d.get("mergeable") == "CONFLICTING",
+            "waiting_since": waiting_since(d), "at": time.time()}
+
+
+BOTS = {"github-actions", "dependabot", "copilot", "codecov", "sonarcloud", "sonarqubecloud", "coderabbitai",
+        "vercel", "netlify", "renovate", "linear", "jira"}
+
+
+def is_bot(login):
+    """gh names app accounts without the [bot] ending (github-actions), so known names count too."""
+    low = login.lower()
+    return low.endswith("[bot]") or low.endswith("-bot") or low in BOTS
+
+
+def waiting_since(d):
+    """When a reviewer last spoke with no answer from the PR author after it, or "".
+    Bots are left out (their comments are reports, not questions), and so are plain approvals."""
+    me = (d.get("author") or {}).get("login", "")
+    said = [((x.get("author") or {}).get("login", ""), x.get("submittedAt") or x.get("createdAt") or "")
+            for x in (d.get("reviews") or []) + (d.get("comments") or [])
+            if not (x.get("state") == "APPROVED" and not (x.get("body") or "").strip())]
+    said = sorted((at, who) for who, at in said if at and who and not is_bot(who))
+    mine = max((at for at, who in said if who == me), default="")
+    theirs = [at for at, who in said if who != me and at > mine]
+    return theirs[0] if theirs else ""
 
 
 def refresh(force=False):
