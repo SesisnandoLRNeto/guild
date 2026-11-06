@@ -932,6 +932,46 @@ has "a wrong --shape is refused" "$out" "--shape is one of"
 printf '## How it will be built\n1. a\n2. b\n3. c\n4. d\n' > "$GUILD_HOME/quests/pl/plan.md"
 out=$(GUILD_QUEST=pl "$GUILD" plan ready "x" 2>&1)
 has "a standard plan without the pain is refused, naming only what that shape needs" "$out" "standard plan, and plan.md lacks: The pain"
+# a pain on a screen comes with the screen
+cat > "$GUILD_HOME/quests/pl/plan.md" <<'MD'
+## The pain
+PMs cannot add a Crowd Support person: the Role select in the "Add team members" modal has no value for them.
+## Why it happens
+Nobody seeded the role.
+## After this plan
+The modal lists "Crowd Team".
+## How it will be built
+1. Seed the term.
+## What you should expect
+The role shows in the modal.
+MD
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Seed the role" 2>&1)
+has "a screen pain with no picture is refused" "$out" "the pain is on a screen, and the plan shows none"
+has "and the refusal says where to get one" "$out" "jira_get_issue_images"
+python3 -c "import base64,sys;open(sys.argv[1],'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='))" "$GUILD_HOME/quests/pl/modal-today.png"
+cp "$GUILD_HOME/quests/pl/modal-today.png" "$TMP/modal-after.png"
+python3 - "$GUILD_HOME/quests/pl/plan.md" "$TMP/modal-after.png" <<'PY'
+import sys
+p, after = sys.argv[1], sys.argv[2]
+s = open(p).read()
+s = s.replace("has no value for them.\n", "has no value for them.\n\n![The Role select is empty](modal-today.png)\n")
+s = s.replace('lists "Crowd Team".\n', 'lists "Crowd Team".\n\n![Crowd Team in the list](' + after + ')\n')
+open(p, "w").write(s)
+PY
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Seed the role" 2>&1)
+pb=$(echo "$out" | awk '/board id:/ {print $3}')
+page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html" 2>/dev/null)
+has "with a picture the plan goes on the table" "$page" "<h2>On screen</h2>"
+has "today's screen shows under Today, with what to look at" "$page" "The Role select is empty"
+has "the result shows under After this plan" "$page" "Crowd Team in the list"
+is "the pictures are copied next to the board" "$(ls "$GUILD_HOME/quests/pl/boards/$pb/pics" 2>/dev/null | wc -l | tr -d ' ')" "2"
+hasnt "the Markdown image does not leak into the text" "$page" "![The Role"
+sed -i.bak 's#(modal-today.png)#(gone.png)#' "$GUILD_HOME/quests/pl/plan.md"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Seed the role" 2>&1)
+has "a picture that is not there is refused" "$out" "a picture that is not there: gone.png"
+sed -i.bak 's#!\[The Role select is empty\](gone.png)#No screen picture: the app does not run here.#; /Crowd Team in the list/d' "$GUILD_HOME/quests/pl/plan.md"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Seed the role" 2>&1)
+has "saying why no screen can be shown lets it through" "$out" "board id:"
 "$GUILD" close pl --force >/dev/null 2>&1
 
 # findings: a code review as points you mark with your own eyes

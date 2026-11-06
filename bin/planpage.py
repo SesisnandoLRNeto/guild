@@ -27,6 +27,19 @@ SECTIONS = [
     ("files", ("files",), False, "the files it touches"),
 ]
 REQUIRED = [s[0] for s in SECTIONS if s[2]]
+# A screen says more than a paragraph about a screen: plan.md can carry ![what to look at](path) pictures.
+IMG = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)\)")
+UI_WORDS = re.compile(r"\b(modal|screen|button|dialog|drawer|dropdown|tab|form|toast|banner|tooltip|menu|ui|frontend|"
+                      r"page|popup|checkbox|sidebar|navbar|placeholder)s?\b", re.I)
+SHOT_BEFORE, SHOT_AFTER = ("pain", "cause", "today"), ("after", "expect", "how")
+
+
+def needs_picture(parts):
+    """The pain is on a screen, the plan shows none, and it did not say why it cannot."""
+    text = " ".join(parts.get(k, "") for k in ("pain", "today"))
+    if IMG.search(" ".join(parts.values())) or "no screen picture" in text.lower():
+        return False
+    return bool(UI_WORDS.search(IMG.sub("", text)))
 TITLES = {"pain": "The pain", "cause": "Why it happens", "today": "Today", "after": "After this plan",
           "how": "How it will be built", "expect": "What you should expect", "scope": "Not included",
           "risks": "Risks", "words": "Words to know", "questions": "Questions for you", "files": "Files"}
@@ -182,6 +195,8 @@ def review_html(quest, groups, head="Agree, point by point", lead=None, change="
 def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full"):
     parts = split(md)
     esc = html.escape
+    shots = {k: IMG.findall(v) for k, v in parts.items()}
+    parts = {k: IMG.sub("", v).strip() for k, v in parts.items()}
     groups = review_groups(parts, kind)
     card = lambda k, cls="": (f'<section class="sec {cls}"><h2>{TITLES[k]}</h2>{md_to_html(parts[k])}</section>'
                               if parts.get(k) else "")
@@ -190,6 +205,16 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
                      if parts.get(k))
     n = minute.count('<div class="m ')
     minute = f'<h2>In one minute</h2><div class="minute n{n}">{minute}</div>' if minute else ""
+    fig = lambda cap, src: (f'<figure><a href="{esc(src)}" target="_blank"><img src="{esc(src)}" alt="{esc(cap)}"></a>'
+                            + (f"<figcaption>{md_inline(cap, auto_code=True)}</figcaption>" if cap else "") + "</figure>")
+    before = [x for k in SHOT_BEFORE for x in shots.get(k, [])]
+    after = [x for k in SHOT_AFTER for x in shots.get(k, [])]
+    other = [x for k, v in shots.items() if k not in SHOT_BEFORE + SHOT_AFTER for x in v]
+    cols = [(t, xs) for t, xs in (("Today", before + other), ("After this plan", after)) if xs]
+    if cols:
+        minute += ('<h2>On screen</h2><div class="shots n' + str(len(cols)) + '">'
+                   + "".join(f'<div class="shot"><h3>{t}</h3>{"".join(fig(c, s_) for c, s_ in xs)}</div>' for t, xs in cols)
+                   + "</div>")
     if parts.get("today") or parts.get("after"):
         ta = ('<h2>Today, and after this plan</h2><div class="ta">'
               + (f'<div class="today"><h3>Today</h3>{md_to_html(parts["today"])}</div>' if parts.get("today") else "")
@@ -348,6 +373,11 @@ PAGE = """<!doctype html>
  .summary { font-size: 17px; margin: 6px 0 18px; }
  .minute { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 8px; }
  .minute.n1 { grid-template-columns: 1fr; } .minute.n2 { grid-template-columns: 1fr 1fr; }
+ .shots { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 0 0 8px; } .shots.n2 { grid-template-columns: 1fr 1fr; }
+ .shot h3 { margin: 0 0 6px; font-size: 15px; } .shot figure { margin: 0 0 10px; }
+ .shot img { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; }
+ .shot figcaption { font-size: 13.5px; color: var(--dim); margin-top: 4px; }
+ @media (max-width: 760px) { .shots.n2 { grid-template-columns: 1fr; } }
  .ta:has(> div:only-child) { grid-template-columns: 1fr; }
  .reel a { font-weight: 600; }
  .minute .m { background: rgba(255,250,235,.62); border: 1px solid var(--line); border-top: 4px solid #8a4b12; border-radius: 4px; padding: 10px 14px; }

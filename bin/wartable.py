@@ -1346,6 +1346,15 @@ def cmd_plan(args):
                          + ", ".join(planpage.TITLES[g] for g in gaps)
                          + ".\nWrite it in these sections (short, plain words; a ```mermaid block draws a diagram):\n\n"
                          + planpage.template(kind))
+    if kind != "small" and planpage.needs_picture(planpage.split(md)):
+        raise SystemExit("guild plan: the pain is on a screen, and the plan shows none. Put a picture in The pain "
+                         "(or Today), the way the guildmaster would see it:\n"
+                         "  1. the ticket's own screenshots (Jira: jira_get_issue_images or jira_download_attachments)\n"
+                         "  2. the running app, local or staging: guild shot <url> --name before\n"
+                         "  3. or draw it: guild draw\n"
+                         "Then add ![what to look at](path/to/picture.png) to the section. A picture of the result goes in After this plan.\n"
+                         "If no screen can be shown, write a line \"No screen picture: <why>\" in The pain.")
+    md, pics = plan_pictures(md, qdir, meta)
     build = meta.get("build_model") or meta.get("model") or "the build model"
     effort = meta.get("build_effort") or ""
     budget = meta.get("budget")
@@ -1372,17 +1381,50 @@ def cmd_plan(args):
         decisions["review"] = True
     if args.get("board"):                               # redo an open board in place (same id, same question)
         d = board_dir(quest, args["board"])
+        copy_pictures(pics, os.path.join(d, "pics"))
         open(os.path.join(d, "content.html"), "w").write(page)
         json.dump(decisions, open(os.path.join(d, "decisions.json"), "w"), indent=2)
         print(f"board {args['board']} redrawn")
         return
     tmp = os.path.join(GUILD_HOME, ".plan-tmp")
+    subprocess.run(["rm", "-rf", tmp])
     os.makedirs(tmp, exist_ok=True)
+    copy_pictures(pics, os.path.join(tmp, "pics"))
     open(os.path.join(tmp, "page.html"), "w").write(page)
-    json.dump(decisions, open(os.path.join(tmp, "decisions.json"), "w"), indent=2)
-    args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(tmp, "decisions.json"),
-                title=f"Approve the plan: {quest}")
+    json.dump(decisions, open(os.path.join(GUILD_HOME, ".plan-decisions.json"), "w"), indent=2)
+    args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(GUILD_HOME, ".plan-decisions.json"),
+                title=f"Approve the plan: {quest}", assets=bool(pics))
     cmd_open(args)
+
+
+def plan_pictures(md, qdir, meta):
+    """plan.md's ![caption](path) pictures: each file found (absolute, ~, or beside plan.md, or in the
+    worktree), renamed under pics/ and the Markdown pointed there. Web links stay as they are."""
+    pics = []
+
+    def swap(m):
+        cap, src = m.group(1), m.group(2)
+        if re.match(r"^(https?:|pics/)", src):
+            return m.group(0)
+        src_ = os.path.expanduser(src)
+        found = next((p for p in ([src_] if os.path.isabs(src_) else
+                                  [os.path.join(qdir, src_), os.path.join(meta.get("worktree") or qdir, src_)])
+                      if os.path.isfile(p)), None)
+        if not found:
+            raise SystemExit(f"guild plan: plan.md shows a picture that is not there: {src}")
+        base = re.sub(r"[^a-z0-9]+", "-", os.path.splitext(os.path.basename(found))[0].lower()).strip("-") or "picture"
+        name = f"{len(pics) + 1:02d}-{base}{os.path.splitext(found)[1].lower() or '.png'}"
+        pics.append((found, name))
+        return f"![{cap}](pics/{name})"
+    import planpage
+    return planpage.IMG.sub(swap, md), pics
+
+
+def copy_pictures(pics, dest):
+    if pics:
+        os.makedirs(dest, exist_ok=True)
+    for src, name in pics:
+        subprocess.run(["cp", src, os.path.join(dest, name)], check=True)
 
 
 FINDINGS_PAGE = """<!doctype html>
