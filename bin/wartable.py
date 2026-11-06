@@ -677,6 +677,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path in ("/lightbox.js", "/realm.js"):
                 with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            if path in ("/console", "/console.json", "/console/screen"):   # the quest console, for the phone
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import console
+                if path == "/console":
+                    return self.send(200, open(os.path.join(WEB, "console.html")).read())
+                if path == "/console.json":
+                    return self.send(200, json.dumps({"tabs": console.tabs()}), "application/json")
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                try:
+                    text = console.screen(q.get("tab", [""])[0], q.get("n", ["80"])[0])
+                    return self.send(200, json.dumps({"screen": text}), "application/json")
+                except ValueError as e:
+                    return self.send(200, json.dumps({"error": str(e)}), "application/json")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
             if path in ("/rules", "/drill"):   # the rule book, and the weekly drill
@@ -760,6 +773,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/console/send":
+            # Typing into a session is the most powerful thing this server does. A custom header is
+            # something another web site cannot add without asking first (CORS), so a page you happen
+            # to open elsewhere cannot type into your quests.
+            if self.headers.get("X-Guild") != "console":
+                return self.send(403, json.dumps({"error": "missing X-Guild header"}), "application/json")
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import console
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                did = console.send(str(body.get("tab", "")), str(body.get("text", "")), str(body.get("key", "")))
+                return self.send(200, json.dumps({"did": did}), "application/json")
+            except (ValueError, OSError, subprocess.SubprocessError) as e:
+                return self.send(200, json.dumps({"error": str(e)}), "application/json")
         k = re.match(r"^/docket/(rule|hold)$", path)
         if k:
             length = int(self.headers.get("Content-Length", 0))

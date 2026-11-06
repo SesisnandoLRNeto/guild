@@ -1662,6 +1662,25 @@ while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; esac
 done < <(python3 "$REPO/test/cockpit.py" "$REPO" "$CK" "guild-cockpit-test" 2>&1)
 
+# ── the quest console: read a tab and type to it from the phone ────────────────
+section "quest console"
+tmux -L "$GUILD_TMUX_SOCKET" has-session -t guild 2>/dev/null || tmux -L "$GUILD_TMUX_SOCKET" new-session -d -s guild -n first "sleep 600"
+tmux -L "$GUILD_TMUX_SOCKET" new-window -d -t guild -n qm-ctest "cat"
+sleep 0.5
+is "the console page is served" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/console)" "200"
+has "it lists the open quartermaster tab" "$(curl -s http://127.0.0.1:4899/console.json)" '"name": "qm-ctest"'
+out=$(curl -s -X POST http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","text":"hello"}')
+has "typing needs the console header, so another site cannot type into a quest" "$out" "missing X-Guild header"
+out=$(curl -s -X POST -H "X-Guild: console" http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","text":"hello from the phone\nsecond line"}')
+has "a message is sent" "$out" '"did": "sent"'
+sleep 0.5
+has "and shows on the tab's screen, on one line" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=qm-ctest')" "hello from the phone second line"
+has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","key":"C-c"}')" "that key is not allowed"
+has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
+has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
+has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=..%2Fetc')" "no such tab"
+tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm-ctest 2>/dev/null
+
 # ── alerts and compaction ─────────────────────────────────────────────────────
 section "alerts and compaction"
 while IFS= read -r line; do
