@@ -50,6 +50,7 @@ guild is a small control plane around agent CLIs. It adds no server of its own e
 | trial | pre-PR gate for one commit | `hooks/pr-gate.sh`, `bin/shims/gh`, `skills/trial` |
 | war table / board / docket | local web server / one decision or report page / the list of open decisions | `bin/wartable.py`, `web/` |
 | campaign board | kanban of quests, sessions and tickets | `bin/fleet.py`, `web/campaign.html` |
+| map room | find any file of a quest, read it with its changes marked, compare with the base or any commit | `bin/files.py`, `web/files.html` |
 | cockpit | tmux on its own server, with a side menu | `config/guild.tmux.conf`, `bin/watch.py` |
 
 Code map: `bin/guild` is the CLI (Bash); every `bin/*.py` is one area (war table, fleet, ledger, checks, lessons, budget, impact, harness, Jira, Jev, machines). Python uses only the standard library.
@@ -81,6 +82,7 @@ guild up ~/Workspace
 |---|---|
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
 | `guild quest <slug> --repo PATH [--ticket KEY] [--harness NAME] [--tier T \| --model M] [--plan] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>`. See [Routing](#routing-which-model-does-which-work) |
+| `guild quest ... --quick ["<why>"]` / `--epic-dagger ["<why>"]` | Quick: no plan, no acceptance contract, no Why card, no validation checklist, trial skipped; a wrap-up is still owed. Epic dagger: all of that and no interaction at all. The adventurer never asks or opens a board, decides alone (choices listed in the PR body under "Decisions taken alone"), opens the PR and reports done. Only the guildmaster's own `--epic-dagger` (or the Jira label `epic-dagger`) means this flag; the quartermaster never skips a step on its own, and a PR review-fix quest keeps every step |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
@@ -91,7 +93,11 @@ guild up ~/Workspace
 | `guild check [slug] [--baseline]` | Run the brief's acceptance checks in the quest worktree (EDD) |
 | `guild check <slug> --reseal` | Accept a changed Acceptance block (you only, never an adventurer) |
 | `guild vision <repo>` / `guild vision status <repo>` | Collect a repo's evidence for its written vision |
-| `guild jira once\|watch\|status` | Start quests from your `@quartermaster` comments on tickets |
+| `guild reel <slug>` | What a quest did, as a short pixel-art explainer: the pain, the cause, before and after, the forge, the trial, the PR. Typed captions, an optional narrator voice, and "Save as video" (a 1280x720 .webm). The wrap-up has a "Watch the reel" button; `reel.json` in the quest folder lets the adventurer tell it in its own words |
+| `guild jira on\|once\|watch\|status` | Start quests from your comments on tickets: `@guild` starts a guarded quest at once, `@quartermaster` asks first |
+| `guild plan ready "<one line>" [--shape small\|standard\|full]` | Inside a quest: the plan approval page, sized to the work. A small plan shows only the steps and how you will know it works. A standard one adds the pain, the cause and the change, and you mark only the risks and questions. A full one (a Why card, six or more steps, or open questions) shows everything, offers the reel, and you approve only when every point is Agree |
+| `guild findings <findings.json>` | A code review's findings on the war table, grouped by how much they matter. You mark each one Agree, Disagree or Not sure; the agreed ones go back with your answer (fix them, draft PR comments, or keep as notes). Nothing is posted anywhere |
+| `guild quest ... --guarded ["<why>"]` | No plan; the trial and the contract stay, and the guildmaster validates the branch end to end before `gh pr create` is allowed. The adventurer runs `guild validate ready`, then `guild validate wait` |
 | `guild shot <url> --name before\|after` | A screenshot taken the same way every time, filed under the quest |
 | `guild peek <slug> --calls` | The tool calls an adventurer actually ran, from its session log |
 | `guild doctor` | Check tools, config, identities, orphan quests, waiting boards |
@@ -109,8 +115,10 @@ guild up ~/Workspace
 | `guild todo add "<text>"` / `done <n>` / `drop <n>` | Your own cards on the campaign board, personal or not |
 | `guild story "<name>" TICKET...` | Name the campaign board row those tickets sit in (an empty name removes it) |
 | `guild validate <slug>` / `guild validate export <slug> [--out F]` | The quest's end-to-end checklist, run before a merge; a standalone copy for the team |
+| `guild files <slug>` | The map room at `/q/<slug>/files`: a finder like an editor's (type part of a name, changed files first), the file with the quest's changes marked in the margin, a diff against the base branch or any commit, and the file's history. Also the "files" link on a campaign card and the Files tile on a report |
 | `guild why <slug>` / `guild why open <slug>` | The quest's Why card: show your answers, or put the card on the docket again |
-| `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
+| `guild rules` / `guild drill` | The rule book (every business rule the work changed, per business area) and this week's three-question drill |
+| `/rules/week` on the war table | This week's rule changes, drafted by the quests, grouped by business area. You mark each Agree, Wrong (with the real rule) or Not sure; a mark holds until the rule changes again. The docket says when it waits. It replaces the Why card, which is now optional (`guild quest --why`) |
 | `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
@@ -118,6 +126,7 @@ guild up ~/Workspace
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
+| `guild draw <spec.json> [--into PAGE]` | Draws a picture for a page from a small spec and picks the form: a state machine, a flow, an organogram or a rules table. Each move or rule carries its scene (where it is triggered, who, the scenario, what they see, where in the code), numbered on the arrow and listed under the picture |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
@@ -155,7 +164,13 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 **The docket.** `guild docket` (or `Ctrl-g g`) is the war table's front page: every open decision from every quest on one parchment ledger, one row each. Pick a ruling (a star marks the adventurer's suggestion), add a note, or hold it until a date, then send them all with one button. A held decision parks its quest and tells the adventurer to stop waiting; on its date `guild wait` raises it again and the quartermaster brings it back to you. Wrap-ups waiting for your grade are rows too. The full list of boards stays at `/boards`.
 
-**From your phone.** `guild remote on` opens a second copy of the war table on your Tailscale address (Tailscale must be running), behind a random key: `guild remote url` prints the link for your phone, which sets a cookie so the next pages need no key. `guild remote restart` applies it, `guild remote off` closes it. Guild sends a Mac notification when something waits for you (a decision, a block, a failure, a wrap-up to grade); add `"ntfy": "https://ntfy.sh/<a-private-topic>"` to `~/.guild/local/remote.json` for a phone push too. The push says only which quest waits and links to the docket: never the note, the ticket text or code, because the topic lives on a third-party service. `"mac": false` turns the Mac notifications off; `guild notify test` checks both.
+**From your phone.** `guild remote on` opens a second copy of the war table on your Tailscale address (Tailscale must be running), behind a random key: `guild remote qr` prints the link as a QR code to scan with the phone camera (and `guild remote on` prints it too; a bigger one is at `127.0.0.1:4711/remote/qr`, served on the Mac only). The link opens the quest console and sets a cookie, so the next pages need no key. `guild remote url` prints it as text. `guild remote restart` applies it, `guild remote off` closes it. Guild sends a Mac notification when something waits for you (a decision, a block, a failure, a wrap-up to grade); add `"ntfy": "https://ntfy.sh/<a-private-topic>"` to `~/.guild/local/remote.json` for a phone push too. The push says only which quest waits and links to the docket: never the note, the ticket text or code, because the topic lives on a third-party service. `"mac": false` turns the Mac notifications off; `guild notify test` checks both.
+
+**The quest console.** `/console` on the war table is made for the phone: every open tab (quests and the quartermaster) with its state; tap one to read its screen as plain text, refreshed every 3 seconds, and type to it in a normal text box, with the phone keyboard, autocorrect and dictation. Send does what `guild send` does. A row of keys (1, 2, 3, Enter, Esc, arrows, y, n) answers a prompt waiting on screen. Only tabs open now can be read or typed to, text is typed literally, and only those keys can be pressed. Typing needs a header another web site cannot add, so a page you open elsewhere cannot type into your quests. From the phone it is the remote war table (`guild remote url`), behind its key: keep that link to yourself, because it can type into your sessions.
+
+**Alerts while you are away.** Every 2 minutes the war table looks for things that went wrong without you: a quest PR with a merge conflict, failing checks, or a reviewer who has waited a day for an answer; Claude usage over 80% of the 5-hour or weekly limit; a board question waiting 2 hours while its quest is blocked. Each one is sent once (it is sent again only if it goes away and comes back) and stays on the docket while it is true; `guild alerts` lists them. `guild notify email you@gmail.com` also emails them, through Gmail with an app password you keep in the macOS Keychain (`security add-generic-password -s guild-email -a you@gmail.com -w`), never in a file. Usage comes from Claude Code's status line (`rate_limits`), which only some plans report. Nothing is ever written to GitHub.
+
+**Waiting quests stay cheap.** A quest that ended its turn to wait for you, with a context over 80k tokens, gets `/compact` typed into its session in the last 90 seconds before the prompt cache goes cold (Claude Code keeps it 1 hour on your plan, so about 59 minutes after it went quiet). Your answer later is read from a short summary instead of the whole cold context. Done quests, the quartermaster and quests with `"nocompact": true` in their meta are never compacted. Tune it under `"alerts"` in `~/.guild/local/remote.json`: `cache_minutes`, `compact_tokens`, `compact`, `unanswered_hours`, `usage_percent`, `board_hours`.
 
 **Finished work leaves the cockpit.** Grade a wrap-up "ready to merge" or "split" and the quest's tab closes (the agent stops; the worktree and branch stay, so `guild revive <slug>` or a later "needs changes" brings it back in the same conversation). When the PR is merged or closed on GitHub, the war table server closes the quest for good: archived, worktree back to the pool, never with uncommitted changes. `"auto_close": false` in `dispatch.json` turns this off.
 
@@ -164,6 +179,24 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 **Validation before a merge.** Every code quest also writes `scenarios.json`: an end-to-end run sheet shown at `/q/<slug>/validate` (`guild validate <slug>`, or the Validation tile on the wrap-up). It lists what is being tested, the exact setup commands, then scenarios in groups run in order, each with what to do, a command with a Copy button and what you must see. When the frontend changed, a map of the screens shows the path through the app, and each screen has its before (base branch) and after (the quest's branch) shots side by side. You mark each scenario pass, fail or skip; a fail or a skip needs a note. "Send the failures to the adventurer" hands the failed ones back with your notes. When the last one passes, guild writes a certificate (`certificate.json`: when, the counts, the commit), logs `validated`, and the page, the wrap-up and the campaign card say so. A wrap-up cannot be graded "ready to merge" without a certificate for the commit the branch is on now, so a later commit means the list is run again. `guild status done` refuses a code quest without scenarios (`--no-scenarios "<why>"` is the recorded way out). For the team, `guild validate export <slug>` (or "Download for the team" on the page) writes one self-contained HTML file, screenshots inside, with your results on each scenario and checkboxes that stay in each reader's browser; ask the quartermaster to publish it as a private Artifact and share it from its Share menu.
 
 **Grading the result.** Every wrap-up page asks you for a grade (1 to 5) and a verdict: ready to merge, needs changes, or split a follow-up. "Needs changes" sends your notes straight back to the adventurer, which carries on. The grade stays with the quest (`grade.json`), the campaign board shows it (or a red "grade it" until you do), and `guild retro` compares grades by model, tier and harness, so routing in `dispatch.json` follows your judgment, not only whether checks passed.
+
+## The lore
+
+The war table is a guild hall, and its pages speak like one. `guild lore` prints the whole bestiary (`bin/lore.py`); the plain meaning always sits next to the flavour, so nothing has to be decoded.
+
+| On the page | What it means |
+|---|---|
+| Guildmaster, Quartermaster | You; the agent that sends parties out and reads their reports |
+| Oracle, Archmage, Knight, Scout, Artificer | The adventurer's class, from its model: Fable, Opus, Sonnet, Haiku, Codex. A tier names it when the model is not known (plan is a Sage) |
+| Squire, Inquisitor, Elf | A helper quest; the behaviour validator; the code reviewer (the elves read every diff at the trial) |
+| The Tavern, On the Road, The Oracle, The Castle Gate, The Treasury | The campaign's columns: to do, in progress, needs you, PR in review, merged or closed |
+| The call, the map, the forge, the gauntlet, the elves' court, the gate, the treasury | A quest's steps on the At-a-glance strip: asked, plan, build, checks, trial, PR open, merged |
+| Path A, Path B; the bard | The options on a decision board; the one dry line under them |
+| The notice wall | The list of every board (`/boards`) |
+| An orc, a troll, goblins, a skull | Failed; blocked; checks failing; stopped without a report |
+| The bard's tale | A wrap-up waiting for your grade |
+
+Pages people outside the guild receive (the validation export for the team) stay plain.
 
 ## Costs and history
 
@@ -198,7 +231,7 @@ How costs are counted: Claude Code writes one log line per content block of a re
 
 Three habits, built in, so the rules behind the work reach you whole: why each exists, what it changes, and what comes next.
 
-**The Why card.** Every quest starts by putting a card on the docket with five questions you answer in your own words: the **pain** (who suffers today, one real example), the **rule** (in one sentence), the **decision** (who decided, what was rejected), the **impact** (what changes, for which users, data or money) and the **future** (what it unlocks or blocks). The AI never fills it in: thinking first is the point. Your answers are kept in `why.json` and top the quest's plan and wrap-up, so you judge the result against your own why. The adventurer then checks your card against the ticket, the spec and the code, and raises up to three challenges on the war table where something contradicts it or is missing. `--no-why` skips it; helpers never get one.
+**The Why card.** Every quest starts by putting a card on the docket with five questions you answer in your own words: the **pain** (who suffers today, one real example), the **rule** (in one sentence), the **decision** (who decided, what was rejected), the **impact** (what changes, for which users, data or money) and the **future** (what it unlocks or blocks). The AI never fills it in: thinking first is the point. Your answers are kept in `why.json` and top the quest's plan and wrap-up, so you judge the result against your own why. The adventurer then checks your card against the ticket, the spec and the code, and raises up to three challenges on the war table where something contradicts it or is missing. Only a feature or an implementation gets the card: a PR review fix, a merge, a CI or conflict chore has no pain or rule of its own, so `guild quest` skips the card there (it reads the slug and the brief, `python3 bin/why.py wanted <slug>` shows the call) and says so. `--why` forces the card, `--no-why` drops it; helpers never get one.
 
 **The rule book.** Every backend wrap-up explains its business rule changes in a rules file (`guild impact --rules`): the rule, before, after, where, why, and an example with real values, its source and the tests that prove it. `guild rules` gathers them from every quest, live and closed, into one book per area, with search and the history of each rule (which quests changed it, and when).
 
@@ -254,11 +287,17 @@ The key is stored with the quest, so `guild log` and `guild retro` can show whic
 
 ## Tickets that start themselves
 
-Comment `@quartermaster repo:work-api build the fair pay list` on a ticket, and a quest can start from it. This is the one part of guild that acts without you typing a command, so it is built around what it must never do:
+Comment on a ticket, and a quest starts from it. Two words:
+
+- **`@guild repo:work-api build the fair pay list`** starts a **guarded** quest at once, under the quartermaster's watch: no plan, straight to the build. Validation guards it instead. After the trial, the adventurer writes the end-to-end checklist and waits; you run it on the branch, and only then may it open the PR. A fail goes back with your notes. A new commit needs your validation again, so what you validated is what the PR holds.
+- **`@quartermaster ...`** asks first on the war table, and the quest plans first.
+
+This is the one part of guild that acts without you typing a command, so it is built around what it must never do:
 
 - **Only your comments count.** Anyone else mentioning the trigger is ignored, and remembered as ignored.
+- **No double work.** Before any start it checks whether someone is already on the ticket: a guild quest on that ticket under any name, the ticket assigned to someone else or already done, or a branch with the ticket key on origin. Any of these turns the start into a question on the war table that lists what it found, with "do not start" suggested.
 - **Ticket text never becomes a command.** `check:` lines come only from your comment; the ticket description is context, with any `check:` lines stripped.
-- **It asks first.** By default it puts "start a quest for SARA-812?" on the war table with the exact brief it would use. It starts only on your yes. `"autostart": true` skips the question and is capped by `max_active`.
+- **`@quartermaster` asks first.** It puts "start a quest for SARA-812?" on the war table with the exact brief it would use, and starts only on your yes. `"autostart": true` skips the question. `@guild` is your yes already written. Both are capped by `max_active`; `@guildmaster` or an email address does not count as `@guild`.
 - **It never writes to Jira.** Ticket comments stay yours. It tells you, with a desktop notification, when a quest it started is done, with the note (usually the PR).
 - It watches only the projects you list; the repo comes from `repo:<name>` or a per-project default, and an unknown repo is a question, not a guess.
 
@@ -376,7 +415,7 @@ Tiers name the kind of work. Each harness maps a tier to its own model, so a rul
 | `deep` | High complexity | `claude-fable-5-1` | `moonshotai/kimi-k2-thinking` |
 | `light` | Easy, well defined | `haiku` | `deepseek/deepseek-chat` |
 
-**Understand the plan before you approve it.** A plan is written in fixed sections and shown as an explainer: the pain, why it happens and what you should expect in one minute at the top; how it works today and after this plan side by side (a ```` ```mermaid ```` block draws a diagram); your Why card next to the plan's understanding, so a misunderstanding shows before any code; the sealed acceptance contract (what "done" means); then how it will be built, what is not included, the risks, the words to know and the questions for you. `guild plan ready` refuses a plan missing a required section. Besides Approve and Change it, you can answer **Explain more**: your questions go back, the adventurer answers them in the plan and asks again, and nothing is built yet.
+**Understand the plan before you approve it.** A plan is written in fixed sections and shown as an explainer: the pain, why it happens and what you should expect in one minute at the top; how it works today and after this plan side by side (a ```` ```mermaid ```` block draws a diagram); your Why card next to the plan's understanding, so a misunderstanding shows before any code; the sealed acceptance contract (what "done" means); then how it will be built, what is not included, the risks, the words to know and the questions for you. Only a full plan has all of them: a small or standard plan shows only what it holds (see `guild plan ready` above), and `guild plan ready` refuses a plan missing what its shape needs. Housekeeping (a merge, conflicts, a PR review fix, a CI chore) gets no plan, no acceptance contract and no checklist at all; the trial stays. `--plan` brings the plan back. Besides Approve and Change it, you can answer **Explain more**: your questions go back, the adventurer answers them in the plan and asks again, and nothing is built yet.
 
 **Plan, then build.** `--plan` splits a quest in two. The adventurer starts on the `plan` tier, writes `plan.md`, and puts it on the war table for you. When you approve, it runs `guild status <slug> planned`, and guild restarts it in the same conversation on the build model (`--tier`, `--model`, or the `build` tier). So Opus thinks, you approve, and Sonnet types.
 
@@ -479,9 +518,9 @@ The cockpit runs on its own tmux server, socket `guild`, with `config/guild.tmux
 
 ## Calm mode: the party on the road
 
-While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a tiny party where the spinner was: an orange archer, a cyan mage and a red knight walking right through a night forest (stars and a moon, near and far pines drifting at different speeds, bushes and grass). Enemies come in from the right, one at a time, and each hero has their own: a bat flies in and the archer shoots it, a slime crawls in and the mage throws a spell, a skeleton marches in and the knight cuts it down. Five rows, plain ASCII, colors follow your dark or light theme. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
+While an adventurer works, the tool calls scrolling by are noise. With calm on, guild sessions draw a party where the spinner was: the sessions running right now, one hero each by model, walking right through a night forest (stars and a moon, near and far pines drifting at different speeds, bushes and grass). Sonnet walks as an orange archer, Opus as a cyan mage, Fable as a gold paladin, Haiku as a red warrior, Codex as a violet artificer, and a model the guild does not know as a wanderer with a torch. Two are always there: the mage is the quartermaster itself (it runs on Opus), and a warrior always leads: when no session runs on Haiku, the guild's own guard takes the front. The road is a fixed sequence of 32 encounters, one every ten seconds. Quests in trouble send their own creature first in their turn (a goblin for red checks, a troll for a blocked quest, an orc for a failed one); between them the road brings bats, slimes, skeletons, wolves, spiders, wisps, ghosts, rats, harpies, imps, snakes, bandits, kobolds, gargoyles, a golem, a necromancer, a treant, a mimic that looks like a chest until it bites, and four bosses (an ogre, a dragon whelp, a hydra that loses a head per blow, a lich) that drop loot. A fight is an exchange: every ranged hero fires in volleys while the creature comes (arrows, spells, flasks, light, a thrown torch), creatures have hit points shown as dots over their heads, some blows do nothing to them (arrows pass through a ghost, no sword reaches a bat) and others count double (ice on the whelp, light on the undead), and what is still alive at the front meets the warrior's sword. Whoever lands the last blow gets the kill and a star over their head; a flying thing nobody stopped swoops over the party and is gone. Some stretches are obstacles instead: a fallen log, a river, a locked gate, a web, a chasm, a boulder; the hero who knows how opens the way (the mage freezes the river, the artificer picks the gate, the paladin bridges the chasm, the wanderer's torch burns the web, the warrior clears the log and the boulder) and the party walks across. Five rows, plain ASCII, colors follow your dark or light theme. Tool rows (`ToolUse`, `ToolResult`, `ToolGroup`) draw at zero height. The model's context and the stored transcript are untouched: only the drawing changes. `/calm` toggles it inside a session, and `guild peek <slug> --calls` still shows every command from the session log.
 
-It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Verified on Claude Code 2.1.280; the API may change between releases.
+It is a `mods/guild-calm` plugin on Claude Code's early-access function-hooks surface, so it is opt-in twice: `guild calm on` writes the preference, and guild exports `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `GUILD_CALM=1` only for the sessions it starts. Without both, the mod is a complete no-op, so your normal sessions never change. Since Claude Code 2.1.309 a mod loads only in a folder you trusted (the "Yes, I trust this folder" answer): the quartermaster runs in your home folder, so trust it once or the party never shows; `guild calm status` says when that is the case. Verified on Claude Code 2.1.309; the API may change between releases.
 
 ## The trial
 

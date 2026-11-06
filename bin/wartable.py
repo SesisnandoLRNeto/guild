@@ -78,7 +78,8 @@ def list_boards():
 # Added to every board page: the parchment theme, after the page's own styles so it wins,
 # and a light color scheme for Mermaid, so diagrams read on parchment.
 THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock">'   # dark-mode extensions leave the parchment alone
-         b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css">'
+         b'<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/realm.css">'
+         b'<script>document.documentElement.classList.add("realm","rm-dark")</script>'
          b'<script src="/lightbox.js" defer></script>'   # click a picture to zoom it or go full screen
          b'<script>addEventListener("pageshow",function(e){if(e.persisted)location.reload()});</script>'   # Back shows fresh state
          b'<script>(function(){var m=window.matchMedia;window.matchMedia=function(q){'
@@ -90,36 +91,60 @@ THEME = (b'<meta name="color-scheme" content="light"><meta name="darkreader-lock
 # A report is written for whoever reads the code; this strip is for anyone: where the work
 # stands, in words and as a path of steps, and the few numbers that matter.
 
-GLANCE_CSS = """<style>
-.gg{font:14px/1.5 inherit;margin:0 0 26px;padding:16px 18px 14px;border:1px solid var(--line,#cdb88e);border-radius:6px;
-  background:rgba(255,250,235,.55)}
-.gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 12px;padding-right:48px}
-.gg-top b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41)}
-.gg-say{font-size:16px;font-weight:600}
-.gg-say.bad{color:var(--bad,#a8322a)}.gg-say.turn{color:#9a5a0c}.gg-say.ok{color:var(--ok,#3f7d3a)}
-.gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0;counter-reset:s}
-.gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:var(--dim,#6e5a41);padding-top:26px;min-width:0}
+GLANCE_CSS = """<link rel="stylesheet" href="/icons.css"><link rel="stylesheet" href="/realm.css"><style>
+.gg{font:14px/1.5 inherit;margin:0 0 28px;padding:18px 22px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 26px;align-items:start;
+  background:radial-gradient(ellipse 55% 90% at 85% 50%,rgba(255,122,26,.16),transparent 70%),linear-gradient(180deg,#241a2a,#15111a);color:#e9dcc0}
+.gg-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 10px}
+.gg-top b{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#d9a441}
+.gg-say{font-size:19px;font-weight:700;font-variant:small-caps;letter-spacing:.03em;color:#f3cf6c}
+.gg-say.bad{color:#f0a08f}.gg-say.turn{color:#f3cf6c}.gg-say.ok{color:#a9d88a}
+.gg-say .gi-icon{width:18px;height:18px;margin-right:7px;vertical-align:-3px}
+.gg-head{font-size:12px;color:#a8987a;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin:0 0 12px}
+.gg-seal{display:inline-flex;align-items:center;gap:7px;color:#e9dcc0;font-weight:600}
+.gg-seal .gi-icon{width:16px;height:16px;color:#d9a441}.gg-seal small{font-weight:400;color:#a8987a}
+.gg-say .race{margin-right:8px;vertical-align:-10px}
+.gg-path{display:flex;list-style:none;margin:0 0 14px;padding:0}
+.gg-path li{flex:1;position:relative;text-align:center;font-size:12px;color:#a8987a;padding-top:26px;min-width:0}
 .gg-path li::before{content:"";position:absolute;top:4px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;
-  border:2px solid #b9a37a;background:#f6ecd2;z-index:1}
-.gg-path li::after{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:#cdb88e}
+  border:2px solid #4a3f52;background:#15111a;z-index:1}
+.gg-path li::after{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:#4a3f52}
 .gg-path li:first-child::after{display:none}
-.gg-path li.done{color:var(--text,#2d2216)}.gg-path li.done::before{background:var(--ok,#3f7d3a);border-color:var(--ok,#3f7d3a)}
-.gg-path li.done::after,.gg-path li.now::after{background:var(--ok,#3f7d3a)}
-.gg-path li.now{color:var(--text,#2d2216);font-weight:700}.gg-path li.now::before{border-color:#b5651d;background:#f3d9a8;box-shadow:0 0 0 4px rgba(217,164,65,.3)}
-.gg-path li.stuck::before{border-color:var(--bad,#a8322a);background:#f2c4bb}
-.gg-path li.skip{opacity:.45}
-.gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
-.gg-tile{background:rgba(255,255,255,.35);border:1px solid var(--line,#cdb88e);border-radius:4px;padding:7px 10px}
-.gg-tile span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim,#6e5a41)}
-.gg-tile b{font-size:17px}.gg-go{text-decoration:none;color:inherit;border-color:#0d6b63;background:rgba(13,107,99,.08)}
-.gg-go:hover{background:rgba(13,107,99,.16)}.gg-tile i{display:block;font-size:11.5px;color:var(--dim,#6e5a41);font-style:normal}
-.gw{margin-top:12px;border-top:1px dashed var(--line,#cdb88e);padding-top:10px}
-.gw-head{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim,#6e5a41);margin-bottom:6px}
+.gg-path li.done{color:#e9dcc0}.gg-path li.done::before{background:#7fbf5a;border-color:#7fbf5a}
+.gg-path li.done::after,.gg-path li.now::after{background:#7fbf5a}
+.gg-path li.now{color:#f3cf6c;font-weight:700}.gg-path li.now::before{border-color:#d9a441;background:#2a2230;box-shadow:0 0 0 4px rgba(217,164,65,.3)}
+.gg-path li.stuck::before{border-color:#e0573f;background:#3a1a1a}
+.gg-path li.skip{opacity:.6;font-style:italic}
+.gg-path li.skip::before{border-style:dashed;border-color:#8a6a1e;background:#15111a}
+.gg-path li .gg-place{display:block}.gg-path li small{display:block;font-size:10px;opacity:.7;letter-spacing:.04em}
+.gg-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.gg-tile{background:linear-gradient(180deg,#241d2b,#17121c);border:1px solid #4a3f52;border-radius:4px;padding:7px 10px;box-shadow:inset 0 0 0 1px #000}
+.gg-tile span{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#a8987a}
+.gg-tile b{font-size:17px;color:#f3cf6c}.gg-go{text-decoration:none;color:inherit;border-color:#8a6a1e}
+.gg-go:hover{background:linear-gradient(180deg,#2e2436,#1b151f)}.gg-tile i{display:block;font-size:11.5px;color:#a8987a;font-style:normal}
+.gg>div:first-child{grid-column:1;grid-row:1;min-width:0}.gg-party{grid-column:2;grid-row:1;align-self:center}
+.gg-party figure{width:104px}
+.gw{grid-column:1/-1;margin-top:6px;border-top:1px dashed #4a3f52;padding-top:10px}
+.gw-head{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#a8987a;margin-bottom:6px}
 .gw-head i{text-transform:none;letter-spacing:0;font-style:italic}
 .gw-row{display:grid;grid-template-columns:90px 1fr;gap:10px;font-size:14px;padding:2px 0}
-.gw-row b{font-variant:small-caps;color:#8a4b12}
-@media (max-width:640px){.gg-path li{font-size:10.5px}}
+.gw-row b{font-variant:small-caps;color:#d9a441}
+@media (max-width:760px){.gg{grid-template-columns:1fr}.gg-party{grid-column:1;grid-row:auto}.gg-path li{font-size:10.5px}}
 </style>"""
+
+
+def race_html(key, cls=""):
+    """A race portrait from races.svg in its ring, or "" for no race."""
+    if not key:
+        return ""
+    return (f'<span class="race {cls}" title="{_html.escape(key)}"><svg aria-hidden="true"><use href="/races.svg#{_html.escape(key)}"/></svg></span>')
+
+
+def figure_html(race, name, sub, tip):
+    """A hero-banner figure, the same shape realm.js draws (the portrait, a name, a line, the hover)."""
+    r = __import__("lore").race(race) or {}
+    horde = " horde" if r.get("side") == "horde" else ""
+    return (f'<figure data-tip="{_html.escape(tip)}" data-race="{race}" tabindex="0"><span class="race big{horde}"><svg aria-hidden="true"><use href="/races.svg#{race}"/></svg></span>'
+            f'<figcaption>{_html.escape(name)}<small>{_html.escape(sub)}</small></figcaption></figure>')
 
 
 def glance(quest):
@@ -142,37 +167,52 @@ def glance(quest):
     edd = q.get("edd") or {}
     planned = os.path.exists(os.path.join(qdir, "plan.md"))
     built = bool(edd.get("runs")) or state in ("done", "trial-pass", "trial-skip") or bool(pr)
-    checks_ok = edd.get("last_green") or (not edd.get("checks") and built)
     trial_ok = q.get("trial") in ("pass", "skip")
-    steps = [("Asked", True), ("Plan", planned if meta.get("phase") or planned else None), ("Build", built),
-             ("Checks", bool(checks_ok) and built), ("Trial", trial_ok), ("PR open", bool(pr)),
-             ("Merged", pr.get("state") == "merged")]
-    now = next((i for i, (_, ok) in enumerate(steps) if ok is False), None)
+    # A step that was never run is not a step that passed. `None` means skipped, and `why` says what
+    # was skipped and on whose word, so a green line always means the step really happened.
+    plan_why = meta.get("no_plan") or ("" if meta.get("phase") or planned else "started without a plan phase")
+    dagger = meta.get("dagger") or ""
+    checks_why = "" if edd.get("checks") else f"epic dagger: {dagger}" if dagger else "no check: lines in the contract, so nothing was run"
+    trial_why = ("the trial was skipped" if q.get("trial") == "skip"
+                 else f"epic dagger: {dagger}" if dagger and not q.get("trial") else "")
+    steps = [("Asked", True, ""),
+             ("Plan", None if plan_why else planned, plan_why),
+             ("Build", built, ""),
+             ("Checks", None if (checks_why and built) else (bool(edd.get("last_green")) and built), checks_why),
+             ("Trial", None if trial_why else trial_ok, trial_why),
+             ("PR open", bool(pr), ""),
+             ("Merged", pr.get("state") == "merged", "")]
+    now = next((i for i, (_, ok, _) in enumerate(steps) if ok is False), None)
     stuck = state in ("blocked", "failed", "stopped", "checks-red")
     items = []
-    for i, (name, ok) in enumerate(steps):
+    import lore
+    for i, (name, ok, why) in enumerate(steps):
         cls = "skip" if ok is None else "done" if ok and (now is None or i < now) else ""
         if i == now:
             cls = "now stuck" if stuck else "now"
-        items.append(f'<li class="{cls}">{_html.escape(name)}</li>')
+        tip = f' title="skipped: {_html.escape(why)}"' if ok is None and why else ""
+        place = lore.STEP.get(name, (name, ""))[0]
+        items.append(f'<li class="{cls}"{tip}><span class="gg-place">{_html.escape(place)}</span>'
+                     f'<small>{_html.escape(name.lower())}</small></li>')
 
     ticket = meta.get("ticket", "")
     if pr.get("state") == "merged":
-        say, tone = "Merged. This work is in the main branch.", "ok"
+        say, tone, icon = "Loot in the treasury: this work is in the main branch.", "ok", "chest"
     elif stuck:
-        say, tone = {"blocked": "Blocked", "failed": "Failed", "stopped": "Stopped without a report",
-                     "checks-red": "Checks are failing"}[state] + (f": {note}" if note else "."), "bad"
+        L = lore.lore(state)
+        say, tone, icon = f"{L['line']} ({L['plain']})" + (f": {note}" if note else "."), "bad", L["icon"]
     elif state == "needs-decision":
-        say, tone = "Waiting for your decision on the war table.", "turn"
+        say, tone, icon = "The oracle awaits your word on the war table.", "turn", "crystal"
     elif state in ("done", "trial-pass", "trial-skip") and pr.get("state") in ("open", "draft"):
-        say, tone = f"Finished. PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn"
+        say, tone, icon = f"At the castle gate: PR #{pr.get('number')} waits for review" + (" (changes requested)." if pr.get("review") == "changes requested" else "."), "turn", "gate"
     elif state in ("done", "trial-pass", "trial-skip"):
-        say, tone = "Finished." + ("" if grade else " Grade it on the right."), "ok"
+        say, tone, icon = "Back with the loot." + ("" if grade else " Grade it on the right."), "ok", "chest"
     elif state == "held":
-        say, tone = "On hold until a date you set.", ""
+        say, tone, icon = "Camped until the day you set.", "", "tent"
     else:
-        say, tone = "An agent is working on it now.", ""
+        say, tone, icon = "On the road: an agent is working on it now.", "", "map"
 
+    say_icon = f'<i class="gi-icon gi-{icon}" aria-hidden="true"></i>'
     tiles = []
     cost = q.get("cost") or 0
     est = " (estimated)" if q.get("unknown") else ""
@@ -181,34 +221,78 @@ def glance(quest):
     if dur:
         tiles.append(("Time open", dur, f"first to last reply, {q.get('messages', 0)} replies"))
     if edd.get("checks"):
-        tiles.append(("Checks", "passing" if edd.get("last_green") else "failing" if edd.get("runs") else "not run",
-                      f"{edd['checks']} automatic, {edd.get('manual', 0)} by review"))
+        counts = f"{edd['checks']} automatic, {edd.get('manual', 0)} by review"
+        if edd.get("last_green"):
+            tiles.append(("Checks", "passing", counts))
+        elif edd.get("runs"):
+            tiles.append(("Checks", "Goblins in the tests", f"failing: {counts}"))
+        else:
+            tiles.append(("Checks", "not run", counts))
     if q.get("trial"):
-        tiles.append(("Trial", {"pass": "passed", "skip": "skipped"}.get(q["trial"], q["trial"]), "review before the PR"))
+        tiles.append(("Trial", {"pass": "passed", "skip": "skipped"}.get(q["trial"], q["trial"]),
+                      "the elves read the diff before the gate"))
     if pr:
         tiles.append(("Pull request", f"#{pr.get('number')} {pr.get('state')}",
                       ", ".join(x for x in [pr.get("review", ""), ("NO CI RUN" if pr.get("checks") == "none" else f"checks {pr['checks']}") if pr.get("checks") else ""] if x)))
     v = scenarios_mod().summary(quest)
-    if v["exists"]:
+    # The gauntlet is the last step before the treasury: until the checks pass and the adventurer
+    # reports done, the checklist is not a thing to open, only a thing that waits.
+    if v.get("waived"):
+        tiles.append(("Validation", "not needed", v["waived"][:90]))
+    elif v["exists"] and steps[3][1] is False:
+        tiles.append(("Validation", "not yet", "the gauntlet opens once the checks pass"))
+    elif v["exists"] and state not in ("done", "failed") and not v["certified"]:
+        tiles.append(("Validation", "not yet", "the gauntlet opens when the adventurer reports done"))
+    elif v["exists"]:
         word = ("certified" if v["certified"] else "out of date, run again" if v["stale"]
                 else f"{v['fail']} failed" if v["fail"] else f"{v['open']} to run")
         tiles.append(("Validation", f"{v['pass']}/{v['total']} passed", word + ": open the checklist",
                       f"/q/{quest}/validate"))
+    try:                                   # the map room: every file the quest touched, readable with its diff
+        import files as fmod
+        fl = fmod.listing(quest)
+        if not fl.get("error"):
+            n = len(fl["changed"])
+            tiles.append(("Files", f"{n} changed", "find any file, read what changed" if n else "nothing changed yet; find any file",
+                          f"/q/{quest}/files"))
+    except Exception:
+        pass
     tiles.append(("Your grade", f"{grade['grade']}/5" if grade and grade.get("grade") else "not yet",
                   (grade or {}).get("verdict", "") or "on the right side"))
     model = meta.get("model") or ""
-    head = " · ".join(_html.escape(x) for x in [ticket, model, os.path.basename(meta.get("repo", ""))] if x)
+    k = lore.klass(model, meta.get("tier", ""))
+    seal = (f'<span class="gg-seal">{race_html(k.get("race"), "small")}<i class="gi-icon gi-{k["icon"]}" aria-hidden="true"></i>{_html.escape(k["name"])}'
+            + (f'<small>({_html.escape(model)})</small>' if model else "") + "</span>") if k else _html.escape(model)
+    if stuck:
+        say_race = race_html(lore.STATE_RACE.get(state, ""), "small horde")
+        if say_race:
+            say_icon = say_race + f'<i class="gi-icon gi-{icon}" aria-hidden="true"></i>'
+    
+    head = " · ".join(x for x in [_html.escape(ticket), seal, _html.escape(os.path.basename(meta.get("repo", "")))] if x)
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import why
     card = why.glance_html(quest)
-    return (GLANCE_CSS + '<section class="gg" aria-label="At a glance">'
-            f'<div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{_html.escape(say)}</span>'
-            f'<span style="margin-left:auto;font-size:12px;color:var(--dim,#6e5a41)">{head}</span></div>'
+    figures = []
+    if k and k.get("race"):
+        r = lore.race(k["race"]) or {}
+        figures.append(figure_html(k["race"], k["name"], f'on {model}' if model else "the adventurer",
+                                   f'{r.get("name", "")}: {r.get("blurb", "")}. {k["blurb"]}. This is the adventurer that did the work.'))
+    if stuck and lore.STATE_RACE.get(state):
+        r = lore.race(lore.STATE_RACE[state]) or {}
+        L = lore.lore(state)
+        figures.append(figure_html(lore.STATE_RACE[state], r.get("name", ""), L["plain"] if L else state,
+                                   f'{r.get("blurb", "")}. ' + (f'{L["line"]} ({L["plain"]}). {L["quip"]}' if L else "") + (f" {note}" if note else "")))
+    elif tone == "turn" or state in ("done", "trial-pass", "trial-skip"):
+        figures.append(figure_html("human", "Guildmaster", "your word", "You. Grade it on the right, or send it back to the forge with a note."))
+    party = f'<div class="gg-party rm-party" aria-label="Who is in this tale">{"".join(figures)}</div>' if figures else ""
+    return (GLANCE_CSS + '<section class="gg rm-frame" aria-label="At a glance">'
+            f'<div><div class="gg-top"><b>At a glance</b><span class="gg-say {tone}">{say_icon}{_html.escape(say)}</span></div>'
+            f'<div class="gg-head">{head}</div>'
             f'<ol class="gg-path">{"".join(items)}</ol><div class="gg-tiles">'
             + "".join((f'<a class="gg-tile gg-go" href="{t[3]}" target="_top">' if len(t) > 3 else '<div class="gg-tile">')
                       + f'<span>{_html.escape(t[0])}</span><b>{_html.escape(str(t[1]))}</b><i>{_html.escape(t[2])}</i>'
                       + ("</a>" if len(t) > 3 else "</div>") for t in tiles)
-            + "</div>" + card + "</section>")
+            + "</div></div>" + party + card + "</section>")
 
 
 def load_json_safe(path):
@@ -378,6 +462,13 @@ def nudge(quest, text):
 
 
 # ── the docket: every open decision on one page, one ruling per row ───────────
+def quest_state(quest):
+    try:
+        return open(os.path.join(QUESTS, quest, "status")).read().split("\t")[0].strip()
+    except OSError:
+        return ""
+
+
 def board_questions(bdir, meta):
     qpath = os.path.join(bdir, "decisions.json")
     questions = json.load(open(qpath)).get("questions", []) if os.path.exists(qpath) else []
@@ -389,7 +480,9 @@ def drill_due():
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import rulebook
         d = rulebook.drill()
-        return {"due": d["due"], "count": sum(1 for i in d["items"] if not i["answered"])}
+        w = rulebook.week()
+        return {"due": d["due"], "count": sum(1 for i in d["items"] if not i["answered"]),
+                "week_due": w["due"], "week_count": sum(1 for i in w["items"] if not i["mark"])}
     except Exception:
         return {"due": False, "count": 0}
 
@@ -421,7 +514,8 @@ def docket_items():
                 continue
             base = {"quest": quest, "board": board, "title": meta.get("title", board), "subtitle": meta.get("subtitle", ""),
                     "created": meta.get("created", ""), "url": f"/b/{quest}/{board}/", "wrapup": bool(meta.get("wrapup")),
-                    "ticket": qmeta.get("ticket", ""), "model": qmeta.get("model", ""), "pseudo": bool(qmeta.get("pseudo"))}
+                    "ticket": qmeta.get("ticket", ""), "model": qmeta.get("model", ""), "pseudo": bool(qmeta.get("pseudo")),
+                    "klass": __import__("lore").klass(qmeta.get("model", ""), qmeta.get("tier", ""))}
             dec = os.path.join(d, "decision.json")
             if meta.get("kind") == "budget" and not qmeta.get("budget") and not os.path.exists(dec):
                 continue                                 # its cap was removed: nothing to raise any more
@@ -431,6 +525,8 @@ def docket_items():
                 continue
             if qstate in ("done", "failed") and not meta.get("wrapup"):
                 continue                     # the quest moved on: an old unanswered question is not a decision
+            if meta.get("wrapup") and qstate not in ("done", "failed"):
+                continue                     # the wrap-up waits for the end of the quest
             item = dict(base, questions=board_questions(d, meta), held_until=meta.get("held_until", ""),
                         held_note=meta.get("held_note", ""))
             items.append(item)
@@ -439,7 +535,16 @@ def docket_items():
     open_.sort(key=lambda i: (i["wrapup"], i["created"]))          # decisions first, then reviews
     held.sort(key=lambda i: i["held_until"])
     recent.sort(key=lambda i: i["at"], reverse=True)
-    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due()}
+    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due(), "alerts": alert_list(open_)}
+
+
+def alert_list(open_):
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import alerts
+        return [{"text": a["text"], "url": a["url"]} for a in alerts.current(open_) if not a["key"].startswith("board:")]
+    except Exception:
+        return []
 
 
 def hold_board(quest, board, until, note=""):
@@ -548,7 +653,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             body = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        if ctype.startswith(("text/html", "application/json")):   # states change: never show a stale copy
+        if ctype.startswith(("text/html", "application/json", "text/css", "text/javascript")):   # states and styles change: never show a stale copy
             self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -563,16 +668,52 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps(docket_items()), "application/json")
             if path == "/boards":
                 return self.send(200, self.render_index())
-            if path in ("/theme.css", "/icons.css"):    # the guild look (and its icons) for every page
+            if path in ("/theme.css", "/icons.css", "/realm.css"):    # the guild look (and its icons) for every page
                 with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/css; charset=utf-8")
-            if path == "/lightbox.js":
-                with open(os.path.join(WEB, "lightbox.js"), "rb") as f:
+            if path == "/races.svg":                     # the races of the guild, one sprite for every page
+                with open(os.path.join(WEB, "races.svg"), "rb") as f:
+                    return self.send(200, f.read(), "image/svg+xml")
+            if path in ("/lightbox.js", "/realm.js"):
+                with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            if path == "/remote/qr":       # the phone link as a big QR code; only on this Mac, never on the remote copy
+                if isinstance(self, RemoteHandler):
+                    return self.send(404, "not here")
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import notify, qr
+                cfg = notify.config()
+                if not (cfg.get("remote") and cfg.get("key")):
+                    return self.send(200, "<p style='font:18px sans-serif;padding:24px'>Remote is off. Run <code>guild remote on</code> "
+                                          "and <code>guild remote restart</code>, then reload.</p>")
+                url = notify.console_url(cfg)
+                return self.send(200, "<!doctype html><meta name=viewport content='width=device-width'><title>Phone Link</title>"
+                                      "<body style='margin:0;min-height:100vh;display:grid;place-items:center;background:#fff;font:16px sans-serif'>"
+                                      f"<div style='text-align:center'>{qr.svg(url, scale=10)}<p>Scan with the phone camera, Tailscale on.<br>"
+                                      "Keep this link to yourself: it can type into your quests.</p></div>")
+            if path in ("/console", "/console.json", "/console/screen"):   # the quest console, for the phone
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import console
+                if path == "/console":
+                    return self.send(200, open(os.path.join(WEB, "console.html")).read())
+                if path == "/console.json":
+                    return self.send(200, json.dumps({"tabs": console.tabs()}), "application/json")
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                try:
+                    text = console.screen(q.get("tab", [""])[0], q.get("n", ["80"])[0])
+                    return self.send(200, json.dumps({"screen": text}), "application/json")
+                except ValueError as e:
+                    return self.send(200, json.dumps({"error": str(e)}), "application/json")
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
             if path in ("/rules", "/drill"):   # the rule book, and the weekly drill
                 return self.send(200, open(os.path.join(WEB, path.strip("/") + ".html")).read())
+            if path == "/rules/week":           # this week's rule changes, for you to confirm
+                return self.send(200, open(os.path.join(WEB, "rules-week.html")).read())
+            if path == "/rules/week.json":
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import rulebook
+                return self.send(200, json.dumps(rulebook.week()), "application/json")
             if path in ("/rules.json", "/drill.json"):
                 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
                 import rulebook
@@ -595,6 +736,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(404, "not installed: run install.sh")
                 with open(target, "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            v = re.match(r"^/q/([A-Za-z0-9._-]+)/reel(\.json)?$", path)
+            if v:
+                if not os.path.isdir(os.path.join(QUESTS, v.group(1))):
+                    return self.send(404, "no such quest")
+                if not v.group(2):
+                    return self.send(200, open(os.path.join(WEB, "reel.html")).read())
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import reel
+                return self.send(200, json.dumps(reel.build(v.group(1))), "application/json")
+            v = re.match(r"^/q/([A-Za-z0-9._-]+)/files(\.json|/show|/diff)?$", path)
+            if v:
+                return self.files_get(v.group(1), v.group(2) or "", urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
             v = re.match(r"^/q/([A-Za-z0-9._-]+)/(validate|validate\.json|validate/export|file/(.+))$", path)
             if v:
                 return self.validation_get(v.group(1), v.group(2), v.group(3))
@@ -634,6 +787,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/console/send":
+            # Typing into a session is the most powerful thing this server does. A custom header is
+            # something another web site cannot add without asking first (CORS), so a page you happen
+            # to open elsewhere cannot type into your quests.
+            if self.headers.get("X-Guild") != "console":
+                return self.send(403, json.dumps({"error": "missing X-Guild header"}), "application/json")
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import console
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                did = console.send(str(body.get("tab", "")), str(body.get("text", "")), str(body.get("key", "")))
+                return self.send(200, json.dumps({"did": did}), "application/json")
+            except (ValueError, OSError, subprocess.SubprocessError) as e:
+                return self.send(200, json.dumps({"error": str(e)}), "application/json")
         k = re.match(r"^/docket/(rule|hold)$", path)
         if k:
             length = int(self.headers.get("Content-Length", 0))
@@ -648,6 +815,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"ok": True}), "application/json")
             except Exception as e:
                 return self.send(500, json.dumps({"error": str(e)}), "application/json")
+        if path == "/rules/mark":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import rulebook
+            out = rulebook.mark(str(body.get("key", "")), str(body.get("mark", "")), body.get("note", ""))
+            return self.send(400 if out.get("error") else 200, json.dumps(out), "application/json")
         if path == "/drill/grade":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -655,7 +829,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             import rulebook
             return self.send(200, json.dumps(rulebook.grade(str(body.get("key", "")), bool(body.get("right")), body.get("answer", ""))),
                              "application/json")
-        v = re.match(r"^/q/([A-Za-z0-9._-]+)/validate/(mark|send)$", path)
+        v = re.match(r"^/q/([A-Za-z0-9._-]+)/validate/(mark|markall|send)$", path)
         if v:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -663,7 +837,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 if v.group(2) == "mark":
                     out = sc.mark(quest, str(body.get("id", "")), str(body.get("status", "")), str(body.get("note", "")))
-                    out = dict(out, stamp=sc.stamp(out), certificate=None)
+                    out = dict(out, stamp=sc.stamp(out, lore=True), certificate=None)
+                elif v.group(2) == "markall":
+                    out = sc.mark_all(quest)
+                    out = dict(out, stamp=sc.stamp(out, lore=True), certificate=None)
                 else:
                     failed = sc.failures_text(quest)
                     if not failed:
@@ -708,6 +885,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             return self.send(500, json.dumps({"error": str(e)}), "application/json")
 
+    def files_get(self, quest, what, qs):
+        """The map room: the page, the file list, one file with its change marks, or a diff."""
+        if what == "":
+            return self.send(200, open(os.path.join(WEB, "files.html")).read())
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import files as fmod
+        one = lambda k: (qs.get(k) or [""])[0]
+        if what == ".json":
+            d = fmod.listing(quest)
+            if not d.get("error"):
+                sc = scenarios_mod()
+                d["report"] = sc.report_url(quest)
+                d["validate"] = bool(sc.load(quest))
+        elif what == "/show":
+            d = fmod.show(quest, one("path"), one("rev"))
+        else:
+            d = fmod.diff(quest, one("path"), one("from"), one("to"))
+        return self.send(404 if d.get("error") else 200, json.dumps(d), "application/json")
+
     def validation_get(self, quest, what, rel):
         sc = scenarios_mod()
         qd = os.path.join(QUESTS, quest)
@@ -742,12 +938,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def render_index(self):
         rows = []
         for m in list_boards():
-            mark = "answered" if m["answered"] else "waiting"
+            title = m.get("title", m["id"])
+            # what kind of notice it is, in the guild's words: a why card, a bard's tale (wrap-up) or a question
+            why = str(title).startswith("Why card")
+            icon, kind = (("scroll", "why card") if why else
+                          ("chest", "the bard's tale") if m.get("wrapup") else ("crystal", "the oracle's question"))
+            # a why card is a note you fill when you like, never a decision the quest waits on: no gold edge
+            mark = "answered" if m["answered"] else "note" if why else "waiting"
+            word = ("written" if why else "ruled") if m["answered"] else ("open, fill it when you like" if why else "awaits your word")
             rows.append(
-                f'<li class="{mark}"><a href="/b/{m["quest"]}/{m["id"]}/">{m.get("title", m["id"])}</a>'
-                f'<span class="meta">{m["quest"]} · {mark} · {m.get("created", "")}</span></li>'
+                f'<li class="{mark}"><span class="gi-icon gi-{icon}" aria-hidden="true"></span><div>'
+                f'<a href="/b/{m["quest"]}/{m["id"]}/">{_html.escape(str(title))}</a>'
+                f'<span class="meta">{_html.escape(m["quest"])} · {kind} · <b>{word}</b> · {_html.escape(str(m.get("created", "")))}</span></div></li>'
             )
-        body = "<ul class='boards'>" + ("".join(rows) or "<li class='empty'>No boards yet.</li>") + "</ul>"
+        body = "<ul class='boards'>" + ("".join(rows) or "<li class='empty'>No boards yet. The wall is clean.</li>") + "</ul>"
         return open(os.path.join(WEB, "index.html")).read().replace("<!--BOARDS-->", body)
 
     def render_shell(self, quest, board, d):
@@ -756,15 +960,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qpath = os.path.join(d, "decisions.json")
         if os.path.exists(qpath):
             questions = json.load(open(qpath)).get("questions", [])
+        waiting = ""
         if meta.get("wrapup"):                  # a finished piece of work: you grade it first
             questions = GRADE_QUESTIONS + questions
+            if quest_state(quest) not in ("done", "failed"):
+                questions, waiting = [], ("The adventurer has not reported done yet. Grading and the next "
+                                          "step open here when the quest ends.")
         shell = open(os.path.join(WEB, "shell.html")).read()
+        qmeta = load_json_safe(os.path.join(QUESTS, quest, "meta.json")) or {}
+        files_link = (f'<a class="hbtn" href="/q/{quest}/files"><i class="gi-icon gi-map" aria-hidden="true"></i>All the changes</a>'
+                      if os.path.isdir(qmeta.get("worktree") or "") else "")
+        if meta.get("wrapup"):                    # the story of what was done, as a pixel-art reel
+            files_link += f'<a class="hbtn" href="/q/{quest}/reel"><i class="gi-icon gi-scroll" aria-hidden="true"></i>Watch the reel</a>'
         return (shell
                 .replace("{{TITLE}}", meta.get("title", board))
+                .replace("{{FILES}}", files_link)
                 .replace("{{QUEST}}", quest)
                 .replace("{{BOARD}}", board)
                 .replace("{{SUBTITLE}}", meta.get("subtitle", ""))
-                .replace("{{QUESTIONS}}", json.dumps(questions)))
+                .replace("{{QUESTIONS}}", json.dumps(questions))
+                .replace("{{WAITING}}", json.dumps(waiting)))
 
 
 class RemoteHandler(Handler):
@@ -826,6 +1041,11 @@ def refresh_prs_forever():
             prs.refresh()
         except Exception:
             pass
+        try:                                   # PR follow-ups, Claude usage, questions waiting too long
+            import alerts
+            alerts.check(docket_items()["open"])
+        except Exception:
+            pass
         try:
             sweep()
         except Exception:
@@ -837,6 +1057,18 @@ def refresh_prs_forever():
         except Exception:
             pass
         time.sleep(120)
+
+
+def compact_forever():
+    """Compact quests that wait for you just before their prompt cache goes cold."""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import alerts
+    while True:
+        try:
+            alerts.compact_idle()
+        except Exception:
+            pass
+        time.sleep(30)
 
 
 def auto_close_on():
@@ -892,6 +1124,7 @@ def serve():
     serve_remote()
     if not os.environ.get("GUILD_NO_PR_SYNC"):
         threading.Thread(target=refresh_prs_forever, daemon=True).start()
+        threading.Thread(target=compact_forever, daemon=True).start()
     port = int(os.environ.get("GUILD_BOARD_PORT", "4711"))
     for candidate in range(port, port + 20):
         try:
@@ -965,11 +1198,13 @@ def finish_open(quest, board, args):
     port = ensure_server()
     url = f"http://127.0.0.1:{port}/b/{quest}/{board}/"
     if args.get("wrapup"):
-        record(quest, "working", f"wrap-up ready: {args.get('title') or board} -> {url}")
+        # The wrap-up is the end of the road: it stays hidden (no grading, not on the docket, no
+        # browser tab) until the quest reports done, so it never shows beside an open question.
+        record(quest, "working", f"wrap-up posted, shown when the quest reports done: {args.get('title') or board} -> {url}")
     else:
         record(quest, "needs-decision", f"war table ready: {args.get('title') or board} -> {url}")
     # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
-    if not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
+    if not args.get("wrapup") and not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
         subprocess.run(["open", url], check=False)
     print(url)
     print(f"board id: {board}")
@@ -1111,7 +1346,7 @@ PLAN_PAGE = """<!doctype html>
  .hint { color: var(--dim); font-size: 13px; margin-top: 22px; }
  @media (max-width: 700px) { .next { grid-template-columns: 1fr; } }
 </style></head><body>
-<div class="kicker">__QUEST__ · plan for your approval</div>
+<div class="kicker">__QUEST__ · the scout's map, for your approval</div>
 <h1>Approve the plan?</h1>
 <p class="summary">__SUMMARY__</p>
 <div class="plan">__PLAN__</div>
@@ -1141,12 +1376,26 @@ def cmd_plan(args):
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     import planpage
     import why
-    gaps = planpage.missing(md)
+    why_card = why.load(quest)
+    forced = args.get("shape") if isinstance(args.get("shape"), str) else ""
+    if forced and forced not in planpage.SHAPES:
+        raise SystemExit(f"guild plan: --shape is one of {', '.join(planpage.SHAPES)}")
+    kind = planpage.shape(planpage.split(md), why_card, forced)
+    gaps = planpage.missing(md, kind)
     if gaps:
-        raise SystemExit("guild plan: the guildmaster reads the plan as an explainer, and plan.md lacks: "
+        raise SystemExit(f"guild plan: this is a {kind} plan, and plan.md lacks: "
                          + ", ".join(planpage.TITLES[g] for g in gaps)
                          + ".\nWrite it in these sections (short, plain words; a ```mermaid block draws a diagram):\n\n"
-                         + planpage.template())
+                         + planpage.template(kind))
+    if kind != "small" and planpage.needs_picture(planpage.split(md)):
+        raise SystemExit("guild plan: the pain is on a screen, and the plan shows none. Put a picture in The pain "
+                         "(or Today), the way the guildmaster would see it:\n"
+                         "  1. the ticket's own screenshots (Jira: jira_get_issue_images or jira_download_attachments)\n"
+                         "  2. the running app, local or staging: guild shot <url> --name before\n"
+                         "  3. or draw it: guild draw\n"
+                         "Then add ![what to look at](path/to/picture.png) to the section. A picture of the result goes in After this plan.\n"
+                         "If no screen can be shown, write a line \"No screen picture: <why>\" in The pain.")
+    md, pics = plan_pictures(md, qdir, meta)
     build = meta.get("build_model") or meta.get("model") or "the build model"
     effort = meta.get("build_effort") or ""
     budget = meta.get("budget")
@@ -1161,24 +1410,128 @@ def cmd_plan(args):
         contract = json.load(open(os.path.join(qdir, "acceptance.json")))
     except (OSError, ValueError):
         pass
-    page = planpage.render(quest, args.get("summary") or "", md, meta, why.load(quest), contract, go,
-                           md_to_html, md_inline, path)
+    review = bool(planpage.review_groups(planpage.split(md), kind))
+    page = planpage.render(quest, args.get("summary") or "", md, meta, why_card, contract, go,
+                           md_to_html, md_inline, path, kind=kind)
     decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
                                 "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},
                                             {"id": "change", "label": "Change it", "why": "your notes go back; it replans"}]}]}
+    decisions["shape"] = kind
+    if review:
+        decisions["review"] = True
     if args.get("board"):                               # redo an open board in place (same id, same question)
         d = board_dir(quest, args["board"])
+        copy_pictures(pics, os.path.join(d, "pics"))
         open(os.path.join(d, "content.html"), "w").write(page)
         json.dump(decisions, open(os.path.join(d, "decisions.json"), "w"), indent=2)
         print(f"board {args['board']} redrawn")
         return
     tmp = os.path.join(GUILD_HOME, ".plan-tmp")
+    subprocess.run(["rm", "-rf", tmp])
+    os.makedirs(tmp, exist_ok=True)
+    copy_pictures(pics, os.path.join(tmp, "pics"))
+    open(os.path.join(tmp, "page.html"), "w").write(page)
+    json.dump(decisions, open(os.path.join(GUILD_HOME, ".plan-decisions.json"), "w"), indent=2)
+    args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(GUILD_HOME, ".plan-decisions.json"),
+                title=f"Approve the plan: {quest}", assets=bool(pics))
+    cmd_open(args)
+
+
+def plan_pictures(md, qdir, meta):
+    """plan.md's ![caption](path) pictures: each file found (absolute, ~, or beside plan.md, or in the
+    worktree), renamed under pics/ and the Markdown pointed there. Web links stay as they are."""
+    pics = []
+
+    def swap(m):
+        cap, src = m.group(1), m.group(2)
+        if re.match(r"^(https?:|pics/)", src):
+            return m.group(0)
+        src_ = os.path.expanduser(src)
+        found = next((p for p in ([src_] if os.path.isabs(src_) else
+                                  [os.path.join(qdir, src_), os.path.join(meta.get("worktree") or qdir, src_)])
+                      if os.path.isfile(p)), None)
+        if not found:
+            raise SystemExit(f"guild plan: plan.md shows a picture that is not there: {src}")
+        base = re.sub(r"[^a-z0-9]+", "-", os.path.splitext(os.path.basename(found))[0].lower()).strip("-") or "picture"
+        name = f"{len(pics) + 1:02d}-{base}{os.path.splitext(found)[1].lower() or '.png'}"
+        pics.append((found, name))
+        return f"![{cap}](pics/{name})"
+    import planpage
+    return planpage.IMG.sub(swap, md), pics
+
+
+def copy_pictures(pics, dest):
+    if pics:
+        os.makedirs(dest, exist_ok=True)
+    for src, name in pics:
+        subprocess.run(["cp", src, os.path.join(dest, name)], check=True)
+
+
+FINDINGS_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>__TITLE__</title>
+<style> body { max-width: 980px; } .lead2 { color: var(--dim); font-size: 14px; margin: 0 0 10px; }
+ .sev.high { color: #c0392b; } .sev.medium { color: #b9770e; } .sev.low { color: var(--dim); }
+ .rv-d pre { white-space: pre-wrap; margin: 4px 0; font-size: 13px; }
+ html.realm.rm-dark .sev.high { color: #ff7a66; } html.realm.rm-dark .sev.medium { color: #f0b45a; }</style></head><body>
+<h1>__TITLE__</h1>
+<p class="summary">__SUMMARY__</p>
+__REVIEW__
+<p class="hint">Nothing is posted anywhere from this page. The points you agree with go back with your answer; a draft
+of PR comments is only a draft until you say to post it.</p>
+</body></html>
+"""
+SEVERITY = (("high", "Must fix"), ("medium", "Should fix"), ("low", "Worth a look"))
+
+
+def cmd_findings(args):
+    """A code review's findings as points you mark: Agree, Disagree or Not sure, with your eyes on each.
+    findings.json: {"title", "summary", "pr", "findings": [{"file", "line", "summary", "failure_scenario",
+    "severity": "high|medium|low", "category", "comment"}]}"""
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    import planpage
+    spec = json.load(open(args["file"]))
+    items = spec.get("findings") or []
+    if not items:
+        raise SystemExit("guild findings: no findings in " + args["file"])
+    esc = _html.escape
+    groups = []
+    for n, (sev, title) in enumerate([s for s in SEVERITY if any((f.get("severity") or "medium") == s[0] for f in items)], 1):
+        points = []
+        for i, f in enumerate([f for f in items if (f.get("severity") or "medium") == sev], 1):
+            where = f"{f.get('file', '')}" + (f":{f['line']}" if f.get("line") else "")
+            detail = (f'<div class="rv-d"><p><span class="sev {sev}">{esc(sev)}</span>'
+                      + (f" · {esc(f['category'])}" if f.get("category") else "")
+                      + (f" · <code>{esc(where)}</code>" if where else "") + "</p>"
+                      + (f"<p><b>When it breaks:</b> {esc(f['failure_scenario'])}</p>" if f.get("failure_scenario") else "")
+                      + (f"<p><b>Comment I would leave:</b></p><pre>{esc(f['comment'])}</pre>" if f.get("comment") else "")
+                      + "</div>")
+            points.append((f"{n}.{i}", f.get("summary", ""), detail))
+        groups.append((sev, title, points))
+    quest = args.get("quest") or os.environ.get("GUILD_QUEST") or "reviews"
+    lead = ("Mark each finding: <b>Agree</b> if you see the same problem, <b>Disagree</b> if it is wrong or not worth it, "
+            "<b>Not sure</b> if you want me to show more. A disagree or a doubt asks for a short note.")
+    review = planpage.review_html(f"findings:{quest}:{os.path.basename(args['file'])}", groups,
+                                  head="My findings, point by point", lead=lead, change="Disagree", label="Findings")
+    title = spec.get("title") or "Review findings"
+    summary = spec.get("summary") or ""
+    if spec.get("pr"):
+        summary = (summary + " " if summary else "") + f"PR: {spec['pr']}"
+    page = (FINDINGS_PAGE.replace("__TITLE__", esc(title)).replace("__SUMMARY__", md_inline(summary, auto_code=True))
+            .replace("__REVIEW__", review))
+    decisions = {"questions": [{"id": "next", "title": "What should I do with the points you agree with?", "type": "single",
+                                "options": [{"id": "fix", "label": "Fix them", "why": "I fix the agreed points on the branch"},
+                                            {"id": "draft", "label": "Draft PR comments", "why": "I write the comments for you to read; nothing is posted until you say so"},
+                                            {"id": "explain", "label": "Show me more", "why": "I answer your Not sure points here first"},
+                                            {"id": "keep", "label": "Keep as notes", "why": "nothing else happens"}]}],
+                 "review": True}
+    tmp = os.path.join(GUILD_HOME, ".findings-tmp")
     os.makedirs(tmp, exist_ok=True)
     open(os.path.join(tmp, "page.html"), "w").write(page)
     json.dump(decisions, open(os.path.join(tmp, "decisions.json"), "w"), indent=2)
-    args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(tmp, "decisions.json"),
-                title=f"Approve the plan: {quest}")
+    args.update(quest=quest, html=os.path.join(tmp, "page.html"), decisions=os.path.join(tmp, "decisions.json"),
+                title=title)
     cmd_open(args)
 
 
@@ -1207,9 +1560,14 @@ ASK_PAGE = """<!doctype html>
  .opt.suggested { border-left-color:#e0af68; }
  .opt.suggested .id { color:#e0af68; }
  .hint { color:var(--dim); font-size:13px; margin-top:28px; border-top:1px solid var(--line); padding-top:14px; }
+ .pics { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin:0 0 26px; }
+ .pics figure { margin:0; }
+ .pics img { display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:8px; background:#fff; }
+ .pics figcaption { color:var(--dim); font-size:13px; margin-top:6px; }
 </style></head><body>
 <h1>__QUESTION__</h1>
 __DETAIL__
+__PICTURES__
 __OPTIONS__
 <p class="hint">Choose in the panel (beside this page, or below it on a narrow window). Notes and screenshots go there too.</p>
 </body></html>
@@ -1241,9 +1599,39 @@ def cmd_ask(args):
                       f'{" · suggested" if suggested else ""}</div>'
                       f'<div class="label">{_esc(o["label"])}</div>{why}</div>')
     detail = detail_html(args.get("detail") or "")
+
+    # A picture the question talks about has to be on the board, not only named in the text.
+    pics = args.get("image") or []
+    if isinstance(pics, str):
+        pics = [pics]
+    if not pics:
+        spoken = " ".join([question, args.get("detail") or ""] + [o["label"] + " " + o["why"] for o in options])
+        named = re.findall(r"[^\s\"'`()]+\.(?:png|jpe?g|webp|gif|svg)\b", spoken, re.I)
+        if named:
+            raise SystemExit(f"guild ask: the text names a picture ({named[0]}) but the board would show none. "
+                             f"Pass it: --image \"<path>=<caption>\" (repeat for more). The guildmaster judges a screen by seeing it.")
+
+    tmp = os.path.join(GUILD_HOME, ".ask-tmp")
+    subprocess.run(["rm", "-rf", tmp])
+    os.makedirs(os.path.join(tmp, "pics"), exist_ok=True)
+    figures = []
+    for n, item in enumerate(pics, 1):
+        src, _, caption = item.partition("=")
+        src = os.path.expanduser(src.strip())
+        if not os.path.isfile(src):
+            raise SystemExit(f"guild ask: --image not found: {src}")
+        ext = os.path.splitext(src)[1].lower() or ".png"
+        name = f"{n:02d}-{re.sub(r'[^a-z0-9]+', '-', os.path.splitext(os.path.basename(src))[0].lower()).strip('-') or 'picture'}{ext}"
+        subprocess.run(["cp", src, os.path.join(tmp, "pics", name)], check=True)
+        caption = caption.strip()
+        cap = f"<figcaption>{md_inline(caption, auto_code=True)}</figcaption>" if caption else ""
+        figures.append(f'<figure><img src="pics/{name}" alt="{_esc(caption)}">{cap}</figure>')
+    pictures = f'<div class="pics">{"".join(figures)}</div>' if figures else ""
+
     page = (ASK_PAGE.replace("__TITLE__", _esc(args.get("title") or question[:60]))
             .replace("__QUESTION__", _esc(question))
             .replace("__DETAIL__", detail)
+            .replace("__PICTURES__", pictures)
             .replace("__OPTIONS__", "\n".join(blocks)))
 
     question_id = "choice"
@@ -1256,8 +1644,6 @@ def cmd_ask(args):
         "options": [{"id": o["id"], "label": o["label"], "why": o["why"]} for o in options],
     }]}
 
-    tmp = os.path.join(GUILD_HOME, ".ask-tmp")
-    os.makedirs(tmp, exist_ok=True)
     page_path, dec_path = os.path.join(tmp, "page.html"), os.path.join(tmp, "decisions.json")
     with open(page_path, "w") as f:
         f.write(page)
@@ -1265,6 +1651,8 @@ def cmd_ask(args):
         json.dump(decisions, f, indent=2)
 
     args["html"], args["decisions"] = page_path, dec_path
+    if figures:
+        args["assets"] = True                     # the pics folder travels with the page
     args.setdefault("title", question[:60])
     cmd_open(args)
 
@@ -1306,10 +1694,10 @@ def main():
             if not isinstance(args.get(key), list):  # keep what a repeated flag collected
                 args[key] = True
         elif key:
-            if key == "option":
-                if not isinstance(args.get("option"), list):
-                    args["option"] = []
-                args["option"].append(token)
+            if key in ("option", "image"):
+                if not isinstance(args.get(key), list):
+                    args[key] = []
+                args[key].append(token)
             else:
                 args[key] = token
             key = None
@@ -1322,6 +1710,9 @@ def main():
         args["quest"] = positional[0]
         args["summary"] = positional[1] if len(positional) > 1 else ""
         return cmd_plan(args)
+    if cmd == "findings":
+        args["file"] = positional[0]
+        return cmd_findings(args)
     if cmd == "ask":
         args["quest"] = positional[0]
         args["question"] = positional[1]
