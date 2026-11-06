@@ -43,6 +43,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Quest-event email: its own throwaway home, so it cannot disturb (or be disturbed by) the rest.
+# `test/run.sh notify_email` runs only this file and fails on any FAIL line or a crash.
+run_notify_email() {
+  section "quest emails (notify_email)"
+  mkdir -p "$TMP/ne/.guild/local"
+  local line out code
+  out=$(GUILD_HOME="$TMP/ne/.guild" HOME="$TMP/ne" python3 "$REPO/test/notify_email.py" "$REPO" 2>&1); code=$?
+  while IFS= read -r line; do
+    case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; "") ;; *) bad "notify_email test said: $line" ;; esac
+  done <<< "$out"
+  [ "$code" -eq 0 ] || bad "notify_email.py exited with $code"
+  [ -n "$out" ] || bad "notify_email.py ran no checks"
+}
+if [ "${1:-}" = notify_email ]; then
+  run_notify_email
+  printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
+  [ "$fail" -eq 0 ]
+  exit
+fi
+
 # ── fixtures ──────────────────────────────────────────────────────────────────
 cat > "$TMP/stub/claude" <<'STUB'
 #!/bin/sh
@@ -1667,6 +1687,9 @@ section "alerts and compaction"
 while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "alerts test said: $line" ;; esac
 done < <(python3 "$REPO/test/alerts.py" "$REPO" 2>&1)
+
+# ── quest emails ──────────────────────────────────────────────────────────────
+run_notify_email
 
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"

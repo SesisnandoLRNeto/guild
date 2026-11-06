@@ -97,7 +97,8 @@ guild validate export <slug> [--out F]  a standalone copy for the team (images i
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
 guild notify test                   check that notifications reach you (Mac, and ntfy if set)
-guild notify email <to> [from]|off  email the alerts (PR follow-ups, Claude usage, a question waiting 2h)
+guild notify email <to> [from]|off  email the alerts (PR follow-ups, Claude usage, a question waiting 2h) and quest events
+guild notify email events on|off    quest events (decision, blocked, failed, done) by email: default on; reply to a decision mail to answer it
 guild alerts [check|compact]        what is wrong now; idle quests are compacted before their cache goes cold
 guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest>: <quote>"
                                     a lesson with verbatim quotes from two quests; you accept it on the docket
