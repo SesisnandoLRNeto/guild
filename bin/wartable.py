@@ -677,6 +677,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path in ("/lightbox.js", "/realm.js"):
                 with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
                     return self.send(200, f.read(), "text/javascript; charset=utf-8")
+            if path == "/remote/qr":       # the phone link as a big QR code; only on this Mac, never on the remote copy
+                if isinstance(self, RemoteHandler):
+                    return self.send(404, "not here")
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import notify, qr
+                cfg = notify.config()
+                if not (cfg.get("remote") and cfg.get("key")):
+                    return self.send(200, "<p style='font:18px sans-serif;padding:24px'>Remote is off. Run <code>guild remote on</code> "
+                                          "and <code>guild remote restart</code>, then reload.</p>")
+                url = notify.console_url(cfg)
+                return self.send(200, "<!doctype html><meta name=viewport content='width=device-width'><title>Phone Link</title>"
+                                      "<body style='margin:0;min-height:100vh;display:grid;place-items:center;background:#fff;font:16px sans-serif'>"
+                                      f"<div style='text-align:center'>{qr.svg(url, scale=10)}<p>Scan with the phone camera, Tailscale on.<br>"
+                                      "Keep this link to yourself: it can type into your quests.</p></div>")
             if path in ("/console", "/console.json", "/console/screen"):   # the quest console, for the phone
                 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
                 import console

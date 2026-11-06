@@ -3,7 +3,7 @@
 
   notify.py event <slug> <state> <note>   called for every guild event; notifies on the ones
                                           that need you (a decision, a block, a failure, done)
-  notify.py remote on|off|status|url      the war table on your Tailscale address, behind a key
+  notify.py remote on|off|status|url|qr   the war table on your Tailscale address, behind a key (qr: scan it)
   notify.py test                          send a test notification the configured ways
   notify.py email <to> [from] | off       email alerts to <to>, sent from the Gmail account [from]
 
@@ -31,6 +31,8 @@ from email.message import EmailMessage
 import subprocess
 import sys
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 GUILD_HOME = os.environ.get("GUILD_HOME", os.path.expanduser("~/.guild"))
 CONFIG = os.path.join(GUILD_HOME, "local", "remote.json")
@@ -132,6 +134,19 @@ def on_event(slug, state, note):
     send(f"guild: {slug}", f"{slug} {what}", docket_url())
 
 
+def console_url(cfg=None):
+    """The phone link that lands on the console. The key in it sets a cookie, so every page works after."""
+    return docket_url(cfg).replace("/?k=", "/console?k=", 1)
+
+
+def print_qr(url):
+    """The link as a QR code in the terminal, and as text under it."""
+    import qr
+    print(qr.terminal(url))
+    print(url)
+    print("A bigger code on this Mac: http://127.0.0.1:4711/remote/qr")
+
+
 def remote(cmd):
     cfg = config()
     if cmd == "on":
@@ -140,21 +155,26 @@ def remote(cmd):
             raise SystemExit("guild remote: Tailscale is not running here. Start it (the menu bar app, or `tailscale up`) and run this again.")
         cfg.update(remote=True, bind=ip, port=int(cfg.get("port", 4712)), key=cfg.get("key") or secrets.token_urlsafe(18))
         save(cfg)
-        print("remote on: restart the war table with `guild remote restart`, then open on your phone (same tailnet):")
-        print(docket_url(cfg))
+        print("remote on: restart the war table with `guild remote restart`, then scan this with the phone camera (same tailnet):")
+        print_qr(console_url(cfg))
     elif cmd == "off":
         cfg["remote"] = False
         save(cfg)
         print("remote off: the war table answers on this Mac only after `guild remote restart`")
     elif cmd == "url":
         print(docket_url(cfg))
+    elif cmd == "qr":
+        if not (cfg.get("remote") and cfg.get("key")):
+            raise SystemExit("guild remote qr: remote is off. Run `guild remote on` and `guild remote restart` first.")
+        print("Scan with the phone camera (Tailscale on). It opens the quest console; the docket is one tap away.")
+        print_qr(console_url(cfg))
     elif cmd == "status":
         print(f"remote: {'on at ' + cfg.get('bind', '?') + ':' + str(cfg.get('port', 4712)) if cfg.get('remote') else 'off'}"
               f" · mac notifications: {'on' if cfg.get('mac', True) else 'off'}"
               f" · phone push: {'ntfy ' + cfg['ntfy'].split('/')[2] if cfg.get('ntfy') else 'off'}"
               f" · alert email: {(cfg.get('email') or {}).get('to') or 'off'}")
     else:
-        raise SystemExit("usage: guild remote on|off|status|url|restart")
+        raise SystemExit("usage: guild remote on|off|status|url|qr|restart")
 
 
 def main():

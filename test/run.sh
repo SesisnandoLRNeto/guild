@@ -1680,6 +1680,26 @@ has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://12
 has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
 has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=..%2Fetc')" "no such tab"
 tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm-ctest 2>/dev/null
+# the phone link as a QR code
+out=$(python3 - "$REPO/bin" <<'PY'
+import sys; sys.path.insert(0, sys.argv[1]); import qr
+m = qr.make("http://100.1.2.3:4712/console?k=abcdefghijklmnopqrstuvwx")
+finder = [r[:7] for r in m[:7]]
+print("size", len(m), "finder", finder[0] == [True] * 7 and finder[3] == [True, False, True, True, True, False, True])
+print("version", qr.codewords("hi")[0], qr.codewords("x" * 150)[0])
+try:
+    qr.make("x" * 300)
+except ValueError as e:
+    print("long:", e)
+print("svg", qr.svg("hi").startswith("<svg"))
+PY
+)
+has "a war table link fits a 33-module code with its finder corners" "$out" "size 33 finder True"
+has "the version grows with the text" "$out" "version 1 8"
+has "a text too long for it is refused" "$out" "long: too long for a QR code here"
+has "it renders as SVG for the page" "$out" "svg True"
+has "guild remote qr says when remote is off" "$("$GUILD" remote qr 2>&1)" "remote is off"
+has "the big QR page says when remote is off" "$(curl -s http://127.0.0.1:4899/remote/qr)" "Remote is off"
 
 # ── alerts and compaction ─────────────────────────────────────────────────────
 section "alerts and compaction"

@@ -95,7 +95,7 @@ guild tidy [--dry-run]              move old events to monthly files, delete the
 guild lore                          the bestiary: which class each model is, what each state looks like
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
-guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
+guild remote on|off|status|url|qr|restart   the war table on your Tailscale address, behind a key (qr: scan it)
 guild notify test                   check that notifications reach you (Mac, and ntfy if set)
 guild notify email <to> [from]|off  email the alerts (PR follow-ups, Claude usage, a question waiting 2h)
 guild alerts [check|compact]        what is wrong now; idle quests are compacted before their cache goes cold
