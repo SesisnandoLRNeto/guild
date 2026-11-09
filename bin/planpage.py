@@ -192,7 +192,25 @@ def review_html(quest, groups, head="Agree, point by point", lead=None, change="
             .replace("__KEY__", esc(quest)))
 
 
-def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full"):
+VIDEO = """<section class="pvideo" data-q="__Q__"><h2>Watch the plan</h2>
+<video controls playsinline preload="metadata" hidden></video>
+<p class="pv-wait">The video is being made (about two minutes). It plays here when it is ready.</p></section>
+<script>(function () {
+  const box = document.querySelector('.pvideo'), v = box.querySelector('video'), w = box.querySelector('.pv-wait');
+  const q = '/q/' + box.dataset.q + '/video';
+  function look() {
+    fetch(q + '.json', {cache: 'no-store'}).then((r) => r.json()).then((s) => {
+      if (s.state === 'ready') { v.src = q + '.mp4?v=' + (s.hash || ''); v.hidden = false; w.hidden = true; }
+      else if (s.state === 'failed') { w.textContent = 'The video could not be made: ' + (s.error || 'see video/build.log'); }
+      else if (s.state === 'none') { box.hidden = true; }
+      else setTimeout(look, 4000);
+    }).catch(() => setTimeout(look, 8000));
+  }
+  look();
+})();</script>"""
+
+
+def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full", video=False):
     parts = split(md)
     esc = html.escape
     shots = {k: IMG.findall(v) for k, v in parts.items()}
@@ -247,6 +265,8 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
         contract_html = f"<p class=\"lead2 warn\">No acceptance contract: {esc(meta.get('no_acceptance') or 'none was written')}.</p>"
     reel = (f'<p class="reel"><a href="/q/{esc(quest)}/reel" target="_blank">Watch the reel</a>: this plan as a short '
             'animated story, if you would rather watch than read.</p>') if kind == "full" else ""
+    if video:                                       # the adventurer told the plan as a video: it comes first
+        reel = VIDEO.replace("__Q__", esc(quest))
     return (PAGE.replace("__QUEST__", esc(quest)).replace("__SUMMARY__", md_inline(summary or "", auto_code=True))
             .replace("__SHAPE__", SHAPE_LEAD[kind]).replace("__REEL__", reel)
             .replace("__MINUTE__", minute)
@@ -371,6 +391,8 @@ PAGE = """<!doctype html>
  body { max-width: 1040px; }
  .kicker { font-variant: small-caps; letter-spacing: .08em; color: var(--dim); font-size: 13px; }
  .summary { font-size: 17px; margin: 6px 0 18px; }
+ .pvideo { margin: 0 0 18px; } .pvideo video { display: block; width: 100%; max-width: 360px; aspect-ratio: 9 / 16;
+   margin: 0 auto; border-radius: 10px; background: #000; } .pvideo .pv-wait { color: var(--dim); font-style: italic; }
  .minute { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 8px; }
  .minute.n1 { grid-template-columns: 1fr; } .minute.n2 { grid-template-columns: 1fr 1fr; }
  .shots { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 0 0 8px; } .shots.n2 { grid-template-columns: 1fr 1fr; }

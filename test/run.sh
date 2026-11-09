@@ -972,6 +972,41 @@ has "a picture that is not there is refused" "$out" "a picture that is not there
 sed -i.bak 's#!\[The Role select is empty\](gone.png)#No screen picture: the app does not run here.#; /Crowd Team in the list/d' "$GUILD_HOME/quests/pl/plan.md"
 out=$(GUILD_QUEST=pl "$GUILD" plan ready "Seed the role" 2>&1)
 has "saying why no screen can be shown lets it through" "$out" "board id:"
+
+# the plan video: a one-minute explainer, only when the adventurer writes video.json
+is "the example video.json passes its check" "$("$GUILD" video check "$REPO/web/video-example.json" 2>&1; echo "rc=$?")" "rc=0"
+has "the spec teaches the order of the story" "$("$GUILD" video spec)" "the pain    as a tiny story"
+echo '{"title": "x", "scenes": [{"type": "nope", "say": "hi"}, {"type": "title", "say": ""}]}' > "$GUILD_HOME/quests/pl/video.json"
+out=$(GUILD_QUEST=pl GUILD_VIDEO_NO_BUILD=1 "$GUILD" plan ready "Seed the role" 2>&1)
+has "a broken video.json stops the plan" "$out" "video.json needs work"
+has "and says which scene" "$out" "scene 1: type is one of"
+has "and what it lacks" "$out" 'scene 2 (title): needs "say"'
+cp "$REPO/web/video-example.json" "$GUILD_HOME/quests/pl/video.json"
+out=$(GUILD_QUEST=pl GUILD_VIDEO_NO_BUILD=1 "$GUILD" plan ready "Seed the role" 2>&1)
+pb=$(echo "$out" | awk '/board id:/ {print $3}')
+page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html" 2>/dev/null)
+has "a good one goes on the table" "$out" "board id:"
+has "and the plan page plays it at the top" "$page" '<section class="pvideo" data-q="pl">'
+is "no build yet: the page is told there is none" "$(curl -s http://127.0.0.1:4899/q/pl/video.json)" '{"state": "none"}'
+is "no file yet" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/q/pl/video.mp4)" "404"
+if command -v ffmpeg >/dev/null && [ -n "$(python3 -c "import sys; sys.path.insert(0, '$REPO/bin'); import shot; print(shot.find_browser() or '')")" ]; then
+  python3 - "$GUILD_HOME/quests/pl/video.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+s["scenes"] = [s["scenes"][0], s["scenes"][5], s["scenes"][7]]
+json.dump(s, open(sys.argv[1], "w"))
+PY
+  out=$(GUILD_VIDEO_VOICE=off GUILD_VIDEO_FPS=4 "$GUILD" video build pl 2>&1)
+  has "it builds into the quest folder" "$out" "video/video.mp4"
+  has "and says it is ready" "$("$GUILD" video status pl)" '"state": "ready"'
+  has "the file is a real video" "$(ffprobe -v error -show_entries stream=codec_name,width -of csv=p=0 "$GUILD_HOME/quests/pl/video/video.mp4")" "h264,1080"
+  hdr=$(curl -s -D - -o /dev/null -H "Range: bytes=0-99" http://127.0.0.1:4899/q/pl/video.mp4 | tr -d '\r')
+  has "it is served in ranges, so a phone plays it" "$hdr" "206 Partial Content"
+  has "with the range it sent" "$hdr" "Content-Range: bytes 0-99/"
+  has "the same video.json is not built twice" "$(GUILD_VIDEO_VOICE=off GUILD_VIDEO_FPS=4 "$GUILD" video build pl 2>&1)" "already built"
+else
+  echo "  (plan video build skipped: needs ffmpeg and Chrome)"
+fi
 "$GUILD" close pl --force >/dev/null 2>&1
 
 # findings: a code review as points you mark with your own eyes

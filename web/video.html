@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Plan video</title>
+<!-- The plan video's scenes. video.py fills window.REEL and calls render(t) for each frame. -->
+<style>
+:root{--bg:#170f09;--gold:#d9a441;--paper:#f3e7c9;--soft:#a8916f;--seal:#d0463a;--ok:#5fae55;--card:#24180f;--line:#4a3322}
+*{box-sizing:border-box}
+body{margin:0;width:540px;height:960px;overflow:hidden;background:var(--bg);color:var(--paper);font-family:"Avenir Next",Helvetica,Arial,sans-serif}
+#stage{position:relative;width:540px;height:960px;overflow:hidden;background:radial-gradient(ellipse at 50% 32%,#2e1f13 0%,#170f09 72%)}
+#stage:before{content:"";position:absolute;inset:0;opacity:.55;background-size:36px 36px;
+  background-image:linear-gradient(rgba(217,164,65,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(217,164,65,.07) 1px,transparent 1px)}
+.mono{font-family:Menlo,"DejaVu Sans Mono",monospace}
+.cond{font-family:"Avenir Next Condensed","Avenir Next","Arial Narrow",sans-serif;font-weight:800;text-transform:uppercase}
+em{font-style:normal;color:var(--gold)}
+#head{position:absolute;top:24px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:2px;z-index:3}
+#head .brand{color:var(--gold)} #head .tk{color:var(--soft);border:1px solid var(--line);padding:3px 7px;border-radius:3px}
+#bar{position:absolute;top:50px;left:24px;right:24px;display:flex;gap:5px;z-index:3}
+#bar i{flex:1;height:3px;background:#3a2a1c;border-radius:2px;overflow:hidden} #bar b{display:block;height:100%;background:var(--gold);width:0}
+.scene{position:absolute;inset:0;display:none;z-index:2}
+.zone{position:absolute;left:28px;right:28px;top:92px;height:540px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:16px}
+#cap{position:absolute;left:34px;right:34px;top:672px;z-index:3;border-left:4px solid var(--gold);padding:2px 0 2px 14px;font-size:35px;line-height:1.12;min-height:46px}
+#cap:empty{border-color:transparent}
+#cap .w{color:#4f3f2f} #cap .w.on{color:var(--paper)} #cap .w.on.key{color:var(--gold)}
+.label{font-size:11px;letter-spacing:2.5px;color:var(--gold);text-transform:uppercase;text-align:center}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:16px 18px;width:100%}
+.card.bad{border-color:var(--seal)} .card.good{border-color:var(--ok)}
+.tag{display:inline-block;font-size:12px;letter-spacing:1.5px;padding:4px 8px;border-radius:4px;font-weight:700;text-transform:uppercase}
+.tag.bad{background:var(--seal);color:#fff} .tag.good{background:var(--ok);color:#10200e} .tag.gold{background:var(--gold);color:#2a1a0c}
+.note{font-size:13px;color:var(--soft);letter-spacing:1.2px;text-align:center;line-height:1.6;text-transform:uppercase}
+.err{font-size:12.5px;color:#f0a79f;margin-top:10px;line-height:1.45}
+.res{display:flex;align-items:center;gap:12px;font-size:19px}
+.brk{position:absolute;width:46px;height:46px;border:3px solid var(--gold)}
+.big{font-size:66px;line-height:.95;text-align:center;letter-spacing:1px}
+.mid{font-size:44px;line-height:1;text-align:center}
+.parts{display:flex;align-items:center;gap:8px;width:100%;justify-content:center}
+.part{width:116px;text-align:center}
+.part .ic{width:86px;height:86px;margin:0 auto 10px;border:2px solid var(--gold);border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--card)}
+.part .nm{font-size:11.5px;letter-spacing:1.5px;line-height:1.35;text-transform:uppercase}
+.arrow{width:18px;height:2px;background:var(--gold);transform-origin:left;flex:none}
+.down{width:2px;height:28px;background:var(--gold);transform-origin:top}
+.sheet{width:100%;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;font-size:15px}
+.sheet .r{display:grid}
+.sheet span{padding:10px 10px;border-right:1px solid var(--line);border-top:1px solid var(--line);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.sheet span:last-child{border-right:0} .sheet .r:first-child span{border-top:0}
+.sheet .hd span{background:#332316;color:var(--soft);font-size:12px;letter-spacing:1px}
+.sheet .hl{background:rgba(217,164,65,.18);color:var(--gold);font-weight:700}
+.date{font-size:58px;letter-spacing:2px;display:flex;justify-content:center;white-space:pre}
+.date span{display:inline-block}
+.chip{font-size:12px;letter-spacing:2px;border:1.5px solid var(--gold);color:var(--gold);padding:6px 12px;border-radius:20px;text-transform:uppercase}
+.chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.flow{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+.menu{width:300px;font-size:15px;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.menu div{padding:10px 14px;border-bottom:1px solid var(--line);color:var(--soft)} .menu div:last-child{border:0}
+.menu .sel{background:var(--gold);color:#2a1a0c;font-weight:700}
+.pic{position:relative;max-width:100%;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.pic img{display:block;max-width:484px;max-height:430px}
+.ring{position:absolute;border:4px solid var(--seal);border-radius:10px;box-shadow:0 0 0 4px rgba(208,70,58,.25)}
+.pill{background:var(--paper);color:#2a1a0c;font-size:20px;letter-spacing:2px;padding:10px 22px;border-radius:30px}
+.item{display:flex;gap:14px;align-items:flex-start;border-color:var(--gold)}
+.num{flex:0 0 30px;height:30px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--gold);font-weight:700;font-size:15px}
+.item .t{font-size:19px;letter-spacing:.5px} .item .s{font-size:13px;color:var(--soft);margin-top:4px;line-height:1.4}
+.item svg{margin-left:auto;flex:0 0 28px}
+.q{font-size:21px;text-align:center;line-height:1.3;font-weight:600}
+.opt{display:flex;align-items:center;gap:12px;font-size:17px}
+.opt.pick{border-color:var(--gold);box-shadow:0 0 0 3px rgba(217,164,65,.18)}
+.opt .k{font-weight:800;color:var(--gold);font-size:20px;width:20px}
+</style></head><body>
+<div id="stage">
+  <div id="head" class="mono"><span class="brand">GUILD &middot; PLAN</span><span class="tk" id="tag"></span></div>
+  <div id="bar"></div>
+  <div id="scenes"></div>
+  <div id="cap" class="cond"></div>
+</div>
+<script>/*__REEL__*/</script>
+<script>
+const SPEC = window.REEL.spec, T = window.REEL.timing;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const fmt = (s) => esc(s).replace(/\*([^*]+)\*/g, '<em>$1</em>');
+const tone = (good) => good === true ? 'good' : good === false ? 'bad' : '';
+const TICK = (at) => `<svg width="28" height="28" viewBox="0 0 28 28"><path d="M5 15l6 6 12-14" fill="none" stroke="#5fae55" stroke-width="4" stroke-linecap="round" data-at="${at}" data-fx="tick" data-len="30"/></svg>`;
+const P = 'fill="none" stroke="#d9a441" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"';
+const ICON = {
+  file: `<svg width="44" height="52" viewBox="0 0 46 54" ${P}><path d="M4 3h26l12 12v36H4z"/><path d="M30 3v12h12M11 26h24M11 34h24M11 42h16"/></svg>`,
+  table: `<svg width="50" height="44" viewBox="0 0 52 46" ${P}><rect x="3" y="3" width="46" height="40" rx="3"/><path d="M3 16h46M3 29h46M19 3v40M35 3v40"/></svg>`,
+  check: `<svg width="44" height="52" viewBox="0 0 44 52" ${P}><path d="M22 3l17 6v15c0 12-8 20-17 25C13 44 5 36 5 24V9z"/><path d="M14 26l6 6 11-12"/></svg>`,
+  user: `<svg width="46" height="48" viewBox="0 0 46 48" ${P}><circle cx="23" cy="15" r="10"/><path d="M4 45c2-11 10-16 19-16s17 5 19 16"/></svg>`,
+  screen: `<svg width="52" height="46" viewBox="0 0 52 46" ${P}><rect x="3" y="3" width="46" height="32" rx="3"/><path d="M18 43h16M26 35v8"/></svg>`,
+  server: `<svg width="46" height="50" viewBox="0 0 46 50" ${P}><rect x="4" y="4" width="38" height="18" rx="3"/><rect x="4" y="28" width="38" height="18" rx="3"/><path d="M12 13h2M12 37h2"/></svg>`,
+  db: `<svg width="44" height="52" viewBox="0 0 44 52" ${P}><ellipse cx="22" cy="9" rx="18" ry="6"/><path d="M4 9v34c0 3 8 6 18 6s18-3 18-6V9M4 26c0 3 8 6 18 6s18-3 18-6"/></svg>`,
+  mail: `<svg width="52" height="40" viewBox="0 0 52 40" ${P}><rect x="3" y="3" width="46" height="34" rx="3"/><path d="M3 5l23 18L49 5"/></svg>`,
+  clock: `<svg width="48" height="48" viewBox="0 0 48 48" ${P}><circle cx="24" cy="24" r="20"/><path d="M24 12v13l8 5"/></svg>`,
+  lock: `<svg width="44" height="50" viewBox="0 0 44 50" ${P}><rect x="5" y="22" width="34" height="25" rx="3"/><path d="M12 22v-8a10 10 0 0 1 20 0v8"/></svg>`,
+  phone: `<svg width="34" height="52" viewBox="0 0 34 52" ${P}><rect x="3" y="3" width="28" height="46" rx="5"/><path d="M14 42h6"/></svg>`,
+  gear: `<svg width="48" height="48" viewBox="0 0 48 48" ${P}><circle cx="24" cy="24" r="7"/><path d="M24 4v7M24 37v7M4 24h7M37 24h7M10 10l5 5M33 33l5 5M10 38l5-5M33 15l5-5"/></svg>`,
+  money: `<svg width="52" height="40" viewBox="0 0 52 40" ${P}><rect x="3" y="5" width="46" height="30" rx="3"/><circle cx="26" cy="20" r="7"/><path d="M10 12v0M42 28v0"/></svg>`,
+};
+const result = (r, at) => !r ? '' : `<div class="card res mono ${tone(r.good)}" data-at="${at}" data-fx="pop" style="flex-wrap:wrap">
+  <span>${esc(r.text || '')}</span>${r.tag ? `<span class="tag ${tone(r.good) || 'gold'}" style="margin-left:auto">${esc(r.tag)}</span>` : ''}
+  ${r.good === true ? TICK(at + '+0.3') : ''}${r.note ? `<div class="err" style="width:100%;${r.good ? 'color:var(--soft)' : ''}">${esc(r.note)}</div>` : ''}</div>`;
+const label = (s, d) => (s.label || d) ? `<div class="label mono" data-at="0">${esc(s.label || d)}</div>` : '';
+
+const DRAW = {
+  title: (s) => `
+    <div class="brk" style="top:60px;left:40px;border-right:0;border-bottom:0" data-at="0"></div>
+    <div class="brk" style="top:60px;right:40px;border-left:0;border-bottom:0" data-at="0.1"></div>
+    <div class="brk" style="bottom:60px;left:40px;border-right:0;border-top:0" data-at="0.2"></div>
+    <div class="brk" style="bottom:60px;right:40px;border-left:0;border-top:0" data-at="0.3"></div>
+    <div class="label mono" data-at="0.2">${esc(s.kicker || 'The plan, in one minute')}</div>
+    <div class="big cond" data-at="0.4" data-fx="pop" style="padding:0 40px">${fmt(s.title)}</div>
+    ${s.sub ? `<div class="note mono" data-at="0.9" style="padding:0 50px">${esc(s.sub)}</div>` : ''}`,
+  parts: (s) => `<div class="parts">${s.items.map((it, k) =>
+    (k ? `<div class="arrow" data-at="c${k + 1}" data-fx="grow"></div>` : '') +
+    `<div class="part" data-at="c${k + 1}" data-fx="pop"><div class="ic">${ICON[it.icon] || ICON.gear}</div><div class="nm mono">${esc(it.name)}</div></div>`).join('')}</div>`,
+  table: (s) => {
+    const cols = `grid-template-columns:repeat(${s.head.length},minmax(0,1fr))`;
+    const mk = s.mark || [];
+    return `${label(s)}<div class="sheet mono" data-at="0.2">
+      <div class="r hd" style="${cols}">${s.head.map((h) => `<span>${esc(h)}</span>`).join('')}</div>
+      ${s.rows.map((r, i) => `<div class="r" style="${cols}">${r.map((c, j) => `<span class="${mk[0] === i && mk[1] === j ? 'hl' : ''}">${esc(c)}</span>`).join('')}</div>`).join('')}
+    </div>${s.result ? `<div class="down" data-at="c1" data-fx="growv"></div>${result(s.result, 'c1+0.3')}` : ''}`;
+  },
+  change: (s) => {
+    const b = String(s.before);
+    let big;
+    if (s.drop) {
+      const i = b.indexOf(s.drop);
+      big = `<div class="date mono"><span>${esc(b.slice(0, i))}</span><span data-at="c1" data-fx="drop">${esc(s.drop)}</span><span>${esc(b.slice(i + s.drop.length))}</span></div>`;
+      return `${s.label ? `<div class="chip mono" data-at="0.2">${esc(s.label)}</div>` : ''}${big}${result(s.result, 'c2')}`;
+    }
+    return `${label(s)}<div class="flow">
+      <div class="card mono" data-at="0.2" style="text-align:center"><div style="font-size:34px">${esc(b)}</div></div>
+      ${s.after ? `<div class="down" data-at="c1-0.4" data-fx="growv"></div>
+      ${s.via ? `<div class="chip mono" data-at="c1-0.2">${esc(s.via)}</div><div class="down" data-at="c1" data-fx="growv"></div>` : ''}
+      <div class="card mono ${tone(s.good)}" data-at="c1+0.2" data-fx="pop" style="text-align:center"><div style="font-size:34px">${esc(s.after)}</div></div>` : ''}
+    </div>${result(s.result, 'c2')}`;
+  },
+  card: (s) => `${label(s)}
+    <div class="mid cond" data-at="0.3" data-fx="pop">${fmt(s.text)}</div>
+    ${(s.lines || []).length ? `<div class="menu mono" data-at="0.6">${s.lines.map((l, i) => `<div ${i === s.pick ? 'data-at="c1" data-fx="sel"' : ''}>${esc(l)}</div>`).join('')}</div>` : ''}
+    ${s.tag ? `<div data-at="c1" data-fx="pop"><span class="tag ${tone(s.good) || 'gold'}" style="font-size:18px;padding:8px 16px">${esc(s.tag)}</span></div>` : ''}
+    ${s.note ? `<div class="note mono" data-at="c1+0.4">${esc(s.note)}</div>` : ''}`,
+  picture: (s) => `${label(s)}<div class="pic" data-at="0.2"><img src="${esc(s.src)}">
+    ${s.box ? `<div class="ring" data-at="c1" data-fx="ring" style="left:${s.box[0]}%;top:${s.box[1]}%;width:${s.box[2]}%;height:${s.box[3]}%"></div>` : ''}</div>
+    ${s.caption ? `<div class="note mono" data-at="0.6">${esc(s.caption)}</div>` : ''}`,
+  turn: (s) => `<div class="pill cond" data-at="0" data-fx="pop">${esc(s.pill || 'The good news')}</div>
+    <div class="big cond" data-at="c1" data-fx="pop" style="font-size:56px">${fmt(s.text)}</div>
+    <div class="chips">${(s.chips || []).map((c, i) => `<span class="chip mono" data-at="c1+${(0.4 + i * 0.2).toFixed(1)}">${esc(c)}</span>`).join('')}</div>`,
+  checklist: (s) => `${label(s)}${s.items.map((it, k) => `<div class="card item" data-at="c${k + 1}"><div class="num">${k + 1}</div>
+    <div><div class="t cond">${fmt(it.title)}</div>${it.sub ? `<div class="s mono">${esc(it.sub)}</div>` : ''}</div>${TICK(`c${k + 1}+0.8`)}</div>`).join('')}`,
+  decision: (s) => `${label(s, 'Your call')}<div class="q" data-at="c1">${fmt(s.question)}</div>
+    ${s.options.map((o, i) => `<div class="card opt ${o.pick ? 'pick' : ''}" data-at="c2+${(i * 0.2).toFixed(1)}"><span class="k">${esc(o.key || 'AB'[i])}</span>
+      <span>${esc(o.text)}</span>${o.pick ? '<span class="tag gold" style="margin-left:auto">My pick</span>' : ''}</div>`).join('')}
+    ${s.note ? `<div class="note mono" data-at="c2+0.6">${esc(s.note)}</div>` : ''}`,
+};
+
+document.getElementById('tag').textContent = SPEC.tag || '';
+const host = document.getElementById('scenes');
+SPEC.scenes.forEach((s, i) => host.insertAdjacentHTML('beforeend',
+  `<section class="scene"><div class="zone" ${s.type === 'checklist' ? 'style="gap:12px"' : ''}>${DRAW[s.type](s)}</div></section>`));
+const els = [...host.children];
+const bar = document.getElementById('bar');
+T.scenes.forEach(() => bar.insertAdjacentHTML('beforeend', '<i><b></b></i>'));
+const fills = [...bar.querySelectorAll('b')];
+const cap = document.getElementById('cap');
+// marks the narration did not place come in evenly while it speaks
+T.scenes.forEach((t, i) => {
+  const used = [...els[i].querySelectorAll('[data-at]')].map((e) => +((/c(\d)/.exec(e.dataset.at) || [])[1] || 0));
+  const n = Math.max(0, ...used);
+  for (let k = 1; k <= n; k++) if (t.cues['c' + k] === undefined) t.cues['c' + k] = 0.3 + (t.speech - 0.3) * k / (n + 1);
+});
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const out3 = (p) => 1 - Math.pow(1 - p, 3);
+const back = (p) => 1 + 2.7 * Math.pow(p - 1, 3) + 1.7 * Math.pow(p - 1, 2);
+function at(spec, t) {
+  const m = /^c(\d)([+-][\d.]+)?$/.exec(spec);
+  return m ? t.cues['c' + m[1]] + (m[2] ? parseFloat(m[2]) : 0) : parseFloat(spec);
+}
+function render(time) {
+  let i = T.scenes.findIndex((s) => time >= s.start && time < s.start + s.dur);
+  if (i < 0) i = T.scenes.length - 1;
+  const t = T.scenes[i], lt = time - t.start;
+  els.forEach((el, k) => (el.style.display = k === i ? 'block' : 'none'));
+  fills.forEach((f, k) => (f.style.width = (k < i ? 100 : k > i ? 0 : clamp(lt / t.dur) * 100) + '%'));
+  els[i].style.opacity = clamp(lt / 0.15);
+  els[i].querySelectorAll('[data-at]').forEach((el) => {
+    const a = at(el.dataset.at, t), fx = el.dataset.fx || 'up', p = clamp((lt - a) / 0.4);
+    if (fx === 'up') { el.style.opacity = out3(p); el.style.transform = `translateY(${(1 - out3(p)) * 22}px)`; }
+    else if (fx === 'pop') { el.style.opacity = clamp(p * 2); el.style.transform = `scale(${0.8 + 0.2 * back(p)})`; }
+    else if (fx === 'grow') el.style.transform = `scaleX(${out3(p)})`;
+    else if (fx === 'growv') el.style.transform = `scaleY(${out3(p)})`;
+    else if (fx === 'tick') { const L = +el.dataset.len; el.style.strokeDasharray = L; el.style.strokeDashoffset = L * (1 - out3(p)); }
+    else if (fx === 'sel') el.classList.toggle('sel', lt >= a);
+    else if (fx === 'ring') { el.style.opacity = clamp(p * 2); el.style.transform = `scale(${1.25 - 0.25 * out3(p)})`; }
+    else if (fx === 'drop') {
+      const q = clamp((lt - a - 0.35) / 0.7);
+      el.style.color = lt >= a ? 'var(--seal)' : '';
+      el.style.textDecoration = lt >= a ? 'line-through' : '';
+      el.style.transform = `translateY(${q * q * 140}px) rotate(${q * 40}deg)`;
+      el.style.opacity = 1 - clamp((q - 0.4) / 0.6);
+    }
+  });
+  const ch = t.chunks.filter((c) => t.words[c[0]].t <= lt).pop();
+  cap.innerHTML = ch ? t.words.slice(ch[0], ch[1]).map((w) =>
+    `<span class="w${w.t <= lt ? ' on' : ''}${w.key ? ' key' : ''}">${esc(w.w)}</span>`).join(' ') : '';
+}
+window.render = render;
+render(0);
+</script>
+</body></html>

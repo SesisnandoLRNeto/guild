@@ -659,6 +659,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_file_ranged(self, target, ctype):
+        """A file, in byte ranges when asked: Safari on the phone will not play a video without them."""
+        if not os.path.isfile(target):
+            return self.send(404, "not found")
+        size = os.path.getsize(target)
+        m = re.match(r"bytes=(\d*)-(\d*)$", (self.headers.get("Range") or "").strip())
+        start, end, code = 0, size - 1, 200
+        if m and (m.group(1) or m.group(2)):
+            if m.group(1):
+                start, end = int(m.group(1)), min(int(m.group(2)) if m.group(2) else size - 1, size - 1)
+            else:
+                start = max(0, size - int(m.group(2)))
+            if start > end or start >= size:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            code = 206
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(end - start + 1))
+        if code == 206:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        with open(target, "rb") as f:
+            f.seek(start)
+            left = end - start + 1
+            while left > 0:
+                chunk = f.read(min(left, 1 << 16))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
         try:
@@ -745,6 +782,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
                 import reel
                 return self.send(200, json.dumps(reel.build(v.group(1))), "application/json")
+            v = re.match(r"^/q/([A-Za-z0-9._-]+)/video\.(json|mp4)$", path)
+            if v:                                   # the plan video: its state, and the file (in ranges, for phones)
+                if not os.path.isdir(os.path.join(QUESTS, v.group(1))):
+                    return self.send(404, "no such quest")
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import video
+                if v.group(2) == "json":
+                    st = video.status(v.group(1))
+                    return self.send(200, json.dumps({k: st.get(k) for k in ("state", "hash", "error", "seconds") if k in st}),
+                                     "application/json")
+                return self.send_file_ranged(os.path.join(video.vdir(v.group(1)), "video.mp4"), "video/mp4")
             v = re.match(r"^/q/([A-Za-z0-9._-]+)/files(\.json|/show|/diff)?$", path)
             if v:
                 return self.files_get(v.group(1), v.group(2) or "", urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
@@ -1396,6 +1444,15 @@ def cmd_plan(args):
                          "Then add ![what to look at](path/to/picture.png) to the section. A picture of the result goes in After this plan.\n"
                          "If no screen can be shown, write a line \"No screen picture: <why>\" in The pain.")
     md, pics = plan_pictures(md, qdir, meta)
+    import video
+    has_video = os.path.exists(os.path.join(qdir, "video.json"))
+    if has_video:                                   # told as a video too: check it now, build it in the background
+        spec, err = video.load(os.path.join(qdir, "video.json"))
+        errs = [err] if err else video.check(spec, video.bases_for(quest))
+        if errs:
+            raise SystemExit("guild plan: video.json needs work (guild video spec shows the format):\n  " + "\n  ".join(errs))
+        if not os.environ.get("GUILD_VIDEO_NO_BUILD"):
+            video.spawn(quest)
     build = meta.get("build_model") or meta.get("model") or "the build model"
     effort = meta.get("build_effort") or ""
     budget = meta.get("budget")
@@ -1412,7 +1469,7 @@ def cmd_plan(args):
         pass
     review = bool(planpage.review_groups(planpage.split(md), kind))
     page = planpage.render(quest, args.get("summary") or "", md, meta, why_card, contract, go,
-                           md_to_html, md_inline, path, kind=kind)
+                           md_to_html, md_inline, path, kind=kind, video=has_video)
     decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
                                 "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},

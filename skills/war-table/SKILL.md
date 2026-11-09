@@ -124,6 +124,10 @@ Each finding is a point they mark Agree, Disagree or Not sure. `summary` is one 
 PR comment you would leave, word for word. The answer brings back the agreed points and what to do with them:
 fix them, draft PR comments (a draft only: never post without their word), show more, or keep as notes.
 
+## The plan video (optional)
+
+For a plan that is a story (a screen, data that changes shape, steps that fail in order), write `quests/<slug>/video.json` before `guild plan ready`: a one-minute explainer the plan page plays at the top. `guild video spec` shows the scene types and the teaching order; `guild video check <slug>` finds the problems. Skip it for small plans, refactors, upgrades, config, tests and docs.
+
 ## The reel (optional)
 
 Guild builds a pixel-art reel of every quest from what it left behind (`guild reel <slug>`, and the "Watch the reel" button on the wrap-up). For a feature, you may tell the story better than the defaults: write `quests/<slug>/reel.json` with up to seven scenes, each `{"kind": "pain|cause|change|build|trial|result|note", "title", "say", "items", "before", "after"}`. `say` is what the narrator reads: one or two plain sentences a product person follows, no file names. A scene you write replaces the one guild would build; a `note` scene is added before the end.
