@@ -99,6 +99,7 @@ guild up ~/Workspace
 | `guild log [slug] [--since 7d] [--repo NAME]` | History: what ran, what it decided, what it cost |
 | `guild retro [--since 14d]` | The facts a retro needs: overruled calls, skipped trials, stalls, spend |
 | `guild board open --html FILE [--decisions FILE] [--assets]` | Put a war table up and open it in the browser |
+| `guild board open [--quest NAME] [ID]` | No `--html`: start the war table if it is down and open board `ID` (or the docket) |
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |

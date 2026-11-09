@@ -54,6 +54,7 @@ guild jira once|watch|status       start quests from your @quartermaster comment
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
+guild board open [--quest NAME] [ID]   no --html: start the war table if it is down and open board ID (or the docket)
                                     (--wrapup marks it as the quest's end-of-work report)
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
@@ -1305,10 +1306,16 @@ cmd_board() {
           *) rest+=("$1"); shift ;;
         esac
       done
+      local has_html=0 a
+      for a in ${rest[@]+"${rest[@]}"}; do [ "$a" = "--html" ] && has_html=1; done
       if [ -n "$slug" ]; then
-        ensure_pseudo_quest "$slug" "board: $slug"
+        # only a new board may create a pseudo quest; a reopen must not invent one
+        if [ "$sub" = open ] && [ "$has_html" = 0 ]; then need_quest "$slug"; else ensure_pseudo_quest "$slug" "board: $slug"; fi
       else
         slug=$(current_quest)
+      fi
+      if [ "$sub" = open ] && [ "$has_html" = 0 ] && [ -z "$slug" ]; then   # bare open: the docket
+        exec python3 "$GUILD_REPO/bin/wartable.py" open ${rest[@]+"${rest[@]}"}
       fi
       [ -n "$slug" ] || die "guild board $sub needs a quest: run it inside one, or pass --quest <name>"
       need_quest "$slug"

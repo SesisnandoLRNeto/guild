@@ -340,6 +340,34 @@ out=$(env -u GUILD_QUEST "$GUILD" board open --quest vision-repo-a --html "$TMP/
 has "a board can live outside a quest" "$out" "/b/vision-repo-a/"
 [ -f "$GUILD_HOME/quests/vision-repo-a/meta.json" ] && ok "under a quest of its own" || bad "under a quest of its own"
 
+# reopening: a stopped war table comes back with its boards
+section "board open without --html"
+stop_wartable() {   # only the suite's own daemon, then wait until its port is free
+  kill "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null
+  for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:4899/" || return 0; sleep 0.1; done
+}
+rb=$(ls "$GUILD_HOME/quests/vision-repo-a/boards" | head -1)
+before=$(cd "$GUILD_HOME/quests/vision-repo-a/boards/$rb" && find . -type f -exec cksum {} + | sort)
+status_before=$(cat "$GUILD_HOME/quests/vision-repo-a/status")
+stop_wartable
+out=$(env -u GUILD_QUEST "$GUILD" board open --quest vision-repo-a "$rb" 2>&1); code=$?
+is "board open reopens an existing board" "$code $out" "0 http://127.0.0.1:4899/b/vision-repo-a/$rb/"
+is "and the page answers again" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/b/vision-repo-a/$rb/")" "200"
+is "and it writes nothing" "$(cd "$GUILD_HOME/quests/vision-repo-a/boards/$rb" && find . -type f -exec cksum {} + | sort)" "$before"
+is "nor changes the quest" "$(cat "$GUILD_HOME/quests/vision-repo-a/status")" "$status_before"
+out=$(env -u GUILD_QUEST "$GUILD" board open --no-open --quest vision-repo-a nosuchboard 2>&1); code=$?
+is "board open names a missing board and exits non-zero" "$code $out" "1 guild board open: no board nosuchboard in quest vision-repo-a"
+[ ! -e "$GUILD_HOME/quests/vision-repo-a/boards/nosuchboard" ] && ok "and creates nothing" || bad "and creates nothing"
+echo '<h1>other</h1>' > "$TMP/other.html"
+out=$(env -u GUILD_QUEST "$GUILD" board open --quest vision-repo-a "$rb" --html "$TMP/other.html" 2>&1); code=$?
+is "board open refuses --html on an existing board" "$code" "1"
+has "with a clear message" "$out" "already exists in quest vision-repo-a"
+is "and leaves the page alone" "$(cd "$GUILD_HOME/quests/vision-repo-a/boards/$rb" && find . -type f -exec cksum {} + | sort)" "$before"
+stop_wartable
+out=$(env -u GUILD_QUEST "$GUILD" board open 2>&1); code=$?
+is "board open with no quest starts the server and opens the docket" "$code $out" "0 http://127.0.0.1:4899/"
+is "and the docket answers" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/)" "200"
+
 # ── jira watcher ──────────────────────────────────────────────────────────────
 section "jira watcher"
 export GUILD_JIRA_SITE="http://127.0.0.1:4898" JIRA_API_TOKEN="test-token" GUILD_NO_NOTIFY=1
