@@ -542,7 +542,8 @@ def alert_list(open_):
     try:
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import alerts
-        return [{"text": a["text"], "url": a["url"]} for a in alerts.current(open_) if not a["key"].startswith("board:")]
+        return [{"text": a["text"], "url": a["url"]} for a in alerts.current(open_)
+                if not a["key"].startswith("board:") and a.get("docket", True)]
     except Exception:
         return []
 

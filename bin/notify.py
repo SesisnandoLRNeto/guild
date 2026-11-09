@@ -18,8 +18,10 @@ Config: ~/.guild/local/remote.json
 Email goes through Gmail's SMTP server as "from", with a Gmail app password kept in the
 macOS Keychain (service "guild-email", account = the "from" address), never in a file:
   security add-generic-password -s guild-email -a you@gmail.com -w
-Email carries the alerts (PR follow-ups, Claude usage, a question waiting too long) and the
-quest events that need you: needs-decision, blocked, failed, done and wrap-up. Each mail reads
+Email waits: quest steps never mail you. alerts.py mails once what has waited on you for an hour
+(a plan, a decision, results, a blocked or failed quest), a PR merged, and a review asking for
+changes ("instant": true in the email config mails every event at once, as before). A mail reads
+on its own. The kinds it can carry are the quest events that need you: needs-decision, blocked, failed, done and wrap-up. Each mail reads
 on its own, with no link needed: a decision lists the question, the detail, every option with its
 trade-off and the recommended one; blocked and failed carry the whole note, repo, branch and PR;
 done carries the PR links and the wrap-up title; a PR alert carries the PR title and its GitHub URL.
@@ -465,6 +467,27 @@ def queue_add(item):
     return first, stale
 
 
+def send_group(group):
+    """One email for these items; a decision leads it and carries its reply token. Returns why it failed, or ""."""
+    lead = next((i for i in group if i.get("token")), None)
+    if len(group) == 1:
+        subject = group[0]["subject"]
+    else:
+        slugs = list(dict.fromkeys(i["slug"] for i in group))
+        subject = f"guild: {len(group)} updates ({', '.join(slugs[:3])}{', ...' if len(slugs) > 3 else ''})"
+    if lead:
+        subject += f" [guild {lead['board']} {lead['token']}]"
+    text, page = render(group, lead)
+    msgid = make_msgid(domain="guild.local")
+    if lead:
+        with locked():
+            tokens = load_json(TOKENS, {})
+            if lead["token"] in tokens:
+                tokens[lead["token"]]["msgid"] = msgid
+                save_json(TOKENS, tokens)
+    return send_email(subject, text, html_body=page, msgid=msgid)
+
+
 def flush():
     """Send what is queued: one email, except that each decision gets its own."""
     with locked():
@@ -474,27 +497,19 @@ def flush():
     rest = [i for i in q if not i.get("token")]
     groups = ([[decisions[0]] + rest] + [[d] for d in decisions[1:]]) if decisions else ([rest] if rest else [])
     for group in groups:
-        lead = next((i for i in group if i.get("token")), None)
-        if len(group) == 1:
-            subject = group[0]["subject"]
-        else:
-            slugs = list(dict.fromkeys(i["slug"] for i in group))
-            subject = f"guild: {len(group)} updates ({', '.join(slugs[:3])}{', ...' if len(slugs) > 3 else ''})"
-        if lead:
-            subject += f" [guild {lead['board']} {lead['token']}]"
-        text, page = render(group, lead)
-        msgid = make_msgid(domain="guild.local")
-        if lead:
-            with locked():
-                tokens = load_json(TOKENS, {})
-                if lead["token"] in tokens:
-                    tokens[lead["token"]]["msgid"] = msgid
-                    save_json(TOKENS, tokens)
-        why = send_email(subject, text, html_body=page, msgid=msgid)
+        why = send_group(group)
         if why.startswith("email failed"):               # Gmail down: keep them, the next event sends them again
             with locked():
                 again = [dict(i, retry=True) for i in group if time.time() - i["ts"] < 3600] + load_json(QUEUE, [])
                 save_json(QUEUE, again)
+
+
+def email_now(slug, state, note):
+    """One mail for one thing that has waited on you (alerts.py calls it after an hour)."""
+    cfg = config()
+    if not email_events_on(cfg) or os.environ.get("GUILD_NO_NOTIFY"):
+        return ""
+    return send_group([event_item(slug, state, note, cfg)])
 
 
 def email_events_on(cfg=None):
@@ -608,7 +623,9 @@ def on_event(slug, state, note):
     if not what:
         return
     send(f"guild: {slug}", f"{slug} {what}", docket_url())
-    if not os.environ.get("GUILD_NO_NOTIFY"):
+    # Mail waits: alerts.py sends one when something has waited on you for an hour (email_now).
+    # "instant": true in the email config mails every event as it happens, as before.
+    if not os.environ.get("GUILD_NO_NOTIFY") and ((config().get("email") or {}).get("instant")):
         try:
             email_event(slug, state, note)
         except Exception:

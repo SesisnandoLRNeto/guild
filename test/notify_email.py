@@ -29,7 +29,7 @@ def check(name, cond):
 
 
 def config(**kw):
-    cfg = {"mac": False, "email": {"to": "me@example.com", "from": "me@example.com"}}
+    cfg = {"mac": False, "email": {"to": "me@example.com", "from": "me@example.com", "instant": True}}   # every event, to test the mails
     cfg.update(kw)
     notify.save(cfg)
 

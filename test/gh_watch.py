@@ -26,7 +26,8 @@ def check(name, cond):
 
 # a fake GitHub: two PRs, comments on them, and what was posted or deleted
 calls, posted, deleted, users = [], [], [], []
-GH = {"pulls": {"o/api#5": {"state": "open", "head": {"sha": "abc"}}, "o/api#6": {"state": "open", "head": {"sha": "def"}}},
+GH = {"pulls": {"o/api#5": {"state": "open", "head": {"sha": "abc", "ref": "their-branch", "repo": {"full_name": "o/api"}}},
+                "o/api#6": {"state": "open", "head": {"sha": "def", "ref": "feat-rates", "repo": {"full_name": "o/api"}}}},
       "comments": {"o/api#5": [{"id": 11, "user": {"login": "someone"}, "body": "@guild approve this please"},
                                {"id": 12, "user": {"login": "me"}, "body": "@guild security"},
                                {"id": 13, "user": {"login": "me"}, "body": "ask @guildmaster later"}],
@@ -74,6 +75,8 @@ def fake_guild(*args, stdin=None):
 
 gh_watch.gh, gh_watch.guild = fake_gh, fake_guild
 gh_watch.log = lambda msg: None
+fetched = []
+gh_watch.git = lambda *a: fetched.append(a)
 json.dump({"watch": True, "repos": {"o/api": CLONE}, "max_active": 2}, open(gh_watch.CONFIG, "w"))
 
 gh_watch.once()
@@ -160,6 +163,20 @@ json.dump({"summary": "Ready.", "findings": []}, open(os.path.join(HOME, "quests
 users.clear()
 gh_watch.once()
 check("and the review is posted as that account", posted[-1]["event"] == "APPROVE" and "me-work" in users)
+# @guild fix: only on your own PR, a code quest on its branch, the comment gone at once
+GH["comments"]["o/api#5"].append({"id": 41, "user": {"login": "me"}, "body": "@guild fix this for them"})
+GH["comments"]["o/api#6"].append({"id": 42, "user": {"login": "me"}, "body": "@guild fix: the null check first"})
+n = len(started)
+gh_watch.once()
+fixes = [(a, b) for a, b in started[n:] if a[1].startswith("fix-")]
+check("@guild fix on someone else's PR starts nothing", not any(a[1] == "fix-api-5" for a, _ in fixes))
+check("@guild fix on your own PR starts a fix quest", any(a[1] == "fix-api-6" for a, _ in fixes))
+fa, fb = next((a, b) for a, b in fixes if a[1] == "fix-api-6")
+check("it starts from the PR's branch, freshly fetched", "origin/feat-rates" in fa and ("-C", CLONE, "fetch", "-q", "origin", "feat-rates") in fetched)
+check("it fixes what reviewers and checks asked, with your focus", "every unresolved review comment" in fb and "the null check first" in fb)
+check("it pushes to the same branch, never a new PR or a force-push", "git push origin HEAD:feat-rates" in fb and "Never force-push, never open a new PR" in fb)
+check("your @guild fix comment is deleted at once", "42" in deleted and "41" not in deleted)
+check("nothing is posted for a fix", json.load(open(gh_watch.STATE))["started"]["fix-api-6"]["posted"] == "fixing on its branch")
 os.remove(gh_watch.CONFIG)
 calls.clear()
 gh_watch.once()

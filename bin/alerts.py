@@ -17,7 +17,7 @@ from a short summary instead of the whole cold context. Never the quartermaster,
 done quest, never one with "nocompact" in its meta.json.
 
 Settings, all optional, in ~/.guild/local/remote.json under "alerts":
-  {"unanswered_hours": 24, "usage_percent": 80, "board_hours": 2,
+  {"unanswered_hours": 24, "usage_percent": 80, "wait_minutes": 60,
    "compact": true, "cache_minutes": 60, "compact_tokens": 80000}
 Nothing here ever writes to GitHub or Jira.
 """
@@ -41,12 +41,20 @@ USAGE = os.path.join(GUILD_HOME, "local", "usage.json")
 PROJECTS = os.path.expanduser("~/.claude/projects")
 SOCKET = os.environ.get("GUILD_TMUX_SOCKET", "guild")
 LOCK = threading.Lock()                # the alert loop and the compact loop share STATE
-DEFAULTS = {"unanswered_hours": 24, "usage_percent": 80, "board_hours": 2,
+DEFAULTS = {"unanswered_hours": 24, "usage_percent": 80, "wait_minutes": 60,
             "compact": True, "cache_minutes": 60, "compact_tokens": 80000}
 
 
 def settings():
-    return dict(DEFAULTS, **(notify.config().get("alerts") or {}))
+    mine = notify.config().get("alerts") or {}
+    cfg = dict(DEFAULTS, **mine)
+    if "board_hours" in mine and "wait_minutes" not in mine:     # the old setting, in hours
+        cfg["wait_minutes"] = float(mine["board_hours"]) * 60
+    return cfg
+
+
+def waited(minutes):
+    return f"{int(minutes // 60)}h" if minutes >= 120 else f"{int(minutes)} min"
 
 
 def load(path, default):
@@ -77,12 +85,22 @@ def age_hours(stamp):
 # ---- what is true now -------------------------------------------------------------------
 
 def pr_problems(cfg):
+    """What is wrong or new on your PRs. Only a merge and a review asking for changes are worth a mail;
+    the rest shows on the docket and as a Mac notification."""
     import prs
     out = []
     for url, p in prs.cache().items():
-        if p.get("state") not in ("open", "draft") or not p.get("slug"):
+        if not p.get("slug"):
             continue
         head = f"{p['slug']}: PR #{p.get('number')}"
+        if p.get("state") == "merged":
+            if p.get("merged_at") and age_hours(p["merged_at"]) < 24:
+                out.append({"key": f"pr:{url}:merged", "text": f"{head} was merged", "url": url, "email": True, "docket": False})
+            continue
+        if p.get("state") not in ("open", "draft"):
+            continue
+        if p.get("review") == "changes requested":
+            out.append({"key": f"pr:{url}:changes", "text": f"{head}: a reviewer requested changes", "url": url, "email": True})
         if p.get("conflict"):
             out.append({"key": f"pr:{url}:conflict", "text": f"{head} has a merge conflict", "url": url})
         if p.get("checks") == "failing":
@@ -114,21 +132,44 @@ def usage_problems(cfg):
 
 
 def board_problems(cfg, open_items):
+    """A plan, a decision or results that have waited on you for an hour: worth a mail, once."""
     out = []
     for i in open_items or []:
-        if i.get("wrapup") or i.get("pseudo"):
-            continue                   # a wrap-up blocks nothing; it waits for your grade
-        hours = age_hours(i.get("created", ""))
-        if hours >= cfg["board_hours"]:
-            out.append({"key": f"board:{i['quest']}/{i['board']}",
-                        "url": notify.war_link(f"/b/{i['quest']}/{i['board']}/") or notify.docket_url(),
-                        "text": f"{i['quest']} has waited {int(hours)}h on your answer: {i.get('title', '')}"})
+        if i.get("pseudo"):
+            continue
+        minutes = age_hours(i.get("created", "")) * 60
+        if minutes < cfg["wait_minutes"]:
+            continue
+        where = f"/b/{i['quest']}/{i['board']}/"
+        text = (f"{i['quest']}: results have waited {waited(minutes)} for your check" if i.get("wrapup") else
+                f"{i['quest']} has waited {waited(minutes)} on your answer: {i.get('title', '')}")
+        out.append({"key": f"board:{i['quest']}/{i['board']}", "url": notify.war_link(where) or notify.docket_url(),
+                    "text": text, "email": True,
+                    "event": (i["quest"], "wrapup" if i.get("wrapup") else "needs-decision",
+                              f"war table ready: {i.get('title', '')} -> {where}")})
+    return out
+
+
+def quest_problems(cfg):
+    """A quest blocked or failed for an hour with nobody answering it."""
+    out = []
+    for slug in sorted(os.listdir(QUESTS)) if os.path.isdir(QUESTS) else []:
+        path = os.path.join(QUESTS, slug, "status")
+        meta = load(os.path.join(QUESTS, slug, "meta.json"), None)
+        if not meta or meta.get("pseudo") or not os.path.exists(path):
+            continue
+        state, note = (open(path).read().split("\t") + ["", ""])[:2]
+        minutes = (time.time() - os.path.getmtime(path)) / 60
+        if state in ("blocked", "failed") and minutes >= cfg["wait_minutes"]:
+            out.append({"key": f"quest:{slug}:{state}:{int(os.path.getmtime(path))}", "url": notify.docket_url(),
+                        "text": f"{slug} has been {state} for {waited(minutes)}: {note.strip()[:120]}",
+                        "email": True, "docket": False, "event": (slug, state, note.strip())})
     return out
 
 
 def current(open_items=None):
     cfg = settings()
-    return pr_problems(cfg) + usage_problems(cfg) + board_problems(cfg, open_items)
+    return pr_problems(cfg) + usage_problems(cfg) + board_problems(cfg, open_items) + quest_problems(cfg)
 
 
 def check(open_items=None):
@@ -138,7 +179,12 @@ def check(open_items=None):
     keys = {p["key"] for p in now_}
     for p in now_:
         if p["key"] not in sent:
-            notify.send("guild: " + p["text"].split(":")[0], p["text"], p["url"], email=True)
+            notify.send("guild: " + p["text"].split(":")[0], p["text"], p["url"])     # the Mac and the phone push
+            if p.get("email"):                     # the mail only for what really waits on you
+                if p.get("event"):
+                    notify.email_now(*p["event"])
+                else:
+                    notify.send_email("guild: " + p["text"].split(":")[0], p["text"], p["url"])
             sent[p["key"]] = time.time()
     with LOCK:
         state = load(STATE, {})
