@@ -17,7 +17,9 @@ around what it must never do:
   the war table with the brief it would use, and starts only when you say so there. `@guild`
   starts at once, because the comment itself is your word, and the guarded quest still waits for
   your validation before any PR.
-- It never writes to Jira. Drafting the ticket comment stays with you.
+- Its only write to Jira: once a quest has started from your `@guild` comment, it deletes that
+  comment, so the ticket keeps no trace of the trigger (`delete_trigger: false` keeps it).
+  Drafting the ticket comment stays with you.
 - It stays inside the projects you list, and never runs more than `max_active` quests
   it started itself.
 
@@ -72,6 +74,7 @@ def load_config():
     cfg.setdefault("max_active", 2)
     cfg.setdefault("poll_minutes", 5)
     cfg.setdefault("model", "")
+    cfg.setdefault("delete_trigger", True)
     if not cfg["projects"]:
         raise SystemExit("jira: list the projects to watch in jira.json; watching everything is not allowed")
     return cfg
@@ -240,6 +243,11 @@ def start_quest(cfg, state, item):
     with open(os.path.join(GUILD_HOME, "events.log"), "a") as f:
         f.write(f"{at}\t{item['slug']}\tjira\tstarted from your comment on {item['key']} ({how})\n")
     log(f"started quest {item['slug']} for {item['key']} ({how})")
+    if item.get("guarded") and item.get("comment_id") and cfg.get("delete_trigger", True):
+        try:                                     # your @guild comment did its job: the ticket keeps no trace of it
+            api(cfg, "DELETE", f"/rest/api/3/issue/{item['key']}/comment/{item['comment_id']}")
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            log(f"{item['key']}: could not delete your @guild comment: {e}")
     notify("guild", f"Quest started for {item['key']}")
     return True
 
@@ -356,7 +364,7 @@ def once(cfg):
                 notify("guild", f"{key}: which repo? Add repo:<name> to your comment")
                 state["seen"].append(cid)
                 continue
-            item = {"key": key, "repo": repo, "slug": slug_for(key, issue["fields"].get("summary", "")),
+            item = {"key": key, "repo": repo, "slug": slug_for(key, issue["fields"].get("summary", "")), "comment_id": cid,
                     "brief": build_brief(key, issue["fields"], instruction, cfg["site"],
                                          [((o.get("author") or {}).get("displayName") or "someone", adf_text(o.get("body")))
                                           for o in comments if (o.get("author") or {}).get("accountId") != me

@@ -34,7 +34,8 @@ QUESTS = os.path.join(GUILD_HOME, "quests")
 LEAD, TAIL = 0.3, 0.55
 W, H = 540, 960                                   # CSS pixels; frames are twice that (1080x1920)
 
-SPEC = """video.json: a one-minute video of the plan, for a plan that is a story.
+SPEC = """video.json: a one-minute video of the plan, for a full plan that is a story (guild plan ready
+refuses it on a small or standard plan: those are told on the page).
 
 When it fits: the pain is something a person can watch go wrong (a screen, data that changes shape
 on its way, steps that fail in order) and the guildmaster would otherwise have to imagine it.
