@@ -63,7 +63,11 @@ def tabs():
             out.append({"name": name, "kind": "quartermaster", "state": "quartermaster", "note": ""})
         elif os.path.isdir(os.path.join(QUESTS, name)):
             state, note = quest_state(name)
-            out.append({"name": name, "kind": "quest", "state": state or "?", "note": note[:140]})
+            try:
+                model = open(os.path.join(QUESTS, name, "model")).read().strip()
+            except OSError:
+                model = ""
+            out.append({"name": name, "kind": "quest", "state": state or "?", "note": note[:140], "model": model})
     order = {"needs-decision": 0, "blocked": 0, "failed": 1, "stopped": 1, "quartermaster": 2, "working": 3}
     return sorted(out, key=lambda t: (order.get(t["state"], 4), t["name"]))
 
