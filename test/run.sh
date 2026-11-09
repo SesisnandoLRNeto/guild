@@ -363,6 +363,8 @@ out=$(env -u GUILD_QUEST "$GUILD" board open --quest vision-repo-a "$rb" --html 
 is "board open refuses --html on an existing board" "$code" "1"
 has "with a clear message" "$out" "already exists in quest vision-repo-a"
 is "and leaves the page alone" "$(cd "$GUILD_HOME/quests/vision-repo-a/boards/$rb" && find . -type f -exec cksum {} + | sort)" "$before"
+out=$(env -u GUILD_QUEST "$GUILD" board open "$rb" 2>&1); code=$?
+is "a board id without a quest is an error, not the docket" "$code" "1"
 stop_wartable
 out=$(env -u GUILD_QUEST "$GUILD" board open 2>&1); code=$?
 is "board open with no quest starts the server and opens the docket" "$code $out" "0 http://127.0.0.1:4899/"

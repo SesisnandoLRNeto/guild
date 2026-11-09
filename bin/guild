@@ -1315,6 +1315,9 @@ cmd_board() {
         slug=$(current_quest)
       fi
       if [ "$sub" = open ] && [ "$has_html" = 0 ] && [ -z "$slug" ]; then   # bare open: the docket
+        for a in ${rest[@]+"${rest[@]}"}; do
+          case "$a" in --*) ;; *) die "a board id needs its quest: guild board open --quest <name> $a" ;; esac
+        done
         exec python3 "$GUILD_REPO/bin/wartable.py" open ${rest[@]+"${rest[@]}"}
       fi
       [ -n "$slug" ] || die "guild board $sub needs a quest: run it inside one, or pass --quest <name>"
