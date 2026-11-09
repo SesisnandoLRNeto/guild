@@ -554,6 +554,8 @@ has "the adventurer is told validation comes before the PR" "$(cat "$BQ/prompt.m
 has "your check comes through" "$(cat "$BQ/brief.md" 2>/dev/null)" "check: test -f bonus.txt"
 hasnt "someone else's @guild is ignored" "$(cat "$BQ/brief.md" 2>/dev/null)" "drop the database"
 has "the quartermaster hears where it came from" "$(cat "$GUILD_HOME/events.log")" "started from your comment on SARA-11 (guarded"
+has "the @guild comment is deleted once its quest started" "$(cat "$TMP/jira.json")" '"deleted": ["400"]'
+
 [ -d "$GUILD_HOME/quests/shift-notes" ] && bad "@guildmaster is not @guild" "started" || ok "@guildmaster is not @guild"
 is "and nothing waits on the war table" "$(python3 -c "import json;print(len(json.load(open('$GUILD_HOME/jira-state.json'))['pending']))")" "0"
 
@@ -1026,17 +1028,51 @@ has "saying why no screen can be shown lets it through" "$out" "board id:"
 # the plan video: a one-minute explainer, only when the adventurer writes video.json
 is "the example video.json passes its check" "$("$GUILD" video check "$REPO/web/video-example.json" 2>&1; echo "rc=$?")" "rc=0"
 has "the spec teaches the order of the story" "$("$GUILD" video spec)" "the pain    as a tiny story"
-echo '{"title": "x", "scenes": [{"type": "nope", "say": "hi"}, {"type": "title", "say": ""}]}' > "$GUILD_HOME/quests/pl/video.json"
+cp "$REPO/web/video-example.json" "$GUILD_HOME/quests/pl/video.json"
 out=$(GUILD_QUEST=pl GUILD_VIDEO_NO_BUILD=1 "$GUILD" plan ready "Seed the role" 2>&1)
+has "a video on a standard plan is refused: it is told on the page" "$out" "a video is for a full plan"
+has "and the refusal names the one visual to use instead" "$out" "one picture, a \`\`\`mermaid flow or a before and after table"
+cat > "$GUILD_HOME/quests/pl/plan.md" <<'MD'
+## The pain
+Ana cannot log in with a small a: the server says no account.
+## Why it happens
+The lookup compares the email letter by letter.
+## Today
+Typed -> compared as typed -> no account.
+## After this plan
+Typed -> lowercased -> found.
+## How it will be built
+1. Lowercase on both sides.
+2. Store new emails lowercase.
+3. A migration lowercases old rows.
+## What you should expect
+Ana logs in however she types it.
+## Not included
+No change to the sign-up page.
+## Risks
+- Two old rows may become one email.
+## Questions for you
+- Keep the newest row when two clash? My guess: yes.
+MD
+echo '{"title": "x", "scenes": [{"type": "nope", "say": "hi"}, {"type": "title", "say": ""}]}' > "$GUILD_HOME/quests/pl/video.json"
+out=$(GUILD_QUEST=pl GUILD_VIDEO_NO_BUILD=1 "$GUILD" plan ready "Lowercase emails" --shape full 2>&1)
 has "a broken video.json stops the plan" "$out" "video.json needs work"
 has "and says which scene" "$out" "scene 1: type is one of"
 has "and what it lacks" "$out" 'scene 2 (title): needs "say"'
 cp "$REPO/web/video-example.json" "$GUILD_HOME/quests/pl/video.json"
-out=$(GUILD_QUEST=pl GUILD_VIDEO_NO_BUILD=1 "$GUILD" plan ready "Seed the role" 2>&1)
+out=$(GUILD_QUEST=pl GUILD_VIDEO_NO_BUILD=1 "$GUILD" plan ready "Lowercase emails" --shape full 2>&1)
 pb=$(echo "$out" | awk '/board id:/ {print $3}')
 page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html" 2>/dev/null)
 has "a good one goes on the table" "$out" "board id:"
 has "and the plan page plays it at the top" "$page" '<section class="pvideo" data-q="pl">'
+has "the page says how it is shown" "$page" "Shown as: the one-minute video, the steps in order."
+has "a full plan with questions puts your decisions first" "$page" "<h2>Your decisions first</h2>"
+has "a full plan with a guess offers the grill" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"id": "grill"'
+echo '{"answers": {"choice": "grill"}}' > "$GUILD_HOME/quests/pl/boards/$pb/decision.json"
+sleep 1
+for n in 1 2 3 4 5; do GUILD_QUEST=pl "$GUILD" ask "Grill question $n?" --option "a=Yes" --option "b=No" >/dev/null 2>&1; sleep 1; done   # board ids are by the second
+out=$(GUILD_QUEST=pl "$GUILD" ask "Grill question 6?" --option "a=Yes" --option "b=No" 2>&1)
+has "the grill stops at five questions" "$out" "the grill's 5 questions are used"
 is "no build yet: the page is told there is none" "$(curl -s http://127.0.0.1:4899/q/pl/video.json)" '{"state": "none"}'
 is "no file yet" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/q/pl/video.mp4)" "404"
 if command -v ffmpeg >/dev/null && [ -n "$(python3 -c "import sys; sys.path.insert(0, '$REPO/bin'); import shot; print(shot.find_browser() or '')")" ]; then
@@ -1764,6 +1800,19 @@ has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' h
 has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
 has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
 has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=..%2Fetc')" "no such tab"
+calm=$(python3 - "$REPO" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/bin")
+import console
+left = ["⏺ line %d of the conversation" % i for i in range(8)]
+wide = "\n".join(l.ljust(40) + "│ side panel diff %d" % i for i, l in enumerate(left)) + "\n❯ type here\n  Sonnet │ 11% │ x"
+out = console.main_column(wide)
+print("split" if "side panel" not in out and "line 7 of the conversation" in out and "Sonnet │ 11%" in out else "mixed")
+print("same" if console.main_column("a │ b\nplain text") == "a │ b\nplain text" else "changed")
+PY
+)
+has "calm mode's side panel stays off the phone, the conversation and input box stay" "$calm" "split"
+has "a screen with no side panel is left as it is" "$calm" "same"
 tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm-ctest 2>/dev/null
 # the phone link as a QR code
 out=$(python3 - "$REPO/bin" <<'PY'
@@ -1791,6 +1840,11 @@ section "alerts and compaction"
 while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "alerts test said: $line" ;; esac
 done < <(python3 "$REPO/test/alerts.py" "$REPO" 2>&1)
+
+section "@guild on a pull request"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "gh_watch test said: $line" ;; esac
+done < <(mkdir -p "$TMP/ghw/local" && GUILD_HOME="$TMP/ghw" python3 "$REPO/test/gh_watch.py" "$REPO" 2>&1)   # its own home: the test war table never sees this github.json
 
 # ── quest emails ──────────────────────────────────────────────────────────────
 run_notify_email

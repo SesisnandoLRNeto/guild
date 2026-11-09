@@ -82,9 +82,25 @@ def pane_of(name):
     return pane
 
 
+def main_column(text):
+    """Calm mode splits the terminal in two: the conversation, a "│", then a side panel. A phone
+    wraps each wide line and mixes the two, so keep the conversation only. The column is the one
+    where most lines carry the bar; lines that do not reach it (the input box) stay whole."""
+    rows = text.splitlines()
+    counts = {}
+    for l in rows:
+        for i, ch in enumerate(l):
+            if ch == "│" and i >= 30:
+                counts[i] = counts.get(i, 0) + 1
+    col, hits = max(counts.items(), key=lambda kv: kv[1], default=(0, 0))
+    if hits < max(5, len(rows) * 0.4):
+        return text
+    return "\n".join(l[:col].rstrip() if len(l) > col and l[col] == "│" else l for l in rows)
+
+
 def screen(name, lines=60):
     lines = max(10, min(int(lines), 400))
-    text = tmux("capture-pane", "-p", "-J", "-t", pane_of(name), "-S", f"-{lines}").stdout
+    text = main_column(tmux("capture-pane", "-p", "-J", "-t", pane_of(name), "-S", f"-{lines}").stdout)
     text = re.sub(r"[─━═—_]{24,}", "─" * 24, text)     # a terminal-wide rule would wrap into rows on a phone
     return "\n".join(l.rstrip() for l in text.splitlines()).strip("\n")
 

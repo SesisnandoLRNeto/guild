@@ -123,7 +123,8 @@ def handle(msg, tokens, to, answer_board, quiet=False):
     if not (subject.lower().lstrip().startswith("re:") or (info.get("msgid") and answers_to == info["msgid"])):
         return "ignored: not a reply"            # the original mail itself, seen in a shared inbox
     bdir = os.path.join(QUESTS, quest, "boards", board)
-    questions = notify.load_json(os.path.join(bdir, "decisions.json"), {}).get("questions", [])
+    decisions = notify.load_json(os.path.join(bdir, "decisions.json"), {})
+    questions = decisions.get("questions", [])
     if os.path.exists(os.path.join(bdir, "decision.json")):
         notify.send_email(f"guild: {quest} already answered",
                           f"The question on {quest} ({board}) was already answered on the war table.\nYour reply was not used.")
@@ -138,6 +139,14 @@ def handle(msg, tokens, to, answer_board, quiet=False):
         forget(tokens, tag.group(2))
         log(quest, f"reply to {board}: several questions, not answered")
         return "several questions"
+    if decisions.get("review"):                   # a plan approved point by point: a letter cannot mark the points
+        notify.send_email(f"guild: {quest} needs the plan page",
+                          "This plan is approved point by point, so a reply cannot approve it. Open the plan"
+                          f"{' at ' + notify.war_link('/b/%s/%s/' % (quest, board)) if notify.tail_base() else ' on your Mac'}"
+                          " and mark each point.")
+        forget(tokens, tag.group(2))
+        log(quest, f"reply to {board}: a point-by-point plan, not answered")
+        return "plan needs marks"
     question = questions[0]
     answers, message = parse_answer(strip_quoted(body), question)
     if not answers and not message:

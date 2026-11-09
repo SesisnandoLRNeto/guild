@@ -105,7 +105,7 @@ def fetch(url):
         d.get("reviewDecision") or "", "")
     return {"state": state, "review": review, "checks": checks(d.get("statusCheckRollup")), "title": d.get("title", ""),
             "number": int(PR.search(url).group(3)), "conflict": d.get("mergeable") == "CONFLICTING",
-            "waiting_since": waiting_since(d), "at": time.time()}
+            "waiting_since": waiting_since(d), "merged_at": d.get("mergedAt") or "", "at": time.time()}
 
 
 BOTS = {"github-actions", "dependabot", "copilot", "codecov", "sonarcloud", "sonarqubecloud", "coderabbitai",

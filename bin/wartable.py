@@ -542,7 +542,8 @@ def alert_list(open_):
     try:
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import alerts
-        return [{"text": a["text"], "url": a["url"]} for a in alerts.current(open_) if not a["key"].startswith("board:")]
+        return [{"text": a["text"], "url": a["url"]} for a in alerts.current(open_)
+                if not a["key"].startswith("board:") and a.get("docket", True)]
     except Exception:
         return []
 
@@ -1094,6 +1095,11 @@ def refresh_prs_forever():
             alerts.check(docket_items()["open"])
         except Exception:
             pass
+        try:                                   # an @guild comment on a PR: a review quest, then the review posted
+            import gh_watch
+            gh_watch.once()
+        except Exception:
+            pass
         try:                                   # a reply to a decision email answers that board
             import mailreply
             mailreply.poll(answer_board)
@@ -1472,6 +1478,11 @@ def cmd_plan(args):
     md, pics = plan_pictures(md, qdir, meta)
     import video
     has_video = os.path.exists(os.path.join(qdir, "video.json"))
+    if has_video and kind != "full":
+        raise SystemExit(f"guild plan: this is a {kind} plan, and a {kind} plan is told on the page: a video is for a full "
+                         f"plan whose pain is a story. Delete {os.path.join(qdir, 'video.json')}"
+                         + (" (a small plan needs only the steps and how to know it works)." if kind == "small" else
+                            ", and show the pain with one picture, a ```mermaid flow or a before and after table."))
     if has_video:                                   # told as a video too: check it now, build it in the background
         spec, err = video.load(os.path.join(qdir, "video.json"))
         errs = [err] if err else video.check(spec, video.bases_for(quest))
@@ -1501,6 +1512,9 @@ def cmd_plan(args):
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},
                                             {"id": "change", "label": "Change it", "why": "your notes go back; it replans"}]}]}
     decisions["shape"] = kind
+    if planpage.explain(planpage.split(md), md, kind, has_video, why_card)["grill"]:
+        decisions["questions"][0]["options"].insert(2, {"id": "grill", "label": "Grill me first",
+                                                        "why": f"it asks up to {GRILL_ROUNDS} hard questions, one at a time, then replans"})
     if review:
         decisions["review"] = True
     if args.get("board"):                               # redo an open board in place (same id, same question)
@@ -1519,6 +1533,32 @@ def cmd_plan(args):
     args.update(html=os.path.join(tmp, "page.html"), decisions=os.path.join(GUILD_HOME, ".plan-decisions.json"),
                 title=f"Approve the plan: {quest}", assets=bool(pics))
     cmd_open(args)
+
+
+GRILL_ROUNDS = 5
+
+
+def grill_left(quest):
+    """Questions the grill may still ask: after "Grill me first" on the newest plan board, each guild ask
+    counts one. None when the quest is not being grilled."""
+    bdir = os.path.join(QUESTS, quest, "boards")
+    plans = []
+    for b in os.listdir(bdir) if os.path.isdir(bdir) else []:
+        dec = load_json_safe(os.path.join(bdir, b, "decisions.json")) or {}
+        if "shape" in dec:
+            plans.append(((load_json_safe(os.path.join(bdir, b, "board.json")) or {}).get("created", ""), b))
+    if not plans:
+        return None
+    newest = max(plans)[1]
+    path = os.path.join(bdir, newest, "decision.json")
+    answer = (load_json_safe(path) or {}).get("answers", {}).get("choice")
+    if answer != "grill":
+        return None
+    since = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(path)))
+    asked = sum(1 for b in os.listdir(bdir)
+                if "shape" not in (load_json_safe(os.path.join(bdir, b, "decisions.json")) or {})
+                and (load_json_safe(os.path.join(bdir, b, "board.json")) or {}).get("created", "") >= since)
+    return max(0, GRILL_ROUNDS - asked)
 
 
 def plan_pictures(md, qdir, meta):
@@ -1664,6 +1704,10 @@ def _esc(text):
 def cmd_ask(args):
     """Turn a plain question into a board: page, decision file, browser, all in one call."""
     question = args["question"]
+    left = grill_left(args["quest"]) if args.get("quest") else None
+    if left == 0:
+        raise SystemExit(f"guild ask: the grill's {GRILL_ROUNDS} questions are used. Write what you learned into plan.md "
+                         "and run guild plan ready again.")
     options = []
     raw = args.get("option") or []
     if isinstance(raw, str):

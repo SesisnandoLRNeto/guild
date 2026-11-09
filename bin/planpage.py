@@ -45,6 +45,36 @@ TITLES = {"pain": "The pain", "cause": "Why it happens", "today": "Today", "afte
           "risks": "Risks", "words": "Words to know", "questions": "Questions for you", "files": "Files"}
 
 
+ARROW = re.compile(r"->|→|=>|\bthen\b|\bcalls\b|\bsends\b", re.I)
+GUESS = re.compile(r"\b(my guess|i guessed|i assume|assumption|not sure|unclear)\b", re.I)
+
+
+def explain(parts, md, kind, video=False, why_card=None):
+    """How this plan is shown, matched to its size and to what it says. Returns
+    {"views": [labels], "decide_first": bool, "grill": bool}. A small plan is text only; a standard
+    one gets the one visual its pain calls for; a full one may add the video, puts the decisions
+    first, and offers the grill when it holds guesses or questions."""
+    if kind == "small":
+        return {"views": ["the steps and how you will know it works"], "decide_first": False, "grill": False}
+    text = " ".join(parts.values())
+    views = []
+    if IMG.search(text):
+        views.append("the screen today and after")
+    if "```mermaid" in md:
+        views.append("a flow")
+    elif len(ARROW.findall(" ".join(parts.get(k, "") for k in ("today", "after", "how", "cause")))) >= 3:
+        views.append("the steps in order")
+    if re.search(r"^\s*\|.*\|\s*$", parts.get("today", "") + "\n" + parts.get("after", ""), re.M):
+        views.append("a before and after table")
+    if video and kind == "full":
+        views.insert(0, "the one-minute video")
+    if not views:
+        views.append("the change in words")
+    full_q = kind == "full" and bool(parts.get("questions"))
+    return {"views": views, "decide_first": full_q,
+            "grill": kind == "full" and (full_q or bool(GUESS.search(text)) or bool(why_card))}
+
+
 def split(md):
     """{section key: its Markdown} from plan.md's `## ` headings; unknown headings go with the one before."""
     out, key = {}, None
@@ -265,16 +295,22 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
         contract_html = f"<p class=\"lead2 warn\">No acceptance contract: {esc(meta.get('no_acceptance') or 'none was written')}.</p>"
     reel = (f'<p class="reel"><a href="/q/{esc(quest)}/reel" target="_blank">Watch the reel</a>: this plan as a short '
             'animated story, if you would rather watch than read.</p>') if kind == "full" else ""
-    if video:                                       # the adventurer told the plan as a video: it comes first
+    if video and kind == "full":                    # the adventurer told the plan as a video: it comes first
         reel = VIDEO.replace("__Q__", esc(quest))
+    kit = explain(parts, md, kind, video, why_card)
+    shown = f' <span class="kit">Shown as: {esc(", ".join(kit["views"]))}.</span>'
+    first = (f'<section class="sec decide"><h2>Your decisions first</h2>'
+             f'<p class="lead2">The plan holds choices only you can make. Read them before the rest.</p>'
+             f'{md_to_html(parts["questions"])}</section>') if kit["decide_first"] else ""
     return (PAGE.replace("__QUEST__", esc(quest)).replace("__SUMMARY__", md_inline(summary or "", auto_code=True))
-            .replace("__SHAPE__", SHAPE_LEAD[kind]).replace("__REEL__", reel)
+            .replace("__SHAPE__", SHAPE_LEAD[kind] + shown).replace("__REEL__", reel + first)
             .replace("__MINUTE__", minute)
             .replace("__TA__", ta)
             .replace("__COMPARE__", compare)
             .replace("__CONTRACT__", contract_html)
             .replace("__REST__", "".join(card(k) for k in ("pain", "cause", "how", "scope", "risks", "words", "questions", "files")
-                                         if k not in ("pain", "cause") or longer(parts.get(k, ""))))
+                                         if (k not in ("pain", "cause") or longer(parts.get(k, "")))
+                                         and not (k == "questions" and kit["decide_first"])))
             .replace("__REVIEW__", review_html(quest, groups) if groups else "")
             .replace("__IF_GO__", "".join(f"<li>{x}</li>" for x in go))
             .replace("__PATH__", esc(plan_path)))
@@ -391,6 +427,9 @@ PAGE = """<!doctype html>
  body { max-width: 1040px; }
  .kicker { font-variant: small-caps; letter-spacing: .08em; color: var(--dim); font-size: 13px; }
  .summary { font-size: 17px; margin: 6px 0 18px; }
+ .kit { display: block; margin-top: 4px; font-size: 13px; opacity: .8; }
+ .sec.decide { border-left: 4px solid #8a4b12; padding-left: 14px; margin: 0 0 22px; }
+ html.realm.rm-dark .sec.decide { border-left-color: var(--rm-gold); }
  .pvideo { margin: 0 0 18px; } .pvideo video { display: block; width: 100%; max-width: 360px; aspect-ratio: 9 / 16;
    margin: 0 auto; border-radius: 10px; background: #000; } .pvideo .pv-wait { color: var(--dim); font-style: italic; }
  .minute { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 8px; }

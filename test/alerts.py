@@ -29,6 +29,10 @@ def utc(hours_ago):
 
 sent = []
 notify.send = lambda title, text, url="", email=False: sent.append((text, email))
+mailed, now_mailed = [], []
+real_send_email, real_email_now = notify.send_email, notify.email_now
+notify.send_email = lambda title, text, url="", **kw: mailed.append(text) or ""
+notify.email_now = lambda slug, state, note: now_mailed.append((slug, state, note)) or ""
 for f in (alerts.STATE, alerts.USAGE):
     if os.path.exists(f):
         os.remove(f)
@@ -37,16 +41,24 @@ for f in (alerts.STATE, alerts.USAGE):
 pr, merged = "https://github.com/o/r/pull/7", "https://github.com/o/r/pull/8"
 json.dump({pr: {"slug": "alpha", "number": 7, "state": "open", "checks": "failing", "conflict": True,
                 "waiting_since": utc(30)},
-           merged: {"slug": "beta", "number": 8, "state": "merged", "checks": "failing", "conflict": True}},
+           merged: {"slug": "beta", "number": 8, "state": "merged", "checks": "failing", "conflict": True},
+           "https://github.com/o/r/pull/9": {"slug": "gamma", "number": 9, "state": "merged", "merged_at": utc(2)},
+           "https://github.com/o/r/pull/10": {"slug": "delta", "number": 10, "state": "open", "review": "changes requested"}},
           open(prs.CACHE, "w"))
 texts = [p["text"] for p in alerts.check()]
 check("a conflict on an open PR is an alert", any("merge conflict" in t for t in texts))
 check("failing checks are an alert", any("failing checks" in t for t in texts))
 check("a reviewer waiting a day is an alert", any("waited 30h" in t for t in texts))
-check("a merged PR raises nothing", not any("#8" in t for t in texts))
-check("each alert is sent once, by email too", len(sent) == 3 and all(e for _, e in sent))
+check("an old merge (no time known) raises nothing", not any("#8" in t for t in texts))
+check("a PR merged today is mailed", any("PR #9 was merged" in t for t in mailed))
+check("a review asking for changes is mailed", any("PR #10: a reviewer requested changes" in t for t in mailed))
+check("conflicts, failing checks and a waiting reviewer are not mailed", len(mailed) == 2)
+check("each alert reaches the Mac once", len(sent) == 5 and not any(e for _, e in sent))
+check("a merge is not a docket alert", "#9" not in str([a for a in alerts.current() if a.get("docket", True)]))
 alerts.check()
-check("a second check sends nothing new", len(sent) == 3)
+check("a second check sends nothing new", len(sent) == 5 and len(mailed) == 2)
+c = prs.cache(); [c.pop(u) for u in ("https://github.com/o/r/pull/9", "https://github.com/o/r/pull/10")]; json.dump(c, open(prs.CACHE, "w"))
+sent.clear(); sent.extend([("x", False)] * 3)
 c = prs.cache(); c[pr]["conflict"] = False; json.dump(c, open(prs.CACHE, "w"))
 alerts.check()
 c[pr]["conflict"] = True; json.dump(c, open(prs.CACHE, "w"))
@@ -82,7 +94,25 @@ items = [{"quest": "alpha", "board": "b1", "title": "Which way?", "created": old
          {"quest": "alpha", "board": "wrap", "title": "Wrap-up", "created": old, "wrapup": True}]
 texts = [p["text"] for p in alerts.current(items)]
 check("a board waiting 3h is an alert", any("waited 3h on your answer: Which way?" in t for t in texts))
-check("a wrap-up waiting is not", not any("Wrap-up" in t for t in texts))
+check("results waiting 3h are one too", any("alpha: results have waited 3h for your check" in t for t in texts))
+fresh = (datetime.datetime.now() - datetime.timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S")
+check("a board waiting 30 minutes is not mailed yet", alerts.current([{"quest": "alpha", "board": "b2", "title": "Soon", "created": fresh}]) == [])
+alerts.check(items)
+check("after an hour the plan or question is mailed in full, with its board",
+      ("alpha", "needs-decision", "war table ready: Which way? -> /b/alpha/b1/") in now_mailed)
+check("and the results too", any(m[:2] == ("alpha", "wrapup") for m in now_mailed))
+# a quest blocked for an hour
+bq = os.path.join(HOME, "quests", "stuck")
+os.makedirs(bq, exist_ok=True)
+json.dump({"slug": "stuck"}, open(os.path.join(bq, "meta.json"), "w"))
+open(os.path.join(bq, "status"), "w").write("blocked\tneeds the staging password\t2026-01-01T00:00:00\n")
+check("a quest blocked for ten minutes waits", not any("stuck" in p["text"] for p in alerts.current()))
+two_h = time.time() - 7200
+os.utime(os.path.join(bq, "status"), (two_h, two_h))
+alerts.check()
+check("blocked for two hours is mailed, with what it needs", any(m[0] == "stuck" and m[1] == "blocked"
+                                                                 and "staging password" in m[2] for m in now_mailed))
+import shutil; shutil.rmtree(bq)
 
 # compaction
 wt = os.path.join(HOME, "wt-compact")
@@ -141,6 +171,7 @@ check("a done quest is never compacted", alerts.compact_idle() == [])
 check("the compaction is in the events", "compacted" in open(os.path.join(HOME, "events.log")).read())
 
 # email
+notify.send_email, notify.email_now = real_send_email, real_email_now
 cfg = notify.config()
 cfg.pop("email", None); notify.save(cfg)
 check("no email set says how to set it", "guild notify email" in notify.send_email("t", "x"))
@@ -170,7 +201,7 @@ class SMTP:
 notify.email_password = lambda sender: "app-pass"
 notify.smtplib.SMTP_SSL = SMTP
 why = notify.send_email("guild: alpha", "alpha: PR #7 has a merge conflict", "http://100.1.2.3:4712/?k=secret")
-body = mails[-1]["msg"].get_content() if mails else ""
+body = mails[-1]["msg"].get_body(preferencelist=("plain",)).get_content() if mails else ""
 check("an alert email goes through Gmail with the app password", why == "" and mails[-1]["host"] == "smtp.gmail.com"
       and mails[-1]["login"] == ("me@example.com", "app-pass"))
 check("the email carries the line and the link", "merge conflict" in body and "http://100.1.2.3:4712/" in body)
