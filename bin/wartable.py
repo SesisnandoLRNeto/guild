@@ -1046,6 +1046,11 @@ def refresh_prs_forever():
             alerts.check(docket_items()["open"])
         except Exception:
             pass
+        try:                                   # a reply to a decision email answers that board
+            import mailreply
+            mailreply.poll(answer_board)
+        except Exception:
+            pass
         try:
             sweep()
         except Exception:
