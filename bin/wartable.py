@@ -1214,11 +1214,35 @@ def ensure_server():
     raise SystemExit("wartable: server did not start")
 
 
+def open_page(url, args):
+    # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
+    if not args.get("wrapup") and not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
+        subprocess.run(["open", url], check=False)
+    print(url)
+
+
+def reopen(args):
+    """No --html: bring the server back and show a board that already exists, or the docket."""
+    quest, board = args.get("quest"), args.get("id")
+    if quest and board and board is not True:
+        if not SAFE.match(quest) or not SAFE.match(board) or not os.path.isfile(
+                os.path.join(board_dir(quest, board), "board.json")):
+            raise SystemExit(f"guild board open: no board {board} in quest {quest}")
+        open_page(f"http://127.0.0.1:{ensure_server()}/b/{quest}/{board}/", args)
+    else:
+        open_page(f"http://127.0.0.1:{ensure_server()}/", args)
+
+
 def cmd_open(args):
+    if not args.get("html"):
+        return reopen(args)
     quest = args["quest"]
     board = args.get("id") or time.strftime("%H%M%S")
     d = board_dir(quest, board)
     fresh = not os.path.exists(d)
+    if args.get("id") and not fresh:
+        raise SystemExit(f"guild board open: board {board} already exists in quest {quest}; "
+                         f"to show it again: guild board open --quest {quest} {board}")
     os.makedirs(d, exist_ok=True)
     try:
         write_board(d, quest, board, args)
@@ -1256,10 +1280,7 @@ def finish_open(quest, board, args):
         record(quest, "working", f"wrap-up posted, shown when the quest reports done: {args.get('title') or board} -> {url}")
     else:
         record(quest, "needs-decision", f"war table ready: {args.get('title') or board} -> {url}")
-    # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
-    if not args.get("wrapup") and not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
-        subprocess.run(["open", url], check=False)
-    print(url)
+    open_page(url, args)
     print(f"board id: {board}")
     print(f"now wait for the answer: guild board wait {board} --timeout 3600")
 
@@ -1755,6 +1776,8 @@ def main():
             key = token[2:].replace("-", "_")
             if not isinstance(args.get(key), list):  # keep what a repeated flag collected
                 args[key] = True
+            if key in ("no_open", "assets", "wrapup"):  # switches: never swallow the next word
+                key = None
         elif key:
             if key in ("option", "image"):
                 if not isinstance(args.get(key), list):
@@ -1766,7 +1789,9 @@ def main():
         else:
             positional.append(token)
     if cmd == "open":
-        args["quest"] = positional[0]
+        args["quest"] = positional[0] if positional else None
+        if len(positional) > 1:
+            args["id"] = positional[1]
         return cmd_open(args)
     if cmd == "plan":
         args["quest"] = positional[0]
