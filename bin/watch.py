@@ -79,6 +79,42 @@ def mark_tabs(quests):
                         "@guildstate", mark], capture_output=True)
 
 
+FINISHED = ("done", "trial-pass", "trial-skip")
+
+
+def merged_tabs(quests, pr_by_slug, names):
+    """The quest tabs whose work is merged and finished: nothing runs there, so they can close."""
+    return [q["slug"] for q in quests
+            if q["slug"] in names and q["slug"] != "qm"
+            and q.get("state") in FINISHED
+            and (pr_by_slug.get(q["slug"]) or {}).get("state") == "merged"]
+
+
+def close_merged_tabs(quests):
+    """A merged quest keeps a whole agent session in memory for nothing. Close its tab.
+
+    Only the tab: the quest, its boards and its wrap-up page stay where they are, and
+    `guild close` is still yours to run when you have read the report.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    try:
+        import prs
+        by = prs.by_slug()
+    except Exception:
+        return
+    if not by:
+        return
+    names = set(tmux_out("list-windows", "-t", SESSION, "-F", "#{window_name}").split())
+    for slug in merged_tabs(quests, by, names):
+        tmux_out("kill-window", "-t", f"{SESSION}:{slug}")
+        try:
+            with open(EVENTS, "a") as f:
+                f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')}\t{slug}\ttab-closed\t"
+                        "merged, so its tab was closed and its agent stopped holding memory\n")
+        except OSError:
+            pass
+
+
 def pinned():
     """Pinned quests and sessions, from fleet.py, which reads the session logs."""
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
@@ -471,6 +507,7 @@ def main():
         tty.setcbreak(sys.stdin.fileno())
         sys.stdout.write("\033[?1000h\033[?1006h\033[?1004h\033[?25l")
     selected, focused = 0, False
+    last_sweep = 0.0
     try:
         buf = ""
         shown = False
@@ -490,6 +527,9 @@ def main():
             width, height = size.columns, size.lines
             quests = read_quests()
             mark_tabs(quests)
+            if time.time() - last_sweep > 30:
+                last_sweep = time.time()
+                close_merged_tabs(quests)
             lines, listing = draw(quests, width, height, costs(), pinned(), selected, focused)
             foot, spans = footer(width, focused)
             lines = lines[:max(0, height - len(foot))]

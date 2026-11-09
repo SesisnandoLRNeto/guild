@@ -183,6 +183,40 @@ def jev():
             "by_why": by_why, "by_day": by_day, "since": rows[0]["at"] if rows else ""}
 
 
+# ── what kind of task a quest was ─────────────────────────────────────────────
+# Read from the slug and the brief, first rule that fits. "feature" is the rest with a ticket,
+# "chore" the rest without one. Rough on purpose: a report wants a handful of kinds, not a taxonomy.
+KIND_RULES = [
+    ("merge", r"merge-main|\bmerge\b[^.\n]*\bmain\b|branch update only|branch maintenance"),
+    ("PR review fix", r"^pr\d+-fix|review items|requested changes|changes requested|review comments|review follow"
+                      r"|pushing into (the |two )?existing|on (the )?existing (frontend |backend )?pr\b|address(ing)? .*review"),
+    ("investigation", r"quest type: investigation|quest type: validation|read[- ]only|\binvestigat"),
+    ("docs", r"quest type: docs|docs only|\bdocumentation\b|\breadme\b"),
+    ("bug fix", r"\bbug\b|bugfix/|\bfix(es|ed)?\b|\bbroken\b|\bwrong\b|does not work|doesn't work|\b500\b|\bfails?\b"),
+]
+MODES = (("dagger", "epic dagger"), ("quick", "quick"), ("parent", "helper"), ("no_plan", "no plan"))
+
+
+def kind_of(slug, brief, meta):
+    """Judged on the slug, the Intent line and the Quest type line only: the constraints below
+    them name merges, reviews and PRs that are not what the quest is about."""
+    lines = (brief or "").splitlines()
+    head = [l for l in lines if re.match(r"\s*(intent|quest type)\s*:", l, re.I)] or lines[:1]
+    text = (slug + "\n" + "\n".join(head)).lower()
+    for name, pattern in KIND_RULES:
+        if re.search(pattern, text, re.M):
+            return name
+    return "feature" if meta.get("ticket") else "chore"
+
+
+def mode_of(meta):
+    """How the quest was run: with every gate, or with some of them off."""
+    for key, name in MODES:
+        if meta.get(key):
+            return name
+    return "planned"
+
+
 # ── quests ────────────────────────────────────────────────────────────────────
 def stories():
     names = load_json(os.path.join(GUILD_HOME, "stories.json"), {})
@@ -227,8 +261,13 @@ def quests():
             except ValueError:
                 pass
         edd = q.get("edd") or {}
+        try:
+            brief = open(os.path.join(d, "brief.md")).read()
+        except OSError:
+            brief = ""
         out.append({
             "slug": q["slug"], "ticket": ticket, "story": names.get(ticket) or parents.get(ticket) or "",
+            "kind": kind_of(q["slug"], brief, meta), "mode": mode_of(meta),
             "repo": os.path.basename(meta.get("repo", "")), "harness": meta.get("harness", "claude"),
             "tier": meta.get("tier", ""), "model": meta.get("model", "") or (max(per_model, key=per_model.get) if per_model else ""),
             "models": per_model, "state": q["state"], "archived": q["archived"],

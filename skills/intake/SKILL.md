@@ -33,6 +33,10 @@ Never open a quest for every ticket. A quest per ticket is how a fleet gets loud
 
 Bring the shortlist to the guildmaster: ticket, one-line intent, the repo you would use, the harness and model from `~/.guild/local/dispatch.json`, and why. Wait for a yes.
 
+Two kinds of ticket skip the yes and start at once:
+- a ticket with the label **`epic-dagger`**: `guild quest ... --epic-dagger "ticket label epic-dagger"`. The adventurer builds it alone, with no plan, no checks, no questions and no wrap-up, and opens the PR. This is the only mark that skips steps; never pass `--epic-dagger`, `--quick` or `--no-plan` on your own judgment;
+- a ticket (or an ask) to review or address review items on a GitHub PR: start it without the yes, with every step kept (plan, checks, trial, wrap-up) and the usual PR constraints (existing branch, merge never rebase, never post on the PR).
+
 Then, per approved ticket:
 
 ```bash

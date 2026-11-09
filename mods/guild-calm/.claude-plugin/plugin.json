@@ -1,6 +1,6 @@
 {
   "name": "guild-calm",
-  "version": "0.2.0",
-  "description": "Calm mode for guild sessions: a party of three adventurers walks through a forest where the thinking and tool calls used to scroll. Drawing only, the transcript and the model context are untouched.",
+  "version": "0.3.1",
+  "description": "Calm mode for guild sessions: the running sessions walk as a party through a forest where the thinking and tool calls used to scroll: a hero per model, the quartermaster's mage always among them, a warrior always at the front, and the quests in trouble send their creatures down the road. Drawing only, the transcript and the model context are untouched.",
   "author": { "name": "SesisnandoLRNeto", "url": "https://github.com/SesisnandoLRNeto/guild" }
 }

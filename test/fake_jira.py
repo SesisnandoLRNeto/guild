@@ -49,7 +49,8 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/rest/api/3/search/jql"):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))
             issues = [{"key": i["key"], "fields": {"summary": i["summary"], "description": adf(i["description"]),
-                                                   "project": {"key": i["key"].split("-")[0]}}}
+                                                   "project": {"key": i["key"].split("-")[0]},
+                                                   "assignee": i.get("assignee"), "status": i.get("status")}}
                       for i in self.data().get("issues", [])]
             return self.reply({"issues": issues})
         self.reply({"error": "not found"}, 404)

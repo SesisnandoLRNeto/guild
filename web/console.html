@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en" class="realm">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0b10">
+<title>The Console</title>
+<style>
+  /* The quest console: read a session and type to it, from the phone. The realm look, like the docket. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; } body { min-height: 100dvh; }
+  body { font: 16px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; padding: 12px 12px 24px;
+         padding-top: max(12px, env(safe-area-inset-top)); }
+  .rm-hero { margin: 0 0 14px; }
+  .rm-hero .rm-sub { font-size: 14.5px; }
+  .rm-nav { margin-top: 12px; }
+  #tabs { display: flex; flex-direction: column; gap: 12px; }
+  .tab { display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left; color: inherit; font: inherit;
+         padding: 12px 14px; cursor: pointer; }
+  .tab .race { flex: none; width: 44px; height: 44px; }
+  .tab .txt { min-width: 0; flex: 1; }
+  .tab b { display: block; font-size: 16px; font-variant: small-caps; letter-spacing: .05em; color: var(--rm-gold-2); overflow-wrap: anywhere; }
+  .st { display: inline-block; margin-top: 3px; font: 600 11px/1.6 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: .1em; text-transform: uppercase; padding: 0 7px; border-radius: 3px; border: 1px solid var(--rm-line); color: var(--rm-dim); }
+  .st.needs-decision, .st.stopped { color: #f0c75a; border-color: #8a6a1e; } .st.blocked, .st.failed { color: #ff8a72; border-color: var(--rm-blood); }
+  .st.working { color: #8fb8ff; border-color: #2b4a86; } .st.done, .st.graded { color: var(--rm-ok); border-color: #3f6a2c; }
+  .st.quartermaster { color: var(--rm-gold); border-color: var(--rm-gold-3); }
+  .tab .note { display: block; font-size: 13.5px; font-style: italic; color: var(--rm-dim); margin-top: 5px; }
+  .empty { color: var(--rm-dim); font-style: italic; padding: 14px 16px; margin: 0; }
+  /* one session: a framed bar, the screen on dark stone, the compose box at the bottom */
+  #view { display: none; flex-direction: column; gap: 10px; height: calc(100dvh - 36px - env(safe-area-inset-top)); }
+  body.open #list { display: none; } body.open #view { display: flex; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+  .bar .race { flex: none; width: 34px; height: 34px; }
+  .bar .rm-title { flex: 1; min-width: 0; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar a, .bar button { flex: none; color: var(--rm-gold); text-decoration: none; background: rgba(0, 0, 0, .35); border: 1px solid var(--rm-line);
+         border-radius: 3px; font-family: inherit; font-size: 13px; line-height: 1; padding: 7px 10px; letter-spacing: .04em; }
+  #screen { flex: 1; margin: 0; padding: 12px 14px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+            font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: #e8e2d6; background: rgba(0, 0, 0, .55); }
+  #compose { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .keys { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 10px; padding: 2px; }
+  .keys button { flex: none; min-width: 42px; height: 38px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--rm-iron);
+                 background: linear-gradient(180deg, #2a2230, #15111a); color: var(--rm-gold-2); box-shadow: inset 0 0 0 1px #000;
+                 font: 14px ui-monospace, Menlo, monospace; }
+  .keys button:active { border-color: var(--rm-gold); }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  textarea { flex: 1; min-height: 44px; max-height: 40vh; resize: none; padding: 10px 12px; border-radius: 3px; border: 1px solid var(--rm-line);
+             background: rgba(0, 0, 0, .4); color: var(--rm-text); color-scheme: dark; font-size: 16px; line-height: 1.35; font-family: inherit; }   /* 16px: iOS does not zoom in */
+  textarea:focus { outline: none; border-color: var(--rm-gold); }
+  #send { min-height: 44px; font-size: 16px; }
+  #msg { font-size: 13px; font-style: italic; color: var(--rm-dim); min-height: 18px; margin-top: 6px; }
+  #msg.err { color: #ff8a72; font-style: normal; }
+</style>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
+</head>
+<body>
+<section id="list">
+  <section class="rm-hero rm-frame" aria-label="The console">
+    <div>
+      <p class="rm-kicker">The war table</p>
+      <h1 class="rm-title">The Console</h1>
+      <div class="rm-rule"></div>
+      <p class="rm-sub">Read what a quest shows on its screen, and answer it from here.</p>
+      <nav class="rm-nav"><a href="/"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a></nav>
+    </div>
+  </section>
+  <div id="tabs"><p class="empty rm-frame">Loading…</p></div>
+</section>
+<section id="view">
+  <div class="bar rm-frame"><button type="button" id="back" aria-label="Back to the list">‹ Quests</button><span id="face"></span><h1 class="rm-title" id="title"></h1><a id="board" href="/">Docket</a></div>
+  <pre id="screen" class="rm-frame" aria-live="polite"></pre>
+  <div id="compose" class="rm-frame">
+    <div class="keys" aria-label="Keys for prompts">
+      <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+      <button type="button" data-key="enter">Enter</button><button type="button" data-key="esc">Esc</button>
+      <button type="button" data-key="up">↑</button><button type="button" data-key="down">↓</button>
+      <button type="button" data-key="y">y</button><button type="button" data-key="n">n</button>
+    </div>
+    <div class="row">
+      <textarea id="text" rows="1" placeholder="Message" aria-label="Message"></textarea>
+      <button type="button" id="send" class="rm-btn">Send</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+</section>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const STATE = { "needs-decision": "waits on you", blocked: "blocked", failed: "failed", stopped: "stopped",
+                working: "working", done: "done", graded: "graded", quartermaster: "quartermaster" };
+const HORDE = { failed: "orc", blocked: "troll", stopped: "undead" };
+const raceOf = (t) => t.kind === "quartermaster" ? "highelf" : HORDE[t.state] || rmRaceOf(t.model);
+let tab = "", timer = null, listTimer = null, faces = {};
+
+async function loadList() {
+  try {
+    const d = await (await fetch("/console.json", { cache: "no-store" })).json();
+    faces = {};
+    $("#tabs").innerHTML = d.tabs.map((t) => { const r = raceOf(t); faces[t.name] = r;
+      return `<button type="button" class="tab rm-frame" data-tab="${esc(t.name)}">${rmRace(r)}
+      <span class="txt"><b>${esc(t.name)}</b><span class="st ${esc(t.state)}">${esc(STATE[t.state] || t.state)}</span>
+      ${t.note ? `<span class="note">${esc(t.note)}</span>` : ""}</span></button>`; }).join("")
+      || `<p class="empty rm-frame">No tabs open. Start the guild on the Mac with guild up.</p>`;
+  } catch (e) { $("#tabs").innerHTML = `<p class="empty rm-frame">Cannot reach the war table.</p>`; }
+}
+
+function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 60; }
+
+async function loadScreen() {
+  if (!tab) return;
+  const el = $("#screen"), stick = nearBottom(el) || !el.textContent;
+  try {
+    const d = await (await fetch(`/console/screen?tab=${encodeURIComponent(tab)}&n=120`, { cache: "no-store" })).json();
+    if (d.error) { say(d.error, true); return; }
+    if (el.textContent !== d.screen) { el.textContent = d.screen; if (stick) el.scrollTop = el.scrollHeight; }
+  } catch (e) { say("Cannot reach the war table.", true); }
+}
+
+function say(t, err) { const m = $("#msg"); m.textContent = t; m.className = err ? "err" : ""; }
+
+function show(name) {
+  tab = name; document.body.classList.add("open"); $("#title").textContent = name;
+  const r = faces[name] || (name === "qm" || name.startsWith("qm-") ? "highelf" : "");
+  $("#face").innerHTML = r ? rmRace(r) : "";
+  $("#screen").textContent = ""; say("");
+  clearInterval(listTimer); clearInterval(timer); loadScreen(); timer = setInterval(loadScreen, 3000);
+}
+function hide() {
+  tab = ""; document.body.classList.remove("open"); clearInterval(timer);
+  loadList(); listTimer = setInterval(loadList, 10000);
+}
+
+async function post(body) {
+  const r = await fetch("/console/send", { method: "POST", headers: { "X-Guild": "console", "Content-Type": "application/json" },
+                                           body: JSON.stringify(Object.assign({ tab }, body)) });
+  return r.json();
+}
+
+$("#tabs").addEventListener("click", (ev) => { const b = ev.target.closest("[data-tab]"); if (b) location.hash = b.dataset.tab; });
+$("#back").addEventListener("click", () => { location.hash = ""; });
+window.addEventListener("hashchange", route);
+function route() { const h = decodeURIComponent(location.hash.slice(1)); h ? show(h) : hide(); }
+
+$("#send").addEventListener("click", async () => {
+  const t = $("#text"), text = t.value.trim();
+  if (!text) return;
+  $("#send").disabled = true; say("Sending…");
+  try {
+    const d = await post({ text });
+    if (d.error) say(d.error, true); else { t.value = ""; grow(); say("Sent."); setTimeout(loadScreen, 800); }
+  } catch (e) { say("Not sent: cannot reach the war table.", true); }
+  $("#send").disabled = false;
+});
+document.querySelector(".keys").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-key]"); if (!b) return;
+  const d = await post({ key: b.dataset.key });
+  say(d.error || d.did, !!d.error); setTimeout(loadScreen, 500);
+});
+function grow() { const t = $("#text"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * .4) + "px"; }
+$("#text").addEventListener("input", grow);
+$("#text").addEventListener("keydown", (ev) => {   // a hardware keyboard: Cmd/Ctrl+Enter sends
+  if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#send").click(); }
+});
+route();
+</script>
+</body>
+</html>

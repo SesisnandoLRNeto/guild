@@ -1,0 +1,127 @@
+{
+ "title": "No account found",
+ "tag": "DEMO-42",
+ "scenes": [
+  {
+   "type": "title",
+   "kicker": "The plan, in one minute",
+   "title": "No *account* found",
+   "sub": "Log in, with a capital letter",
+   "say": "Ana types her email to log in, and the page says there is *no account*. There is one."
+  },
+  {
+   "type": "parts",
+   "items": [
+    {
+     "name": "Log-in form",
+     "icon": "screen"
+    },
+    {
+     "name": "Server",
+     "icon": "server"
+    },
+    {
+     "name": "Users table",
+     "icon": "db"
+    }
+   ],
+   "say": "Three things matter. {1}The *form*, {2}the *server*, {3}and the *users* table."
+  },
+  {
+   "type": "table",
+   "label": "The users table",
+   "head": [
+    "id",
+    "email"
+   ],
+   "rows": [
+    [
+     "17",
+     "Ana@Mail.com"
+    ],
+    [
+     "18",
+     "bo@mail.com"
+    ]
+   ],
+   "mark": [
+    0,
+    1
+   ],
+   "result": {
+    "text": "Ana@Mail.com",
+    "tag": "Logs in",
+    "good": true
+   },
+   "say": "Ana signed up with a *capital* A. {1}Typed the same way, she logs in *fine*."
+  },
+  {
+   "type": "change",
+   "label": "On her phone",
+   "before": "ana@mail.com",
+   "via": "compared letter by letter",
+   "after": "Ana@Mail.com",
+   "good": false,
+   "result": {
+    "text": "Log in",
+    "tag": "No account",
+    "good": false,
+    "note": "No account found for this email"
+   },
+   "say": "On her phone she types a *small* a. {1}The server compares letter by letter, {2}so it finds *no account*."
+  },
+  {
+   "type": "turn",
+   "text": "Lowercase, both sides",
+   "chips": [
+    "1 query",
+    "1 migration",
+    "No screen changes"
+   ],
+   "say": "The *good news*: {1}the fix is *small*."
+  },
+  {
+   "type": "checklist",
+   "items": [
+    {
+     "title": "Compare in *lowercase*",
+     "sub": "Both sides, in one place."
+    },
+    {
+     "title": "Store it lowercase",
+     "sub": "New sign-ups save the email as typed, lowercased."
+    },
+    {
+     "title": "Clean the old rows",
+     "sub": "A migration lowercases what is there."
+    }
+   ],
+   "say": "{1}One. Compare in *lowercase*. {2}Two. Store new emails lowercase. {3}Three. *Clean* the old rows."
+  },
+  {
+   "type": "decision",
+   "question": "Two old rows become the *same* email. What then?",
+   "options": [
+    {
+     "key": "A",
+     "text": "Keep the newest, list the rest for you",
+     "pick": true
+    },
+    {
+     "key": "B",
+     "text": "Stop the migration"
+    }
+   ],
+   "note": "Today there are none, but a check will say so",
+   "say": "One question for you. {1}What if two old rows become the *same* email? {2}My call is to keep the *newest*."
+  },
+  {
+   "type": "card",
+   "text": "Ana logs in",
+   "tag": "Welcome back",
+   "good": true,
+   "note": "Plan ready for your review",
+   "say": "Ana logs in, any way she types it, and it *just works*."
+  }
+ ]
+}

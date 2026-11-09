@@ -1,8 +1,9 @@
 {
-  "_note": "Copy to ~/.guild/local/jira.json. Put JIRA_API_TOKEN=... in ~/.guild/local/env (an Atlassian API token). Only comments written by this account trigger anything.",
+  "_note": "Copy to ~/.guild/local/jira.json. Put JIRA_API_TOKEN=... in ~/.guild/local/env (an Atlassian API token). Only comments written by this account trigger anything. go_trigger starts a guarded quest at once (no plan, your validation before the PR); trigger asks on the war table first.",
   "site": "https://your-company.atlassian.net",
   "email": "you@company.example",
   "trigger": "@quartermaster",
+  "go_trigger": "@guild",
   "projects": ["PROJ"],
   "repos": {
     "api": "~/code/api",

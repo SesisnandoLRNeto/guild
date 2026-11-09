@@ -25,7 +25,16 @@ current_quest() { echo "${1:-${GUILD_QUEST:-}}"; }
 usage() {
   cat <<'EOF'
 guild up [dir]                      open the cockpit: sidebar + quartermaster, one tab per quest
-guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light] [--plan]
+guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier plan|build|deep|light]
+                    [--no-plan "<why>"]   a quest plans first unless you say why it should not
+                   [--quick ["<why>"]]   small work, no gates: no plan, no acceptance contract,
+                                    no Why card, no validation checklist, and the trial is skipped
+                   [--epic-dagger ["<why>"]]  everything --quick drops, and no interaction at all:
+                                    no questions, no boards, no wrap-up; build it and open the PR
+                   [--guarded ["<why>"]]  no plan; build, trial, then the guildmaster validates the
+                                    branch end to end before the PR may open (what @guild on Jira starts)
+                   [--why | --no-why]    the Why card is optional: --why puts one on the docket. Rule
+                                    changes are confirmed in the weekly digest (/rules/week)
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
                    [--brief FILE] [--ticket KEY] [--fresh] [--branch NAME]
                                     branch is TICKET/slug when a ticket is given, else quest/slug
@@ -50,7 +59,8 @@ guild check [slug] [--baseline]     run the brief's acceptance checks in the que
 guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
 guild vision <repo path>           collect a repo's merged, declined and reverted work (vision skill)
 guild vision status <repo>         is there a sealed vision for this repo
-guild jira once|watch|status       start quests from your @quartermaster comments on tickets
+guild jira on|once|watch|status    start quests from your comments on tickets: @guild starts a guarded
+                                    quest at once, @quartermaster asks on the war table first
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
@@ -58,7 +68,7 @@ guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--as
 guild board open [--quest NAME] [ID]   no --html: start the war table if it is down and open board ID (or the docket)
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
-guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
+guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id] [--image "path=caption"]...
                                     put the question on the war table as a page and open it (inside a quest)
 guild pool list|drop [repo]          the warm worktree pool quests are started from
 guild new [dir] [name] [--harness H] [--model M | --tier T] [--resume SESSION]
@@ -71,25 +81,38 @@ guild todo [list] | add <text> | done <n> | drop <n>   your own cards on the cam
 guild harnesses                     the agent CLIs guild knows and their model tiers
 guild treasury                      what the work cost and what it was worth, as charts
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
+guild reel <slug>                   what a quest did, as a pixel-art reel you can watch or save as a video
+guild video spec|check|build|status <slug>   the plan video: a one-minute explainer for plans that are a story
+guild validate ready | wait [--timeout S]   inside a guarded quest: put the checklist before the
+                                    guildmaster, then block until it is validated or sent back
+guild files <slug>                  the map room: find any file of the quest, read it with its changes marked, compare with any commit
 guild decide <spec.json>            a decision page: options as cards, cases, flows, screens, numbers (war-table skill)
 guild rules                         the rule book: every business rule the work changed, per area
 guild drill                         this week's three-question drill on those rules (you answer first)
 guild why <slug>                    the quest's Why card: show it, or put it on the docket again (open)
 guild pr-body [slug]                the PR's contract section (acceptance, behaviour, checklist) for HEAD; gh pr create needs it
 guild behaviour [slug]              an independent validator drives the running app through the scenarios (never reads the code)
-guild tidy [--dry-run]              move old events to monthly files, pack old closed quests (runs monthly on its own)
+guild tidy [--dry-run]              move old events to monthly files, delete the dead pages and pictures of
+                                    closed quests (runs monthly on its own, and at every guild close)
+guild lore                          the bestiary: which class each model is, what each state looks like
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
-guild remote on|off|status|url|restart   the war table on your Tailscale address, behind a key
+guild remote on|off|status|url|qr|restart   the war table on your Tailscale address, behind a key (qr: scan it)
 guild notify test                   check that notifications reach you (Mac, and ntfy if set)
+guild notify email <to> [from]|off  email the alerts (PR follow-ups, Claude usage, a question waiting 2h) and quest events
+guild notify email events on|off    quest events (decision, blocked, failed, done) by email: default on; reply to a decision mail to answer it
+guild alerts [check|compact]        what is wrong now; idle quests are compacted before their cache goes cold
 guild lesson propose "<lesson>" --evidence "<quest>: <quote>" --evidence "<quest>: <quote>"
                                     a lesson with verbatim quotes from two quests; you accept it on the docket
 guild lessons                       proposed, accepted and rejected lessons
 guild prs                           each quest's PR as GitHub sees it (state, review, checks)
+guild findings <findings.json>      a code review's findings on the war table: you mark each one
+                                    Agree, Disagree or Not sure; nothing is posted anywhere
 guild jev status|test|on|off|allow|block|risk
                                     Jev (TypeSafe) for small judgment calls; scopes: board, quests, global
 guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
                                     data model, impact and business rule changes, drawn for a wrap-up
+guild draw <spec.json> [--into PAGE]    draw a state machine, flow, organogram or rules table for a page (picks the form, numbers the scenes)
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
@@ -116,11 +139,22 @@ event() { # slug state note
 calm_on() { [ "$(cat "$GUILD_HOME/calm" 2>/dev/null | tr -d '[:space:]')" = "on" ]; }
 calm_env() { calm_on && printf 'CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GUILD_CALM=1 '; }
 
+# Claude Code 2.1.309 loads mods (the calm party among them) only in a folder you have trusted.
+# The quartermaster runs in $HOME, which most people never trusted, so the party would never show.
+dir_trusted() { # dir
+  python3 -c "import json,sys;p=json.load(open('$HOME/.claude.json')).get('projects',{}).get(sys.argv[1],{});sys.exit(0 if p.get('hasTrustDialogAccepted') else 1)" "$1" 2>/dev/null
+}
+calm_warn() { # dir
+  calm_on || return 0
+  dir_trusted "$1" && return 0
+  echo "guild: calm is on but Claude Code trusts no session in $1, so the party will not draw there." >&2
+  echo "       Once: cd '$1' && claude, answer 'Yes, I trust this folder', quit. Then: guild qm reset" >&2
+}
 cmd_calm() {
   case "${1:-status}" in
-    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the party instead of tool calls (/calm toggles it inside a session)" ;;
+    on) echo on > "$GUILD_HOME/calm"; echo "calm on: new guild sessions draw the party instead of tool calls (/calm toggles it inside a session)"; calm_warn "$HOME" ;;
     off) echo off > "$GUILD_HOME/calm"; echo "calm off: guild sessions draw normally again" ;;
-    status) calm_on && echo on || echo off ;;
+    status) calm_on && echo on || echo off; calm_warn "$HOME" ;;
     *) die "usage: guild calm on|off|status" ;;
   esac
 }
@@ -252,6 +286,7 @@ cmd_up() {
       resume="--session-id '$sid'"
     fi
     local qm="$(calm_env)GUILD_ROLE=qm GUILD_QM=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
+    calm_warn "$dir"
     tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" "guild watch; exec \$SHELL"
     # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
@@ -297,7 +332,20 @@ cmd_revive() {
 cmd_cost() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" cost "$@"; }
 cmd_log()  { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" log "$@"; }
 
-cmd_jira() { python3 "$GUILD_REPO/bin/jira_watch.py" "${1:-status}"; }
+cmd_jira() {
+  # on: the watcher tab in the running cockpit now, and on every guild up after (jira.json "watch": true)
+  if [ "${1:-}" = on ]; then
+    python3 "$GUILD_REPO/bin/jira_watch.py" check || exit 1
+    python3 -c "import json;p='$GUILD_HOME/local/jira.json';d=json.load(open(p));d['watch']=True;json.dump(d,open(p,'w'),indent=1)"
+    if tm has-session -t "$SESSION" 2>/dev/null && ! tm list-windows -t "$SESSION" -F '#W' | grep -qx jira; then
+      open_tab jira "$HOME" "guild jira watch; exec \$SHELL" --bg >/dev/null && echo "jira: watching, in the cockpit's jira tab"
+    else
+      echo "jira: watch is on; the next guild up opens its tab"
+    fi
+    return
+  fi
+  python3 "$GUILD_REPO/bin/jira_watch.py" "${1:-status}"
+}
 
 cmd_retro() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" retro "$@"; }
 
@@ -667,7 +715,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
-  local machine="" headless="" noaccept="" all_args=("$@")
+  local machine="" headless="" noaccept="" noplan="" quick="" dagger="" guarded="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -676,6 +724,16 @@ cmd_quest() {
       --model) model="$2"; shift 2 ;;
       --tier) tier="$2"; shift 2 ;;
       --plan) plan=1; shift ;;
+      --no-plan) noplan="${2:-}"; [ -n "$noplan" ] || die "--no-plan needs a reason"; shift 2 ;;
+      --quick)
+        if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then quick="$2"; shift 2
+        else quick="the guildmaster asked for a quick quest"; shift; fi ;;
+      --epic-dagger)
+        if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then dagger="$2"; shift 2
+        else dagger="the guildmaster marked it epic-dagger"; shift; fi ;;
+      --guarded)
+        if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then guarded="$2"; shift 2
+        else guarded="the guildmaster validates it before the PR"; shift; fi ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
       --parent) parent="$2"; shift 2 ;;
@@ -683,7 +741,8 @@ cmd_quest() {
       --headless) headless=1; shift ;;
       --brief) brief="$2"; shift 2 ;;
       --no-why) export GUILD_NO_WHY=1; shift ;;
-      --no-acceptance) noaccept="$2"; [ -n "$noaccept" ] || die "--no-acceptance needs a reason"; shift 2 ;;
+      --why) export GUILD_WHY=1; shift ;;
+      --no-acceptance) noaccept="${2:-}"; [ -n "$noaccept" ] || die "--no-acceptance needs a reason"; shift 2 ;;
       --ticket) ticket="$2"; shift 2 ;;
       --fresh) fresh=1; shift ;;
       --branch) branch="$2"; shift 2 ;;
@@ -725,12 +784,44 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   local hbin; hbin=$(harness bin "$harness") || exit 1
   command -v "$hbin" >/dev/null || die "$hbin is not installed"
 
+  # --quick is one flag for all the gates: no plan, no acceptance contract, no Why card, no
+  # validation checklist, and the trial is skipped. Nothing is faked: every step it drops shows on
+  # the board as skipped, with this reason, so a quick quest never looks like a checked one.
+  # --epic-dagger is --quick and then some: the adventurer never turns to the guildmaster. No
+  # question, no board, no wrap-up; it decides alone, writes the choices in the PR body, opens
+  # the PR and reports done. The guildmaster meets the work as a PR, nowhere else.
+  if [ -n "$dagger" ]; then
+    [ -n "$quick" ] || quick="$dagger"
+  fi
+  # --guarded drops only the plan: the trial, the contract and the checklist stay, and the checklist
+  # moves in front of the PR. The guildmaster validates the whole branch, then the PR may open.
+  if [ -n "$guarded" ]; then
+    [ -z "$quick" ] || die "--guarded keeps the gates that --quick and --epic-dagger drop; pick one"
+    [ -n "$noplan" ] || noplan="guarded: $guarded"
+  fi
+  if [ -n "$quick" ]; then
+    [ -n "$noplan" ] || noplan="$quick"
+    [ -n "$noaccept" ] || noaccept="$quick"
+    export GUILD_NO_WHY=1
+  fi
   [ -n "$noaccept" ] || noaccept="${GUILD_NO_ACCEPTANCE:-}"
   # The contract comes before the code: read the brief now, and refuse one with no acceptance
   # before any worktree or folder exists (helpers inherit their parent's; a reason opts out).
   local brief_tmp="$GUILD_HOME/.brief-$slug-$$"
   if [ -n "$brief" ]; then cp "$brief" "$brief_tmp"; else cat > "$brief_tmp"; fi
   [ -s "$brief_tmp" ] || { rm -f "$brief_tmp"; die "empty brief"; }
+  # Housekeeping (a merge, conflicts, a review fix, a CI chore) has nothing to plan, accept or
+  # validate: the PR it serves already holds all of that. It gets no plan, no contract and no
+  # checklist; the trial stays, so the result is still reviewed and tested. --plan keeps the plan.
+  local light=""
+  if [ -z "$plan" ] && [ -z "$guarded" ] && [ -z "$quick" ] && [ -z "$parent" ] && [ -z "${GUILD_WHY:-}" ] \
+     && ! light=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$brief_tmp" 2>/dev/null); then
+    light="housekeeping: ${light#why card: skipped, }"
+    [ -n "$noplan" ] || noplan="$light"
+    [ -n "$noaccept" ] || noaccept="$light"
+  else
+    light=""
+  fi
   if [ -z "$parent" ] && [ -z "$noaccept" ] && [ "$(python3 "$GUILD_REPO/bin/checks.py" count "$brief_tmp")" = 0 ]; then
     rm -f "$brief_tmp"
     die "the brief has no Acceptance block, so there is no contract to judge the work against. Add one before any code:
@@ -744,6 +835,11 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
     model=$(harness tier "$harness" "$tier") || exit 1
     [ -n "$effort" ] || effort=$(harness tier "$harness" "$tier" --effort)
   fi
+  # The plan phase is the step before the code, so it is on by default: a quest that skips it has
+  # to say why, the same as the acceptance contract. A helper inherits its parent's plan.
+  [ -n "$noplan" ] || noplan="${GUILD_NO_PLAN:-}"
+  [ -n "$parent" ] && [ -z "$noplan" ] && noplan="a helper builds what its parent already planned"
+  if [ -n "$plan" ]; then noplan=""; elif [ -z "$noplan" ]; then plan=1; fi
   # --plan: think on the plan tier first, then build on the chosen model (or the build tier).
   local build_model="" build_effort=""
   if [ -n "$plan" ]; then
@@ -803,6 +899,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "base": "$base", "harness": "$harness", "model": "$model", "tier": "$tier",
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
+           "no_plan": """$noplan""", "quick": """$quick""", "dagger": """$dagger""", "guarded": """$guarded""", "light": """$light""",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -846,22 +943,54 @@ guild wait --for <short-name> --timeout 3600      # in the background; you are w
 Each helper works in its own worktree on a branch from yours. When one reports done, merge its branch into yours (\`git merge $branch--<short-name>\`), run your checks, and carry on. Its work is yours to review.
 HELPERS
   fi
+  if [ -n "$dagger" ]; then cat >> "$q/prompt.md" <<DAGGER
+
+## This is an epic dagger
+
+The guildmaster marked this one epic-dagger: "$dagger". You work alone, start to finish, and they meet the result as a PR.
+- No plan phase, no acceptance contract, no Why card, no validation checklist, no wrap-up page.
+- Never turn to the guildmaster: no \`guild ask\`, no \`guild decide\`, no board, no needs-decision. Guild refuses them on this quest. When a choice comes up, make it, and write it under **Decisions taken alone** in the PR body, one line each with the option you did not take.
+- Build it, run the project's own tests, commit, push, then open the PR: \`guild pr-body\` for the contract section, plus the line \`Trial: skipped - epic dagger: $dagger\` so the reviewer sees it. Then \`guild status $slug done "<PR url>"\`.
+- Blocked by something only a person can give (an access, a secret, a product answer you cannot find)? \`guild status $slug blocked "<what>"\` and stop. That is the one exception.
+DAGGER
+  elif [ -n "$guarded" ]; then cat >> "$q/prompt.md" <<GUARDED
+
+## This is a guarded quest
+
+"$guarded". There is no plan phase: build straight from the brief. In its place, the guildmaster validates your whole branch end to end before any PR exists. Guild refuses \`gh pr create\` until they did, for the exact commit the PR will hold.
+1. Build it and commit. Run \`guild check\`, then the trial (trial skill) until \`guild trial pass\`. Do not open the PR yet.
+2. Write \`$q/scenarios.json\` (war-table skill, "Validation scenarios"): the setup to run your branch locally, then the scenarios that prove the whole ticket, edges included. Commit and push the branch, still without a PR.
+3. \`guild validate ready\` puts the checklist before the guildmaster and marks the quest as waiting on them. Then run \`guild validate wait --timeout 86400\` in the background; you are woken when they finish.
+4. Validated: open the PR (\`guild pr-body\` for the contract section, then \`gh pr create\`), post the wrap-up (war-table skill), and report done with the PR url.
+5. Sent back: the failed scenarios and what the guildmaster saw come to you. Fix them, commit, run the trial again, then \`guild validate ready\` again. Any new commit makes the old certificate stale, so what they validated is always what the PR holds.
+- A question only the guildmaster can answer still goes on the war table (\`guild ask\`). Do not ask what the brief or the code already answers.
+GUARDED
+  elif [ -n "$quick" ]; then cat >> "$q/prompt.md" <<QUICK
+
+## This is a quick quest
+
+The guildmaster asked for speed on this one: "$quick". The gates are off.
+- No plan phase, no acceptance contract, no Why card, no validation checklist.
+- Build it, commit it, then \`guild trial skip "$quick"\` and report done.
+- The board shows every skipped step as skipped, with that reason. Never write a note that says a step passed when it did not run.
+- Still owed: a wrap-up page, and a PR if the brief asks for one.
+QUICK
+  fi
+
   [ -n "$plan" ] && cat >> "$q/prompt.md" <<PLAN
 
 ## You start in the plan phase
 
 You run on a planning model now. Do not change code yet.
-1. Read the brief and the code, then write the plan to \`$q/plan.md\`. The guildmaster reads it as an explainer before approving: the goal is that they understand why, what and how, with no misunderstanding left. Use these \`## \` sections, short and in plain words, each opening with its point:
-   \`## The pain\` (who suffers today, where, one real example with its evidence: a ticket quote, a log line, a screenshot path),
-   \`## Why it happens\` (the root cause in plain words, and where it lives, \`file:line\`),
-   \`## Today\` (how it works now) and \`## After this plan\` (how it will work: what is added, changed, removed; a \`\`\`mermaid flow on each side when the point has arrows),
-   \`## How it will be built\` (numbered steps, one idea each, names in backticks),
-   \`## What you should expect\` (what they will see when it works, and how the acceptance checks prove it),
-   \`## Not included\`, \`## Risks\` (each with what you do about it),
-   and when they help \`## Words to know\`, \`## Questions for you\` (each with options), \`## Files\`.
-   If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs from theirs, say so in the plan instead of hiding it. \`guild plan ready\` refuses a plan without the required sections.
-2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. Guild renders plan.md as the approval page and says what each answer leads to. Then wait with \`guild board wait <id>\`.
-3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. If they ask to explain more, answer their questions inside plan.md (in the section each one is about, plainly) and ask again; if they ask for a change, update the plan and ask again.
+1. Read the brief and the code, then write the plan to \`$q/plan.md\`. The guildmaster reads it to understand what is going on and to agree or disagree, so write only what they need for that. Pick the shape that fits the work:
+   - **small** (a fix with up to three steps, no open choice): \`## How it will be built\` and \`## What you should expect\` (what they will see when it works, and how it is proven). Nothing else unless it helps.
+   - **standard** (most work): add \`## The pain\` (who suffers, one real example with evidence), \`## Why it happens\` (the root cause, \`file:line\`) and \`## After this plan\` (what is added, changed, removed). Add \`## Today\`, \`## Risks\`, \`## Not included\`, \`## Questions for you\` only when they have something real to say.
+   - **full** (a feature, a business rule, six or more steps, or choices they may not share): every section, \`## Today\` against \`## After this plan\` with a \`\`\`mermaid flow when the point has arrows, \`## Not included\`, \`## Risks\` (each with what you do about it), and \`## Questions for you\` for every choice and every guess you made about the ticket.
+   **When the pain is on a screen, show the screen.** Put \`![what to look at](path)\` in \`## The pain\`: first the ticket's own screenshots (Jira: \`jira_get_issue_images\` or \`jira_download_attachments\`), else the running app, local or staging (\`guild shot <url> --name before\`, with the steps to reach the state in the caption), else a drawing (\`guild draw\`). Say in the caption exactly what to look at ("the Role select is empty"). A picture or a mock of the result goes in \`## After this plan\`. The page shows them side by side, and \`guild plan ready\` refuses a screen pain with no picture; if none can be shown, write "No screen picture: <why>" in The pain.
+   **When the plan is a story, tell it as a one-minute video too.** Only when it fits: the pain is something a person can watch go wrong (a screen, data that changes shape on its way, steps that fail in order) and the guildmaster would otherwise have to imagine it. Skip it for small plans, refactors, upgrades, config, tests and docs. Write \`$q/video.json\`: \`guild video spec\` shows the format and the order that teaches (a surprising hook, the parts named first, the normal case, the pain as a tiny story, the turn, the fix as a numbered checklist, your decision, a close that comes back to the hook). One idea per scene, under 200 words in all, plain words, no file names. \`guild video check $slug\` tells you what is wrong. \`guild plan ready\` builds it in the background (about two minutes) and the plan page plays it at the top.
+   Write the steps, risks, scope and questions as lists, one claim per item: each item can become a point they mark. Short, plain words. A section with nothing real to say is better left out. If the guildmaster wrote a Why card (\`$q/why.json\`), the page shows it next to your plan: where your understanding differs, say so.
+2. Put it on the war table: \`guild plan ready "<one sentence: what this plan does>"\`. Guild picks the shape from what you wrote (a Why card, six or more steps, or questions with four or more steps make it full); \`--shape small|standard|full\` sets it. A small plan is approve, explain or change. A standard one asks them to mark only the risks and questions; a full one asks them to mark every point, and they can approve only when every point shown is Agree. Then wait with \`guild board wait <id>\`.
+3. When it is approved, run \`guild status $slug planned "<one line>"\`. Guild restarts you on the build model ($build_model) in this same conversation, and you build what the plan says. Until then, the answer comes back with their marks: for each **Not sure**, answer it inside plan.md, in the section it is about, in plain words, with an example when it helps; for each **Change**, change the plan. If an answer shows they read the task differently, add a question about it. Then \`guild plan ready\` again. Repeat until they approve; points they agreed stay agreed, and changed ones show as new.
 PLAN
 
   { echo "#!/usr/bin/env bash"
@@ -890,10 +1019,18 @@ PLAN
   event "$slug" working "launched ($harness${model:+ $model}) in $wt"
   # headless: another machine's guild asked for this quest; its tab lives over there
   [ -n "$headless" ] || open_tab "$slug" "$wt" "bash '$q/launch.sh'" --bg ${parent:+"$SESSION:$parent"} >/dev/null
-  # the guildmaster writes why this quest exists, in their own words (helpers and remote copies skip it)
+  # The Why card is optional: --why puts it on the docket. The rules themselves are owned another way:
+  # the quests draft every rule change, and the guildmaster confirms them once a week (/rules/week).
   if [ -z "${GUILD_NO_WHY:-}" ] && [ -z "$parent" ] && [ -z "$headless" ]; then
-    python3 "$GUILD_REPO/bin/why.py" open "$slug" >/dev/null 2>&1 && echo "why card: on the docket for the guildmaster" || true
+    if [ -n "${GUILD_WHY:-}" ]; then
+      python3 "$GUILD_REPO/bin/why.py" open "$slug" >/dev/null 2>&1 && echo "why card: on the docket for the guildmaster" || true
+    elif why_word=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$q/brief.md" 2>/dev/null); then
+      echo "why card: optional, not opened (--why opens one); its rule changes come to the weekly digest"
+    else
+      echo "${why_word:-why card: skipped}"
+    fi
   fi
+  [ -n "$light" ] && echo "light quest ($light): no plan, no acceptance contract, no checklist; the trial stays"
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -918,6 +1055,23 @@ PY
 }
 
 # Has this quest actually committed code? A report is only owed when something changed.
+quest_quick() { # slug: the reason a quest was started with --quick, or empty
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('quick',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+quest_light() { # slug: why a housekeeping quest has no plan, contract or checklist, or empty
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('light',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+quest_dagger() { # slug: the reason a quest was started with --epic-dagger, or empty
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('dagger',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+# An epic dagger never turns to the guildmaster: every way of asking is refused inside one.
+dagger_guard() { # [slug]
+  local s="${1:-$(current_quest)}"
+  [ -n "$s" ] || return 0
+  local why; why=$(quest_dagger "$s")
+  [ -z "$why" ] || die "epic dagger ($why): this quest decides alone. Make the call, write it under 'Decisions taken alone' in the PR body, and go on. Only 'guild status $s blocked' may stop it."
+}
+
 quest_committed() { # slug
   local q wt base
   q="$(qdir "$1")"
@@ -972,6 +1126,12 @@ cmd_status() {
     esac
   done
   need_quest "$slug"
+  [ -n "$(quest_quick "$slug")" ] && export GUILD_NO_SCENARIOS=1
+  [ -n "$(quest_light "$slug")" ] && export GUILD_NO_SCENARIOS=1
+  if [ -n "$(quest_dagger "$slug")" ]; then
+    export GUILD_NO_WRAPUP=1 GUILD_NO_SCENARIOS=1
+    [ "$state" = needs-decision ] && dagger_guard "$slug"
+  fi
   case "$state" in working|blocked|needs-decision|done|failed|stopped|planned) ;; *) die "bad state $state" ;; esac
   [ "$state" = planned ] && { handoff "$slug" "$note"; return; }
   # Every decision reaches the guildmaster as a page on the war table, never as a line of
@@ -1017,8 +1177,20 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   [ "$state" = done ] && [ -n "${GUILD_NO_WRAPUP:-}" ] && note="$note (no wrap-up)"
   [ "$state" = done ] && [ -n "${GUILD_NO_IMPACT:-}" ] && note="$note (no impact section)"
   [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ] && note="$note (no validation scenarios)"
+  if [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ]; then
+    printf '%s\n' "${note% (no*}" > "$(qdir "$slug")/scenarios.waived"
+  fi
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
+  # The wrap-up waits hidden until the end: it opens now, when the quest really is done.
+  if [ "$state" = done ] && [ -z "${GUILD_NO_WRAPUP:-}" ]; then
+    local w; w=$(wrapup_of "$slug")
+    if [ -n "$w" ]; then
+      local url; url="$(python3 "$GUILD_REPO/bin/wartable.py" url)b/$slug/$w/"
+      event "$slug" "wrapup" "wrap-up ready: $url"
+      case "$url" in http*) [ "${GUILD_BOARD_NO_OPEN:-}" = 1 ] || open "$url" >/dev/null 2>&1 || true ;; esac
+    fi
+  fi
 }
 
 # The end of a quest's plan phase: same conversation, build model. The restart runs from
@@ -1028,7 +1200,7 @@ handoff() { # slug note
   local phase build
   phase=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('phase',''))")
   build=$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_model',''))")
-  [ "$phase" = plan ] || die "quest $1 is not in a plan phase (start it with --plan)"
+  [ "$phase" = plan ] || die "quest $1 is not in a plan phase (it was started with --no-plan)"
   printf '%s\n' "$build" > "$q/model"
   python3 -c "import json;print(json.load(open('$q/meta.json')).get('build_effort',''))" > "$q/effort"
   python3 - "$q/meta.json" <<'PY2'
@@ -1061,8 +1233,12 @@ frontend_changed() { # slug
 }
 
 # The end-to-end checklist for a quest: open it, or export a standalone copy for the team.
-cmd_validate() { # [export] slug [--out FILE]
+cmd_validate() { # [export] slug [--out FILE] | ready | wait [--timeout S]
   local port
+  case "${1:-}" in
+    ready) shift; validate_ready "$@"; return ;;
+    wait) shift; validate_wait "$@"; return ;;
+  esac
   if [ "${1:-}" = export ]; then
     shift; need_quest "${1:-}"
     python3 "$GUILD_REPO/bin/scenarios.py" export "$@"
@@ -1074,6 +1250,77 @@ cmd_validate() { # [export] slug [--out FILE]
   local url="http://127.0.0.1:$port/q/$1/validate"
   echo "$url"
   [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+}
+
+# A guarded quest's checklist goes before the guildmaster: only with a passed trial for HEAD and a
+# checklist that is ready, so they never validate a branch the adventurer has not checked first.
+validate_ready() {
+  local slug; slug=$(current_quest "${1:-}")
+  [ -n "$slug" ] || die "usage: guild validate ready   (inside a guarded quest)"
+  need_quest "$slug"
+  local q wt head sha fe="" problems port url
+  q="$(qdir "$slug")"
+  [ -n "$(python3 -c "import json;print(json.load(open('$q/meta.json')).get('guarded',''))")" ] \
+    || die "$slug is not a guarded quest: its checklist is run before the merge, from the wrap-up (guild validate $slug)"
+  wt=$(python3 -c "import json;print(json.load(open('$q/meta.json'))['worktree'])")
+  head=$(git -C "$wt" rev-parse HEAD)
+  sha=$(python3 -c "import json;print(json.load(open('$q/trial.json'))['sha'])" 2>/dev/null || true)
+  [ "$sha" = "$head" ] || die "run the trial on this commit first (trial skill, then guild trial pass); the guildmaster validates only a checked branch"
+  [ -n "$(frontend_changed "$slug")" ] && fe="--frontend"
+  problems=$(python3 "$GUILD_REPO/bin/scenarios.py" check "$slug" $fe)
+  [ -z "$problems" ] || die "the checklist is not ready:
+$(printf '%s\n' "$problems" | sed 's/^/     - /')
+     Write $q/scenarios.json (war-table skill, \"Validation scenarios\"), then run guild validate ready again."
+  port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+  url="http://127.0.0.1:$port/q/$slug/validate"
+  printf 'needs-decision\t%s\t%s\n' "validate before the PR: run the checklist on ${head:0:8} -> $url" "$(now)" > "$q/status"
+  event "$slug" needs-decision "validate before the PR: run the checklist on ${head:0:8} -> $url"
+  [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || true
+  echo "$url"
+  echo "now wait: guild validate wait --timeout 86400"
+}
+
+# Blocks until the guildmaster validated this commit (exit 0) or marked every scenario with at least
+# one fail (exit 3, the failures printed). Either way the quest goes back to work.
+validate_wait() {
+  local slug="" timeout=86400
+  while [ $# -gt 0 ]; do
+    case "$1" in --timeout) timeout="$2"; shift 2 ;; *) slug="$1"; shift ;; esac
+  done
+  slug=$(current_quest "$slug")
+  [ -n "$slug" ] || die "usage: guild validate wait [--timeout S]   (inside a guarded quest)"
+  need_quest "$slug"
+  local waited=0 out verdict detail
+  while :; do
+    out=$(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import scenarios
+s = scenarios.summary(sys.argv[2])
+if s["certified"]:
+    c = s["certificate"]
+    print("validated\t%s/%s passed on %s" % (c["passed"], c["total"], c["commit"][:8]))
+elif s["exists"] and s["open"] == 0 and s["fail"]:
+    print("failed\t" + scenarios.failures_text(sys.argv[2]))
+' "$GUILD_REPO/bin" "$slug")
+    verdict="${out%%	*}"; detail="${out#*	}"
+    case "$verdict" in
+      validated)
+        printf 'working\t%s\t%s\n' "validated by the guildmaster, opening the PR" "$(now)" > "$(qdir "$slug")/status"
+        event "$slug" working "validated: $detail"
+        echo "validated: $detail. Open the PR now (guild pr-body, then gh pr create)."
+        return 0 ;;
+      failed)
+        printf 'working\t%s\t%s\n' "validation failed: back to the forge" "$(now)" > "$(qdir "$slug")/status"
+        event "$slug" working "validation failed: back to the forge"
+        echo "The guildmaster ran the checklist and these scenarios failed:"
+        echo "$detail"
+        echo "Fix them, commit, run the trial again, then guild validate ready again."
+        return 3 ;;
+    esac
+    [ "$waited" -ge "$timeout" ] && { echo "validate wait: not validated within ${timeout}s; run it again to keep waiting"; return 1; }
+    sleep 3; waited=$((waited + 3))
+  done
 }
 
 # Prints why the wrap-up still lacks its impact section, or nothing when it is fine.
@@ -1091,7 +1338,7 @@ impact_missing() { # slug
      Nothing real to show? guild status $1 done --no-impact \"<why>\""
   elif grep -qE 'data-unexplained="[1-9]' "$page"; then
     echo "the wrap-up's impact section has rule changes nobody explained: write them in a rules file
-     ({\"rules\": [{\"rule\", \"before\", \"after\", \"where\", \"why\"}], \"note\": \"...\"}) and run guild impact --into <page> --rules <file> again"
+     ({\"rules\": [{\"rule\", \"area\", \"before\", \"after\", \"where\", \"why\"}], \"note\": \"...\"}; area is the business area, like Projects or Pay equations) and run guild impact --into <page> --rules <file> again"
   fi
 }
 
@@ -1148,7 +1395,8 @@ cmd_ask() {
     ensure_pseudo_quest "$slug" "the fleet"
   fi
   need_quest "$slug"
-  [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]'
+  dagger_guard "$slug"
+  [ $# -ge 1 ] || die 'usage: guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id] [--image "path=caption"]...'
   local question="$1"; shift
   python3 "$GUILD_REPO/bin/wartable.py" ask "$slug" "$question" "$@"
 }
@@ -1270,7 +1518,8 @@ cmd_trial() {
   local slug; slug=$(current_quest)
   [ -n "$slug" ] || die "trial must run inside a quest (GUILD_QUEST not set)"
   need_quest "$slug"
-  local result="${1:-}" note="${2:-}" sha nobehaviour=""
+  local result="${1:-}" note="${2:-}" sha nobehaviour="" quick
+  quick=$(quest_quick "$slug")
   if [ "${2:-}" = --no-behaviour ]; then nobehaviour="${3:-}"; [ -n "$nobehaviour" ] || die "--no-behaviour needs a reason"; note="${4:-}"; fi
   case "$result" in
     pass) ;;
@@ -1278,6 +1527,7 @@ cmd_trial() {
     *) die "usage: guild trial pass [note] | skip <reason>" ;;
   esac
   sha=$(git rev-parse HEAD)
+  [ -n "$quick" ] && [ -z "$nobehaviour" ] && nobehaviour="quick quest: $quick"
   if [ "$result" = pass ]; then
     local why
     why=$(python3 "$GUILD_REPO/bin/checks.py" status "$(qdir "$slug")" "$sha") || die "trial refused: $why"
@@ -1322,6 +1572,7 @@ cmd_board() {
       fi
       [ -n "$slug" ] || die "guild board $sub needs a quest: run it inside one, or pass --quest <name>"
       need_quest "$slug"
+      [ "$sub" = open ] && dagger_guard "$slug"
       python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$slug" ${rest[@]+"${rest[@]}"} ;;
     list|url) python3 "$GUILD_REPO/bin/wartable.py" "$sub" "$@" ;;
     *) die "usage: guild board open|wait|list|url" ;;
@@ -1365,7 +1616,11 @@ if os.path.exists(path):
         os.replace(tmp, path)
 PY
   mkdir -p "$QUESTS/_archive"
-  mv "$q" "$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
+  local dest="$QUESTS/_archive/$slug-$(date +%Y%m%d%H%M%S)"
+  mv "$q" "$dest"
+  # Its board links 404 from here on, so the pages and pictures are dead weight: drop them now.
+  # The json stays (meta, ledger, grade, each board's title and your answer), so history holds.
+  python3 "$GUILD_REPO/bin/tidy.py" purge "$dest" >/dev/null 2>&1 || true
   event "$slug" closed ""
   echo "closed $slug (branch $branch kept in $repo)"
 }
@@ -1381,8 +1636,11 @@ case "${1:-}" in
   trial) shift; cmd_trial "$@" ;;
   board) shift; cmd_board "$@" ;;
   ask) shift; cmd_ask "$@" ;;
+  findings) shift; [ -f "${1:-}" ] || die "usage: guild findings <findings.json> [--quest <slug>]  (a code review's findings, marked point by point)"
+        python3 "$GUILD_REPO/bin/wartable.py" findings "$@" ;;
   decide) shift; d_slug=$(current_quest); [ -n "$d_slug" ] || { d_slug=quartermaster; ensure_pseudo_quest "$d_slug" "the fleet"; }
           [ -f "${1:-}" ] || die "usage: guild decide <spec.json>  (the war-table skill shows the format)"
+          dagger_guard "$d_slug"
           python3 "$GUILD_REPO/bin/decide.py" open "$d_slug" "$1" ;;
   calm) shift; cmd_calm "$@" ;;
   revive) shift; cmd_revive "$@" ;;
@@ -1401,9 +1659,10 @@ case "${1:-}" in
   machines) shift; python3 "$GUILD_REPO/bin/machines.py" "${@:-list}" ;;
   remote) shift; cmd_remote "$@" ;;
   prs) shift; python3 "$GUILD_REPO/bin/prs.py" show ;;
-  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\"  (inside a quest, after writing plan.md)"
+  plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\" [--shape small|standard|full]  (inside a quest, after writing plan.md)"
         me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
-        python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" ;;
+        dagger_guard "$me"
+        python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" "${@:3}" ;;
   jev) shift
        if [ "${1:-}" = risk ] && [ -z "${2:-}" ]; then set -- risk "$(current_quest)"; fi
        python3 "$GUILD_REPO/bin/jev.py" "${@:-status}" ;;
@@ -1411,11 +1670,21 @@ case "${1:-}" in
           python3 "$GUILD_REPO/bin/lessons.py" "$@" ;;
   lessons) shift; python3 "$GUILD_REPO/bin/lessons.py" list ;;
   notify) shift; python3 "$GUILD_REPO/bin/notify.py" "${@:-test}" ;;
+  alerts) shift; python3 "$GUILD_REPO/bin/alerts.py" "${@:-show}" ;;
+  video) shift; python3 "$GUILD_REPO/bin/video.py" "${@:-spec}" ;;
   term) shift; cmd_term "$@" ;;
   campaign) shift; cmd_campaign "$@" ;;
   treasury) shift; cmd_treasury "$@" ;;
   validate) shift; cmd_validate "$@" ;;
+  reel) shift; need_quest "${1:-}"
+        port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+        echo "http://127.0.0.1:$port/q/$1/reel"
+        [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/reel" 2>/dev/null || true ;;
+  files) shift; need_quest "${1:-}"
+    port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+    echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/files" 2>/dev/null || true ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
+  lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
   behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
@@ -1423,6 +1692,7 @@ case "${1:-}" in
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
   impact) shift; cmd_impact "$@" ;;
+  draw) shift; python3 "$GUILD_REPO/bin/draw.py" "$@" ;;
   harnesses) harness list ;;
   layout) cmd_layout ;;
   check) shift; cmd_check "$@" ;;
