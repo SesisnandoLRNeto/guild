@@ -54,8 +54,8 @@ guild jira once|watch|status       start quests from your @quartermaster comment
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
-guild board open [--quest NAME] [ID]   no --html: start the war table if it is down and open board ID (or the docket)
                                     (--wrapup marks it as the quest's end-of-work report)
+guild board open [--quest NAME] [ID]   no --html: start the war table if it is down and open board ID (or the docket)
 guild board wait <id> [--timeout S]  block until the guildmaster answers that board, then print the answer
 guild board list | guild board url   boards and their state, or the war table address
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id]
