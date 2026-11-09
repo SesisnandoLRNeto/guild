@@ -1764,6 +1764,19 @@ has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' h
 has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
 has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
 has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=..%2Fetc')" "no such tab"
+calm=$(python3 - "$REPO" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/bin")
+import console
+left = ["⏺ line %d of the conversation" % i for i in range(8)]
+wide = "\n".join(l.ljust(40) + "│ side panel diff %d" % i for i, l in enumerate(left)) + "\n❯ type here\n  Sonnet │ 11% │ x"
+out = console.main_column(wide)
+print("split" if "side panel" not in out and "line 7 of the conversation" in out and "Sonnet │ 11%" in out else "mixed")
+print("same" if console.main_column("a │ b\nplain text") == "a │ b\nplain text" else "changed")
+PY
+)
+has "calm mode's side panel stays off the phone, the conversation and input box stay" "$calm" "split"
+has "a screen with no side panel is left as it is" "$calm" "same"
 tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm-ctest 2>/dev/null
 # the phone link as a QR code
 out=$(python3 - "$REPO/bin" <<'PY'

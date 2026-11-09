@@ -23,7 +23,11 @@ quest events that need you: needs-decision, blocked, failed, done and wrap-up. E
 on its own, with no link needed: a decision lists the question, the detail, every option with its
 trade-off and the recommended one; blocked and failed carry the whole note, repo, branch and PR;
 done carries the PR links and the wrap-up title; a PR alert carries the PR title and its GitHub URL.
-It is an HTML mail with a plain-text copy. Events within 60 seconds of each other share one mail
+It is an HTML mail with a plain-text copy: one dark card per item, in the realm's colors, that says
+what waits (Approve the plan, Your decision, Results ready, Done, Blocked, Failed, Still waiting
+for you, Pull request), the quest, only what matters, and buttons: the page itself (the plan, the
+board, the results) and the quest in the console, to type to it. A point-by-point plan is not
+answered by reply: its mail sends you to the plan page. Events within 60 seconds of each other share one mail
 (a second decision gets its own, so a reply names one question).
 Links: with `guild remote on` the war table link is the Tailscale address with its key (that
 address only opens on your tailnet). With remote off the mail says to open the war table on the
@@ -140,7 +144,8 @@ def war_link(path="/", cfg=None):
     """A war table link that opens on a phone: the tailnet address with its key. "" with remote off."""
     cfg = cfg or config()
     base = tail_base(cfg)
-    return f"{base}{path}?k={cfg['key']}" if base else ""
+    path, _, frag = path.partition("#")
+    return f"{base}{path}?k={cfg['key']}" + (f"#{frag}" if frag else "") if base else ""
 
 
 def localize(text, cfg=None):
@@ -230,23 +235,57 @@ def new_token(slug, board):
     return token
 
 
+# kind: (label on the mail, its color). One look for every mail: the realm's dark card.
+KINDS = {"approve": ("Approve the plan", "#d9a441"), "decision": ("Your decision", "#d9a441"),
+         "results": ("Results ready", "#8fcf6a"), "done": ("Done", "#8fcf6a"),
+         "blocked": ("Blocked", "#ff7a66"), "failed": ("Failed", "#ff7a66"),
+         "waiting": ("Still waiting for you", "#f0c75a"), "pr": ("Pull request", "#f0c75a"),
+         "usage": ("Claude usage", "#f0c75a"), "alert": ("Alert", "#f0c75a")}
+
+
+def plan_summary(slug, board):
+    """The one line a plan page opens with."""
+    try:
+        page = open(os.path.join(QUESTS, slug, "boards", board, "content.html")).read()
+    except OSError:
+        return ""
+    m = re.search(r'<p class="summary">(.*?)</p>', page, re.S)
+    return html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip() if m else ""
+
+
+def video_ready(slug):
+    try:
+        import video
+        return video.status(slug).get("state") == "ready"
+    except Exception:
+        return False
+
+
 def event_item(slug, state, note, cfg=None):
     """One event as an email section: {"slug","state","subject","blocks","board","token"}."""
     cfg = cfg or config()
     facts, prs_found = quest_facts(slug, note)
     blocks, token, board_id = [], "", ""
-    flat = [("Quest", slug)] + facts
-    subject = {"needs-decision": "needs a decision", "blocked": "is blocked", "failed": "failed",
-               "done": "is done", "wrapup": "wrap-up ready"}.get(state, state)
-    blocks.append(("title", f"{slug} {subject}"))
-    blocks.append(("facts", [(k, clean(v, cfg)) for k, v in flat]))
-    board_link = ""
+    console = war_link(f"/console#{slug}", cfg)
+    kind = {"needs-decision": "decision", "blocked": "blocked", "failed": "failed", "done": "done", "wrapup": "results"}.get(state, "alert")
+    buttons = []
     if state == "needs-decision":
         board_id, meta, questions = find_board(slug, note)
         if board_id:
-            board_link = war_link(f"/b/{slug}/{board_id}/", cfg)
-            token = new_token(slug, board_id)
-            for q in questions or [{"title": meta.get("title", "")}]:
+            dec = load_json(os.path.join(QUESTS, slug, "boards", board_id, "decisions.json"), {})
+            plan = meta.get("title", "").startswith("Approve the plan") or "shape" in dec
+            kind = "approve" if plan else "decision"
+            buttons.append(("Open the plan" if plan else "Open the board", war_link(f"/b/{slug}/{board_id}/", cfg), True))
+            if plan:
+                summary = plan_summary(slug, board_id)
+                if summary:
+                    blocks.append(("h", "The plan"))
+                    blocks.append(("p", clean(summary, cfg)))
+                if video_ready(slug):
+                    buttons.append(("Watch it (1 min)", war_link(f"/q/{slug}/video.mp4", cfg), False))
+            replyable = len(questions) == 1 and not meta.get("kind") and not dec.get("review")
+            token = new_token(slug, board_id)    # every decision mail: a reply to one it cannot take still gets an answer
+            for q in ([] if dec.get("review") else questions or [{"title": meta.get("title", "")}]):
                 blocks.append(("h", "Question"))
                 blocks.append(("p", clean(q.get("title", ""), cfg)))
                 if q.get("detail"):
@@ -259,20 +298,25 @@ def event_item(slug, state, note, cfg=None):
                     rec = next((o for o in q["options"] if o.get("id") == q.get("recommended")), None)
                     if rec:
                         blocks.append(("p", f"Recommended: {rec['id']} ({clean(rec.get('label', ''), cfg)})"))
-            if len(questions) == 1 and not meta.get("kind"):
-                blocks.append(("p", "Answer by replying to this email with an option letter (b, or b: a few words) or free text."))
+            if replyable:
+                blocks.append(("note", "Answer by replying to this email with an option letter (b, or b: a few words) or free text."))
+            elif dec.get("review"):
+                blocks.append(("note", "Approving means marking every point Agree: open the plan to read and mark it."))
             else:
-                blocks.append(("p", "This board has several questions: answer it on the war table."))
+                blocks.append(("note", "This board has several questions: answer it on the war table."))
         else:
             blocks.append(("h", "What waits for you"))
             blocks.append(("p", clean(note, cfg)))
     elif state in ("blocked", "failed"):
         blocks.append(("h", "What happened"))
         blocks.append(("p", clean(note, cfg)))
+        buttons.append(("Answer it in the console", console, True))
+        console = ""
     else:                                    # done, wrapup
         board_id, meta, _ = find_board(slug, note, want_wrapup=True)
         if meta:
-            board_link = war_link(f"/b/{slug}/{board_id}/", cfg)
+            kind = "results"
+            buttons.append(("Open the results", war_link(f"/b/{slug}/{board_id}/", cfg), True))
             blocks.append(("h", "Wrap-up"))
             blocks.append(("p", clean(meta.get("title", ""), cfg) + (f"\n{clean(meta['subtitle'], cfg)}" if meta.get("subtitle") else "")))
         elif state == "done" and note:
@@ -281,54 +325,107 @@ def event_item(slug, state, note, cfg=None):
     if prs_found:
         blocks.append(("h", "Pull request" + ("s" if len(prs_found) > 1 else "")))
         blocks.append(("links", [(clean(t, cfg) or "PR", u) for u, t in prs_found.items()]))
-    if board_link:
-        blocks.append(("links", [("Open the war table", board_link)]))
+    if console:
+        buttons.append(("Talk to it in the console", console, not buttons))
+    buttons = [b for b in buttons if b[1]]
+    if buttons:
+        blocks.append(("buttons", buttons))
     elif tail_base(cfg):
-        blocks.append(("links", [("Open the war table", war_link("/", cfg))]))
+        blocks.append(("buttons", [("Open the war table", war_link("/", cfg), True)]))
     else:
         blocks.append(("p", "Open the war table on your Mac."))
-    return {"slug": slug, "state": state, "subject": f"guild: {slug} {subject}", "blocks": blocks,
-            "board": board_id if token else "", "token": token, "ts": time.time()}
+    label = KINDS[kind][0]
+    subject = {"approve": "approve the plan", "decision": "needs a decision", "blocked": "is blocked",
+               "failed": "failed", "done": "is done", "results": "results ready"}.get(kind, state)
+    blocks.insert(0, ("facts", [(k, clean(v, cfg)) for k, v in [("Quest", slug)] + facts]))
+    blocks.insert(0, ("title", f"{slug} {subject}", kind, slug))
+    return {"slug": slug, "state": state, "subject": f"guild: {slug} {subject}" if kind != "approve" else f"guild: {slug}, approve the plan",
+            "blocks": blocks, "board": board_id if token else "", "token": token, "ts": time.time(), "label": label}
+
+
+INK, DIM, GOLD, CARD, LINE = "#efe6d8", "#a89c8c", "#f3cf6c", "#221b29", "#4a3f52"
+
+
+def card_html(blocks):
+    """One item as the realm's dark card: a colored label, the quest, then what matters, then buttons."""
+    out, color = [], KINDS["alert"][1]
+    for kind, *a in blocks:
+        if kind == "title":
+            k = a[1] if len(a) > 1 else "alert"
+            label, color = KINDS.get(k, KINDS["alert"])
+            out.append(f'<div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:{color}">'
+                       f'{html.escape(label)}</div><div style="font-size:19px;font-weight:700;color:{GOLD};margin:4px 0 2px;'
+                       f'word-break:break-word">{html.escape(a[2] if len(a) > 2 else a[0])}</div>')
+        elif kind == "facts":
+            rest = [v for k, v in a[0] if k != "Quest"]
+            if rest:
+                out.append(f'<div style="font-size:12.5px;color:{DIM}">' + " &middot; ".join(linkify(v) for v in rest) + "</div>")
+        elif kind == "h":
+            out.append(f'<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:{DIM};margin:14px 0 4px">'
+                       f'{html.escape(a[0])}</div>')
+        elif kind in ("p", "note"):
+            style = f"color:{DIM};font-size:13px;font-style:italic;margin-top:12px" if kind == "note" else "font-size:15px;line-height:1.45"
+            out.append(f'<div style="{style};white-space:pre-wrap;word-break:break-word">{linkify(a[0])}</div>')
+        elif kind == "opts":
+            out.append("".join(
+                f'<div style="margin:6px 0;padding:8px 10px;border:1px solid {GOLD if rec else LINE};border-radius:6px">'
+                f'<b style="color:{GOLD}">{html.escape(i)})</b> <b>{html.escape(label)}</b>'
+                + (f' <span style="font-size:11px;color:#1a1208;background:{GOLD};border-radius:3px;padding:1px 5px">recommended</span>' if rec else "")
+                + (f'<div style="color:{DIM};font-size:13.5px;margin-top:2px">{linkify(why)}</div>' if why else "") + "</div>"
+                for i, label, why, rec in a[0]))
+        elif kind == "links":
+            out.append("".join(f'<div style="margin:3px 0"><a href="{html.escape(url, quote=True)}" style="color:{GOLD}">'
+                               f'{html.escape(label)}</a></div>' for label, url in a[0]))
+        elif kind == "buttons":
+            out.append('<div style="margin-top:14px">' + "".join(
+                f'<a href="{html.escape(url, quote=True)}" style="display:inline-block;margin:0 8px 8px 0;padding:9px 14px;'
+                f'border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;'
+                + (f'background:{GOLD};color:#1a1208">' if primary else f'border:1px solid {GOLD};color:{GOLD}">')
+                + f"{html.escape(label)}</a>" for label, url, primary in a[0]) + "</div>")
+    return (f'<div style="max-width:560px;margin:0 auto 12px;background:{CARD};border:1px solid {LINE};border-top:3px solid {color};'
+            f'border-radius:8px;padding:16px 18px">' + "".join(out) + "</div>")
+
+
+def page_html(cards, footer=""):
+    return (f'<div style="background:#17121c;padding:16px 10px;color:{INK};font-family:-apple-system,BlinkMacSystemFont,'
+            f'Segoe UI,Helvetica,Arial,sans-serif">' + "".join(cards)
+            + f'<div style="text-align:center;font-size:11px;color:#6e6476">guild{(" &middot; " + footer) if footer else ""}</div></div>')
 
 
 def render(items, token_item=None):
     """(text, html) for one or more items. The reply token goes last, in a line a reply quotes back."""
-    text, page = [], []
+    text, cards = [], []
     for n, item in enumerate(items):
         if n:
             text.append("\n" + "-" * 30 + "\n")
-            page.append("<hr>")
         for kind, *a in item["blocks"]:
             if kind == "title":
                 text.append(a[0] + "\n" + "=" * len(a[0]))
-                page.append(f'<h2 style="margin:16px 0 6px">{html.escape(a[0])}</h2>')
             elif kind == "facts":
                 text.append("\n".join(f"{k}: {v}" for k, v in a[0]))
-                page.append('<p style="color:#555;margin:4px 0">' + "<br>".join(
-                    f"<b>{html.escape(k)}:</b> {linkify(v)}" for k, v in a[0]) + "</p>")
             elif kind == "h":
                 text.append("\n" + a[0].upper())
-                page.append(f'<h3 style="margin:14px 0 4px">{html.escape(a[0])}</h3>')
-            elif kind == "p":
+            elif kind in ("p", "note"):
                 text.append(a[0])
-                page.append(f'<p style="margin:4px 0;white-space:pre-wrap">{linkify(a[0])}</p>')
             elif kind == "opts":
                 text.append("\n".join(f"  {i}) {label}" + (f": {why}" if why else "") + ("  <- recommended" if rec else "")
                                       for i, label, why, rec in a[0]))
-                page.append('<ul style="padding-left:18px">' + "".join(
-                    f'<li style="margin:6px 0"><b>{html.escape(i)}) {html.escape(label)}</b>'
-                    + (" (recommended)" if rec else "") + (f"<br>{linkify(why)}" if why else "") + "</li>"
-                    for i, label, why, rec in a[0]) + "</ul>")
             elif kind == "links":
                 text.append("\n".join(f"{label}: {url}" for label, url in a[0]))
-                page.append("<p>" + "<br>".join(
-                    f'<a href="{html.escape(url, quote=True)}" style="display:inline-block;padding:6px 12px;background:#1a56db;'
-                    f'color:#fff;border-radius:6px;text-decoration:none">{html.escape(label)}</a>' for label, url in a[0]) + "</p>")
+            elif kind == "buttons":
+                text.append("\n".join(f"{label}: {url}" for label, url, _ in a[0]))
+        cards.append(card_html(item["blocks"]))
+    ref = ""
     if token_item and token_item.get("token"):
         ref = f"guild-ref: {token_item['token']}"
         text.append("\n" + ref)
-        page.append(f'<div style="display:none">{ref}</div><p style="color:#999;font-size:11px">{ref}</p>')
-    return "\n\n".join(text), '<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:15px;max-width:640px">' + "".join(page) + "</div>"
+    return "\n\n".join(text), page_html(cards, html.escape(ref))
+
+
+def alert_kind(title, text):
+    t = f"{title} {text}".lower()
+    return ("waiting" if "waited" in t and "your answer" in t else "pr" if "pr #" in t or "/pull/" in t
+            else "usage" if "usage" in t else "alert")
 
 
 def linkify(text):
@@ -452,7 +549,18 @@ def send_email(title, text, url="", html_body=None, msgid=None, to=None):
     context = pr_context(url) if "/pull/" in url else ""
     if html_body is None:
         body = context + text + ("\n\n" + link if link else ("\n\nOpen the war table on your Mac." if url else ""))
-        page = None
+        kind = alert_kind(title, text)
+        quest = text.split(":")[0].split(" has waited")[0].strip() if kind in ("waiting", "pr") else ""
+        blocks = [("title", text, kind, quest or text)]
+        if quest:
+            blocks.append(("p", text))
+        if context:
+            blocks.append(("p", context.strip()))
+        buttons = [(("Open the PR" if "/pull/" in link else "Answer it" if kind == "waiting" else "Open the war table"), link, True)] if link else []
+        if quest and tail_base(cfg):
+            buttons.append(("Talk to it in the console", war_link(f"/console#{quest}", cfg), False))
+        blocks.append(("buttons", buttons) if buttons else ("p", "Open the war table on your Mac." if url else ""))
+        page = page_html([card_html(blocks)])
     else:
         body, page = text, html_body
     body = body.replace(password, "[removed]")

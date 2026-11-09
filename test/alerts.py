@@ -170,7 +170,7 @@ class SMTP:
 notify.email_password = lambda sender: "app-pass"
 notify.smtplib.SMTP_SSL = SMTP
 why = notify.send_email("guild: alpha", "alpha: PR #7 has a merge conflict", "http://100.1.2.3:4712/?k=secret")
-body = mails[-1]["msg"].get_content() if mails else ""
+body = mails[-1]["msg"].get_body(preferencelist=("plain",)).get_content() if mails else ""
 check("an alert email goes through Gmail with the app password", why == "" and mails[-1]["host"] == "smtp.gmail.com"
       and mails[-1]["login"] == ("me@example.com", "app-pass"))
 check("the email carries the line and the link", "merge conflict" in body and "http://100.1.2.3:4712/" in body)

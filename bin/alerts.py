@@ -120,7 +120,8 @@ def board_problems(cfg, open_items):
             continue                   # a wrap-up blocks nothing; it waits for your grade
         hours = age_hours(i.get("created", ""))
         if hours >= cfg["board_hours"]:
-            out.append({"key": f"board:{i['quest']}/{i['board']}", "url": notify.docket_url(),
+            out.append({"key": f"board:{i['quest']}/{i['board']}",
+                        "url": notify.war_link(f"/b/{i['quest']}/{i['board']}/") or notify.docket_url(),
                         "text": f"{i['quest']} has waited {int(hours)}h on your answer: {i.get('title', '')}"})
     return out
 

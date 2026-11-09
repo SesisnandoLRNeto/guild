@@ -109,7 +109,7 @@ check("it lists every option with its trade-off",
       all(o["label"] in text and o["why"] in text for o in QUESTION["options"]))
 check("it names the recommended option", "Recommended: c (Both)" in text)
 check("it names the quest, the ticket and the branch", "Quest: alpha" in text and "SARA-12" in text and "quest/alpha" in text)
-check("the mail has an HTML body with the options as a list", "<li" in html and "Tailscale only" in html and "recommended" in html)
+check("the mail has an HTML body with every option, the recommended one marked", "Tailscale only" in html and "Both" in html and "recommended" in html)
 check("remote on: the link is the tailnet address with its key, on the board",
       f"http://100.64.0.1:4712/b/alpha/224416/?k={KEY}" in text and f"?k={KEY}" in html)
 check("remote on: no 127.0.0.1 link anywhere", "://127.0.0.1" not in text and "://127.0.0.1" not in html)
@@ -423,4 +423,39 @@ config(email={"to": "me@example.com", "from": "me@example.com", "events": False}
 notify.save_json(notify.TOKENS, {"x": {"quest": "alpha", "board": "224416", "created": time.time()}})
 mailreply.poll(wartable.answer_board)
 check("events off also stops reading replies", touched == [])
+config()
+
+# each mail says what kind of thing waits, in the realm's dark card, with the page and the console
+remote_on()
+notify.time.time = time.time
+d = board("alpha", "plan1", "Approve the plan: alpha", [dict(QUESTION, id="choice")])
+json.dump({"questions": [dict(QUESTION, id="choice")], "shape": "full", "review": True}, open(os.path.join(d, "decisions.json"), "w"))
+open(os.path.join(d, "content.html"), "w").write('<p class="summary">Email the decisions that wait &amp; take the reply</p>')
+tok, mid, subj = decision_mail("plan1", "alpha", "war table ready: Approve the plan: alpha -> http://127.0.0.1:4711/b/alpha/plan1/")
+text, html = plain(mails[-1]), page(mails[-1])
+check("a plan waiting for approval says so in the subject", subj.startswith("guild: alpha, approve the plan"))
+check("and on the card, with the plan's own summary", "Approve the plan" in html and "Email the decisions that wait & take the reply" in text)
+check("its button opens the plan page on the tailnet", f"http://100.64.0.1:4712/b/alpha/plan1/?k={KEY}" in html and "Open the plan" in html)
+check("and a second one opens the quest in the console", f"/console?k={KEY}#alpha" in html)
+check("a point-by-point plan does not invite a reply", "Answer by replying" not in text and "marking every point" in text)
+check("the card is the realm's dark one", "#17121c" in html and "#d9a441" in html)
+inbox[:] = [reply(tok, mid, subj, "a")]
+seen.clear()
+mails.clear()
+out = mailreply.poll(wartable.answer_board)
+check("a letter cannot approve a point-by-point plan", out == ["plan needs marks"] and answered("plan1", "alpha") is None
+      and "mark each point" in plain(mails[-1]))
+mails.clear()
+notify.on_event("alpha", "wrapup", "wrap-up for your grade")
+check("a wrap-up is a results mail with its page", mails[-1]["Subject"] == "guild: alpha results ready"
+      and "Open the results" in page(mails[-1]) and "/b/alpha/wrap1/" in page(mails[-1]))
+mails.clear()
+notify.on_event("beta", "blocked", "needs the staging password")
+check("a blocked mail sends you to the console to answer it", "Answer it in the console" in page(mails[-1])
+      and f"/console?k={KEY}#beta" in plain(mails[-1]))
+mails.clear()
+notify.send_email("guild: alpha has waited 3h on your answer", "alpha has waited 3h on your answer: Phone alerts",
+                  notify.war_link("/b/alpha/224416/"))
+check("a decision waiting too long is its own kind of alert", "Still waiting for you" in page(mails[-1])
+      and "Answer it" in page(mails[-1]) and f"/console?k={KEY}#alpha" in page(mails[-1]))
 config()
