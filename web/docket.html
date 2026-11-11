@@ -112,7 +112,9 @@
   html.realm td.n .num::before { background: linear-gradient(160deg, #c08a22, #6e4e10); }
   html.realm .bar { background: #15111a; border-top: 1px solid #8a6a1e; }
   html.realm .bar button { background: linear-gradient(180deg, #f3cf6c, #c08a22); }
+  .alertnote { border-left-color: #c0392b; background: rgba(192,57,43,.14); }
   html.realm .drillnote { background: rgba(217, 164, 65, .14); border-left-color: var(--gold); }
+  html.realm .alertnote { background: rgba(192, 57, 43, .16); border-left-color: #c0392b; }
   html.realm .hold button, html.realm .back { color: var(--ink); }
   html.realm .picked { color: var(--ok); }
   html.realm .empty .gi-icon { color: var(--gold); }
@@ -128,7 +130,7 @@
     <h1 class="rm-title">The Docket</h1>
     <div class="rm-rule"></div>
     <p class="rm-sub">The oracle's hall. High elves, dwarves and gnomes wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
-    <nav class="rm-nav" style="margin-top:12px"><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a></nav>
+    <nav class="rm-nav" style="margin-top:12px"><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a><a href="/console"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The console</a></nav>
   </div>
   <div class="rm-party" id="realm-party" aria-label="Who waits"></div>
 </section>
@@ -137,10 +139,11 @@
     <h1><span class="gi-icon gi-scroll" aria-hidden="true"></span>The Docket</h1>
     <p class="sub">The oracle's hall. Archmages, knights and scouts wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
   </div>
-  <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a></nav>
+  <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a><a href="/console">Console</a></nav>
 </header>
 
 <section class="sheet rm-frame" aria-labelledby="h-open">
+  <p class="drillnote alertnote" id="alertnote" hidden></p>
   <p class="drillnote" id="drillnote" hidden></p>
   <h2 id="h-open"><span class="gi-icon gi-swords" aria-hidden="true"></span>Awaiting your ruling</h2>
   <p class="lead">Decisions first, then finished work waiting for your grade. A little crown marks the adventurer's suggestion.</p>
@@ -218,9 +221,16 @@ function realmParty(open) {
 function render() {
   const open = data.open || [];
   realmParty(open);
+  const an = $("#alertnote"), al = data.alerts || [];
+  an.hidden = !al.length;
+  an.innerHTML = al.map((a) => /^https?:/.test(a.url) && !a.url.includes("127.0.0.1") ? `${esc(a.text)} <a href="${esc(a.url)}" target="_blank" rel="noopener">open</a>` : esc(a.text)).join("<br>");
   const dn = $("#drillnote");
-  dn.hidden = !(data.drill && data.drill.due);
-  if (data.drill && data.drill.due) dn.innerHTML = `<b>This week's rule drill</b>: ${data.drill.count} question${data.drill.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a> &middot; <a href="/rules">the rule book</a>`;
+  const dd = data.drill || {};
+  dn.hidden = !(dd.due || dd.week_due);
+  dn.innerHTML = [
+    dd.week_due ? `<b>Rules changed this week</b>: ${dd.week_count} to confirm. Agree, Wrong or Not sure, one click each. <a href="/rules/week">Confirm them</a>` : "",
+    dd.due ? `<b>This week's rule drill</b>: ${dd.count} question${dd.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a>` : "",
+  ].filter(Boolean).join("<br>") + ` &middot; <a href="/rules">the rule book</a>`;
   $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5"><span class="gi-icon gi-potion" aria-hidden="true"></span>Nothing waits for your seal. The guild is on the road, or resting at the tavern.</td></tr>`;
   $("#held").innerHTML = (data.held || []).map((i) =>
     `<tr class="held"><td class="item"><b>${esc(i.title)}</b><div class="meta"><span class="chip">${esc(i.quest)}</span>${i.held_note ? esc(i.held_note) : ""}</div></td>
@@ -228,7 +238,7 @@ function render() {
     || `<tr><td class="empty">The vault is empty.</td></tr>`;
   $("#recent").innerHTML = (data.recent || []).map((r) =>
     `<tr><td>${esc(r.at.replace("T", " ").slice(0, 16))}</td><td>${esc(r.title)}</td>
-     <td class="picked">${esc(Object.entries(r.answers || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
+     <td class="picked">${esc(Object.entries(r.answers || {}).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
      <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("") || `<tr><td class="empty">No rulings yet. The ink is still wet.</td></tr>`;
   const ready = open.filter(isReady).length;
   $("#send").disabled = !ready;

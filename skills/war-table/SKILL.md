@@ -25,7 +25,7 @@ guild ask "Ship the chooser now or after the icons?" \
 guild board wait <id> --timeout 3600
 ```
 
-Guild builds the page, opens it and waits. Use the long way below when the decision needs pictures: variants, before and after, a diagram, numbers.
+Guild builds the page, opens it and waits. When the question is about a design frame, a screen or a screenshot, the picture goes on the board: `--image "<path>=<caption>"`, once per picture (the Figma export, the screen today). Naming a file in the text is not showing it; `guild ask` refuses a text that names a `.png` without an `--image`. Use the long way below when the decision needs more than a question and pictures: variants side by side, a diagram, numbers.
 
 ## Decision pages: show what each choice leads to (`guild decide`)
 
@@ -109,6 +109,28 @@ Write it so someone who does not read code knows what happened in one minute. Th
   3. `guild impact --into <page.html> --rules rules.json` puts the section where the page has `<!--GUILD-IMPACT-->` (or at the end): an ER diagram of the changed tables with NEW, CHANGED and REMOVED columns, before and after column lists, the constraints the database now enforces, a module impact map, the endpoints, and your rules table. Rerunning it replaces the section.
   4. If an entity field has no column in the migrations, the section shows it in red. Fix it before the wrap-up.
   `guild status done` refuses a backend quest whose wrap-up lacks this section or leaves rules unexplained. `--no-impact "<why>"` is the recorded escape.
+
+## Review findings (`guild findings`)
+
+When the guildmaster asks for a PR review, do not answer with a list in the terminal. Put the findings on the
+war table so they can check each one with their own eyes:
+
+```bash
+guild findings findings.json      # {"title", "summary", "pr", "findings": [{"file", "line", "summary",
+                                  #   "failure_scenario", "severity": "high|medium|low", "category", "comment"}]}
+```
+
+Each finding is a point they mark Agree, Disagree or Not sure. `summary` is one plain sentence; `comment` is the
+PR comment you would leave, word for word. The answer brings back the agreed points and what to do with them:
+fix them, draft PR comments (a draft only: never post without their word), show more, or keep as notes.
+
+## The plan video (optional)
+
+For a plan that is a story (a screen, data that changes shape, steps that fail in order), write `quests/<slug>/video.json` before `guild plan ready`: a one-minute explainer the plan page plays at the top. `guild video spec` shows the scene types and the teaching order; `guild video check <slug>` finds the problems. Skip it for small plans, refactors, upgrades, config, tests and docs.
+
+## The reel (optional)
+
+Guild builds a pixel-art reel of every quest from what it left behind (`guild reel <slug>`, and the "Watch the reel" button on the wrap-up). For a feature, you may tell the story better than the defaults: write `quests/<slug>/reel.json` with up to seven scenes, each `{"kind": "pain|cause|change|build|trial|result|note", "title", "say", "items", "before", "after"}`. `say` is what the narrator reads: one or two plain sentences a product person follows, no file names. A scene you write replaces the one guild would build; a `note` scene is added before the end.
 
 ## Validation scenarios (scenarios.json)
 

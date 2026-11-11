@@ -3,7 +3,50 @@
   "_tiers": "A tier names the kind of work; each harness maps it to its own model in config/harnesses.json (claude: plan=opus, build=sonnet, deep=claude-fable-5-1, light=haiku). Rules say a tier, so switching harness keeps the same intent. 'plan': true thinks on the plan tier first, puts the plan on the war table, and after your approval the same conversation builds on the rule's tier. 'model' still works when you want one exact model.",
   "_harnesses": "Run `guild harnesses` to see them. Add your own CLI in ~/.guild/local/harnesses.json.",
   "_budget": "No dollar cap by default. To cap spend, pass --budget N on a quest, add \"budget\" to a rule, or add \"budget_default\": N here. Past a cap, the adventurer's tools pause and the docket asks you: raise by 50 or 100, or stop.",
+  "_fallback": "Each rule's 'use' is an ordered list: the first entry is the default, the second the fallback. Take the fallback only when the default cannot run: its harness is not ready (`guild harnesses`, codex not logged in, no OPENROUTER_API_KEY), Claude usage is over 90% of the 5-hour or weekly limit, or the quest failed for a harness or model reason (rate limit, model not found, auth). Say which rule and which entry you used. A quest never switches harness halfway on its own: a fallback is a new quest, and the guildmaster hears why.",
   "rules": [
+    {
+      "when": "The task needs generating or editing images",
+      "use": [
+        {
+          "harness": "codex",
+          "tier": "build"
+        },
+        {
+          "harness": "claude",
+          "tier": "build"
+        }
+      ],
+      "why": "Codex has native image generation. Fallback: Claude draws in SVG or CSS, with no generated pictures."
+    },
+    {
+      "when": "Reviewing a pull request (pr-review, findings sorted by severity), with no code change",
+      "use": [
+        {
+          "harness": "claude",
+          "tier": "plan"
+        },
+        {
+          "harness": "codex",
+          "tier": "plan"
+        }
+      ],
+      "why": "Opus reads carefully; a review writes no code, so the fallback needs no guards"
+    },
+    {
+      "when": "Housekeeping on an existing PR: merge main, resolve conflicts, fix CI, address review comments",
+      "use": [
+        {
+          "harness": "claude",
+          "tier": "build"
+        },
+        {
+          "harness": "codex",
+          "tier": "build"
+        }
+      ],
+      "why": "Small, scoped work on a branch that already exists; guild skips the plan for these by itself"
+    },
     {
       "when": "High complexity: new feature with product or UI judgment, a subtle concurrency or data bug, work across many modules",
       "use": [
@@ -11,9 +54,30 @@
           "harness": "claude",
           "tier": "deep",
           "plan": true
+        },
+        {
+          "harness": "openrouter",
+          "tier": "deep",
+          "plan": true
         }
       ],
-      "why": "The strongest model for the hard part; a reviewed plan first keeps it on track"
+      "why": "The strongest model for the hard part; a reviewed plan first keeps it on track. Fallback stays on Claude Code (all guards and the trial skill) through OpenRouter."
+    },
+    {
+      "when": "A bug whose cause is not known yet: a failing test, a production error, behaviour nobody can explain",
+      "use": [
+        {
+          "harness": "claude",
+          "tier": "deep",
+          "plan": true
+        },
+        {
+          "harness": "openrouter",
+          "tier": "deep",
+          "plan": true
+        }
+      ],
+      "why": "Finding the root cause is the hard part; the plan shows the cause and file:line before any fix"
     },
     {
       "when": "A normal feature or change that needs a plan before code",
@@ -22,9 +86,46 @@
           "harness": "claude",
           "tier": "build",
           "plan": true
+        },
+        {
+          "harness": "openrouter",
+          "tier": "build",
+          "plan": true
         }
       ],
-      "why": "Opus plans, you approve, Sonnet builds: judgment where it counts, cheaper tokens for the typing"
+      "why": "Opus plans, you approve, Sonnet builds. Fallback keeps the guards, on a cheaper coder."
+    },
+    {
+      "when": "UI work that must match a design (Figma, screenshots): layout, styling, polish",
+      "use": [
+        {
+          "harness": "claude",
+          "tier": "build",
+          "plan": true
+        },
+        {
+          "harness": "codex",
+          "tier": "build",
+          "plan": true
+        }
+      ],
+      "why": "Sonnet builds UI well; Codex reads images and can redraw assets when Claude is out"
+    },
+    {
+      "when": "Tests and QA: missing unit or integration tests, e2e scenarios, a validation checklist",
+      "use": [
+        {
+          "harness": "claude",
+          "tier": "build",
+          "plan": true
+        },
+        {
+          "harness": "openrouter",
+          "tier": "build",
+          "plan": true
+        }
+      ],
+      "why": "Tests need to know what the code should do, not only what it does; checks prove the result"
     },
     {
       "when": "Pure planning, architecture, or an ambiguous investigation with no code expected",
@@ -32,19 +133,27 @@
         {
           "harness": "claude",
           "tier": "plan"
+        },
+        {
+          "harness": "codex",
+          "tier": "plan"
         }
       ],
-      "why": "Deep reasoning for work where the path is not clear yet"
+      "why": "Deep reasoning for work where the path is not clear yet. No code is written, so Codex's missing hooks do not matter."
     },
     {
-      "when": "The task needs generating or editing images",
+      "when": "Docs and writing: README, runbooks, Confluence or Jira drafts, reports",
       "use": [
+        {
+          "harness": "claude",
+          "tier": "build"
+        },
         {
           "harness": "codex",
           "tier": "build"
         }
       ],
-      "why": "Codex has native image generation; Claude does not"
+      "why": "Plain writing that a human reads before it goes anywhere"
     },
     {
       "when": "Long, mechanical work: renames, migrations, test scaffolding, large sweeps",
@@ -52,15 +161,23 @@
         {
           "harness": "openrouter",
           "tier": "build"
+        },
+        {
+          "harness": "codex",
+          "tier": "build"
         }
       ],
-      "why": "Keeps the Anthropic quota for work that needs judgment"
+      "why": "Keeps the Anthropic quota for work that needs judgment; Codex uses the ChatGPT plan, not money per token"
     },
     {
       "when": "Easy and well defined: a typo, a config value, a small bug whose fix is already known",
       "use": [
         {
           "harness": "claude",
+          "tier": "light"
+        },
+        {
+          "harness": "codex",
           "tier": "light"
         }
       ],
@@ -70,6 +187,11 @@
   "default": [
     {
       "harness": "claude",
+      "tier": "build",
+      "plan": true
+    },
+    {
+      "harness": "openrouter",
       "tier": "build",
       "plan": true
     }

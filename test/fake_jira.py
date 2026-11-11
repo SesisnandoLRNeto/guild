@@ -6,6 +6,7 @@ between polls:  {"issues": [...], "comments": {"KEY": [...]}}
 """
 import http.server
 import json
+import re
 import sys
 
 DATA = sys.argv[1]
@@ -49,10 +50,23 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/rest/api/3/search/jql"):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))
             issues = [{"key": i["key"], "fields": {"summary": i["summary"], "description": adf(i["description"]),
-                                                   "project": {"key": i["key"].split("-")[0]}}}
+                                                   "project": {"key": i["key"].split("-")[0]},
+                                                   "assignee": i.get("assignee"), "status": i.get("status")}}
                       for i in self.data().get("issues", [])]
             return self.reply({"issues": issues})
         self.reply({"error": "not found"}, 404)
+
+
+    def do_DELETE(self):
+        m = re.match(r"^/rest/api/3/issue/([A-Z]+-\d+)/comment/(\w+)$", self.path)
+        if not m:
+            return self.reply({"error": "not found"}, 404)
+        d = self.data()
+        d.setdefault("deleted", []).append(m.group(2))
+        d["comments"][m.group(1)] = [c for c in d.get("comments", {}).get(m.group(1), []) if str(c["id"]) != m.group(2)]
+        json.dump(d, open(DATA, "w"))
+        self.send_response(204)
+        self.end_headers()
 
 
 http.server.ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
