@@ -95,7 +95,7 @@ def fetch(url):
     if token:
         env["GH_TOKEN"] = token
     r = subprocess.run(["gh", "pr", "view", url, "--json",
-                        "state,isDraft,reviewDecision,mergedAt,title,statusCheckRollup,mergeable,author,reviews,comments"],
+                        "state,isDraft,reviewDecision,mergedAt,createdAt,title,statusCheckRollup,mergeable,author,reviews,comments"],
                        capture_output=True, text=True, timeout=30, env=env)
     if r.returncode:
         return {"error": (r.stderr or "gh failed").strip()[:200], "at": time.time()}
@@ -105,7 +105,9 @@ def fetch(url):
         d.get("reviewDecision") or "", "")
     return {"state": state, "review": review, "checks": checks(d.get("statusCheckRollup")), "title": d.get("title", ""),
             "number": int(PR.search(url).group(3)), "conflict": d.get("mergeable") == "CONFLICTING",
-            "waiting_since": waiting_since(d), "merged_at": d.get("mergedAt") or "", "at": time.time()}
+            "waiting_since": waiting_since(d), "merged_at": d.get("mergedAt") or "", "created_at": d.get("createdAt") or "",
+            "changes_at": max((x.get("submittedAt") or "" for x in d.get("reviews") or [] if x.get("state") == "CHANGES_REQUESTED"),
+                              default=""), "at": time.time()}
 
 
 BOTS = {"github-actions", "dependabot", "copilot", "codecov", "sonarcloud", "sonarqubecloud", "coderabbitai",
