@@ -238,7 +238,7 @@ function render() {
     || `<tr><td class="empty">The vault is empty.</td></tr>`;
   $("#recent").innerHTML = (data.recent || []).map((r) =>
     `<tr><td>${esc(r.at.replace("T", " ").slice(0, 16))}</td><td>${esc(r.title)}</td>
-     <td class="picked">${esc(Object.entries(r.answers || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
+     <td class="picked">${esc(Object.entries(r.answers || {}).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
      <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("") || `<tr><td class="empty">No rulings yet. The ink is still wet.</td></tr>`;
   const ready = open.filter(isReady).length;
   $("#send").disabled = !ready;

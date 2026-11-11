@@ -1809,10 +1809,14 @@ wide = "\n".join(l.ljust(40) + "│ side panel diff %d" % i for i, l in enumerat
 out = console.main_column(wide)
 print("split" if "side panel" not in out and "line 7 of the conversation" in out and "Sonnet │ 11%" in out else "mixed")
 print("same" if console.main_column("a │ b\nplain text") == "a │ b\nplain text" else "changed")
+art = "      ^ /|\\        ^  /|\\     ^      ^       /|\\      ox  o+  o/     /|\\    ^      /|\\"
+print("art" if console.is_art(art) and not console.is_art("  - work-api: committed and all 3 checks pass, the suite runs before the PR opens.")
+      and not console.is_art("─" * 80) else "kept")
 PY
 )
 has "calm mode's side panel stays off the phone, the conversation and input box stay" "$calm" "split"
 has "a screen with no side panel is left as it is" "$calm" "same"
+has "the wide ASCII scene is dropped, prose and rules stay" "$calm" "art"
 tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm-ctest 2>/dev/null
 # the phone link as a QR code
 out=$(python3 - "$REPO/bin" <<'PY'

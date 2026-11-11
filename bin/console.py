@@ -98,11 +98,22 @@ def main_column(text):
     return "\n".join(l[:col].rstrip() if len(l) > col and l[col] == "│" else l for l in rows)
 
 
+def is_art(line):
+    """The wide ASCII scene Claude Code draws while it works (stars, trees, little people). It wraps
+    into noise on a phone. A wide line that is almost all symbols and no box drawing is art."""
+    body = line.replace(" ", "")
+    if len(line) < 60 or len(body) < 8 or re.search(r"[─━═│┃╭╮╰╯┌┐└┘├┤]", line):
+        return False
+    return sum(c.isalnum() for c in body) / len(body) < 0.25
+
+
 def screen(name, lines=60):
     lines = max(10, min(int(lines), 400))
     text = main_column(tmux("capture-pane", "-p", "-J", "-t", pane_of(name), "-S", f"-{lines}").stdout)
     text = re.sub(r"[─━═—_]{24,}", "─" * 24, text)     # a terminal-wide rule would wrap into rows on a phone
-    return "\n".join(l.rstrip() for l in text.splitlines()).strip("\n")
+    rows = [l.rstrip() for l in text.splitlines() if not is_art(l)]
+    rows = ["  " + l.lstrip() if len(l) - len(l.lstrip()) > 40 else l for l in rows]   # a far-right note
+    return "\n".join(rows).strip("\n")
 
 
 def send(name, text="", key=""):
