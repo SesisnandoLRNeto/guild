@@ -442,7 +442,7 @@ def act(action):
         slug = action[1]
         if not show(f"{SESSION}:{slug}"):
             subprocess.run([guild, "revive", slug], capture_output=True)
-            show(f"{SESSION}:{slug}")
+            show(f"{SESSION}:{slug}") or show(f"{SESSION}:qm")   # a pseudo quest has no window of its own
     elif kind == "pin":
         key, tab = action[1], action[2]
         wid = [l.split("\t")[0] for l in tmux_out("list-windows", "-t", SESSION, "-F", "#{window_id}\t#W").splitlines()

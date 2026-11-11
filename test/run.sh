@@ -375,6 +375,11 @@ out=$("$GUILD" revive 2>&1)
 has "an orphan quest is revived" "$out" "revived alpha"
 has "its window is back" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W')" "alpha"
 has "the revived launch continues instead of restarting" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "continue"
+mkdir -p "$GUILD_HOME/quests/qm-pseudo" && echo '{"slug": "qm-pseudo", "pseudo": true}' > "$GUILD_HOME/quests/qm-pseudo/meta.json"
+printf 'working\tboards only\t2026-01-01T00:00:00' > "$GUILD_HOME/quests/qm-pseudo/status"
+"$GUILD" revive qm-pseudo >/dev/null 2>&1; "$GUILD" revive qm-pseudo >/dev/null 2>&1
+is "a pseudo quest is never revived, so clicks add no events" "$(grep -c "qm-pseudo.*revived" "$GUILD_HOME/events.log")" "0"
+rm -rf "$GUILD_HOME/quests/qm-pseudo"
 
 mkdir -p "$WT/node_modules" && echo cached > "$WT/node_modules/dep.txt"   # ignored build output
 is "a carried toolchain pin alone is not a change" "$(cd "$REPO" && GUILD_HOME="$GUILD_HOME" bash -c 'eval "$(sed -n "/^TOOLCHAIN_PINS=/p;/^worktree_dirty()/,/^}/p" bin/guild)"; worktree_dirty "'"$WT"'"' | wc -l | tr -d ' ')" "0"

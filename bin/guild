@@ -320,6 +320,7 @@ cmd_revive() {
     [ -n "$only" ] && [ "$only" != "$slug" ] && continue
     state=$(cut -f1 "$d/status" 2>/dev/null)
     case "$state" in working|needs-decision|blocked|stopped) ;; *) continue ;; esac
+    [ -f "$d/launch.sh" ] || continue   # pseudo quests (quartermaster, lessons) only hold boards, no window
     tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$slug" && continue
     open_tab "$slug" "$HOME" "GUILD_RESUME=1 bash '$d/launch.sh'" --bg >/dev/null
     event "$slug" "$state" "window revived after a restart"
