@@ -6,10 +6,13 @@ quests cheap.
   alerts.py show      what the docket shows now
   alerts.py compact   compact the quests idle with a warm cache (the war table runs it every 30s)
 
-Alerts, each sent once (Mac, ntfy, and email when set), and listed on the docket while true:
+Alerts, each sent once (Mac, ntfy), and listed on the docket while true:
   - a quest PR has a merge conflict, failing checks, or a reviewer waits a day for an answer
   - Claude usage passes 80% of the 5-hour or the weekly limit (read from the status line)
-  - a board question waits 2 hours while its quest is blocked on it
+
+Mail (when set), once each: at once for a quest PR opened or merged; after an hour with no answer
+(wait_minutes) for a plan, a decision, results to check, a blocked or failed quest, and a review
+that asked for changes and is still open.
 
 Compaction: a quest that ended its turn to wait for you, with a big context, gets /compact
 typed into its session just before the prompt cache goes cold, so your answer later is read
@@ -85,8 +88,8 @@ def age_hours(stamp):
 # ---- what is true now -------------------------------------------------------------------
 
 def pr_problems(cfg):
-    """What is wrong or new on your PRs. Only a merge and a review asking for changes are worth a mail;
-    the rest shows on the docket and as a Mac notification."""
+    """What is wrong or new on your PRs. A PR opened or merged is mailed at once; a review asking for changes
+    is mailed only after it has waited an hour; the rest shows on the docket and as a Mac notification."""
     import prs
     out = []
     for url, p in prs.cache().items():
@@ -99,8 +102,14 @@ def pr_problems(cfg):
             continue
         if p.get("state") not in ("open", "draft"):
             continue
+        if p.get("created_at") and age_hours(p["created_at"]) < 6:     # new: an old PR found later is no news
+            out.append({"key": f"pr:{url}:opened", "text": f"{head} was opened", "url": url, "email": True, "docket": False})
         if p.get("review") == "changes requested":
-            out.append({"key": f"pr:{url}:changes", "text": f"{head}: a reviewer requested changes", "url": url, "email": True})
+            out.append({"key": f"pr:{url}:changes", "text": f"{head}: a reviewer requested changes", "url": url})
+            since = p.get("changes_at", "")
+            if since and age_hours(since) * 60 >= cfg["wait_minutes"]:
+                out.append({"key": f"pr:{url}:changes:{since}", "url": url, "email": True, "docket": False,
+                            "text": f"{head}: changes requested {waited(age_hours(since) * 60)} ago, still open"})
         if p.get("conflict"):
             out.append({"key": f"pr:{url}:conflict", "text": f"{head} has a merge conflict", "url": url})
         if p.get("checks") == "failing":

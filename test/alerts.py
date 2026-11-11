@@ -43,7 +43,10 @@ json.dump({pr: {"slug": "alpha", "number": 7, "state": "open", "checks": "failin
                 "waiting_since": utc(30)},
            merged: {"slug": "beta", "number": 8, "state": "merged", "checks": "failing", "conflict": True},
            "https://github.com/o/r/pull/9": {"slug": "gamma", "number": 9, "state": "merged", "merged_at": utc(2)},
-           "https://github.com/o/r/pull/10": {"slug": "delta", "number": 10, "state": "open", "review": "changes requested"}},
+           "https://github.com/o/r/pull/10": {"slug": "delta", "number": 10, "state": "open", "review": "changes requested",
+                                              "changes_at": utc(0.2)},
+           "https://github.com/o/r/pull/11": {"slug": "eps", "number": 11, "state": "open", "created_at": utc(0.1)},
+           "https://github.com/o/r/pull/12": {"slug": "zeta", "number": 12, "state": "open", "created_at": utc(30)}},
           open(prs.CACHE, "w"))
 texts = [p["text"] for p in alerts.check()]
 check("a conflict on an open PR is an alert", any("merge conflict" in t for t in texts))
@@ -51,13 +54,22 @@ check("failing checks are an alert", any("failing checks" in t for t in texts))
 check("a reviewer waiting a day is an alert", any("waited 30h" in t for t in texts))
 check("an old merge (no time known) raises nothing", not any("#8" in t for t in texts))
 check("a PR merged today is mailed", any("PR #9 was merged" in t for t in mailed))
-check("a review asking for changes is mailed", any("PR #10: a reviewer requested changes" in t for t in mailed))
+check("a PR opened now is mailed at once", any("PR #11 was opened" in t for t in mailed))
+check("a PR opened long ago is no news", not any("#12" in t for t in mailed + texts))
+check("fresh requested changes are on the Mac, not mailed", any("PR #10: a reviewer requested changes" in t for t in texts)
+      and not any("#10" in t for t in mailed))
 check("conflicts, failing checks and a waiting reviewer are not mailed", len(mailed) == 2)
-check("each alert reaches the Mac once", len(sent) == 5 and not any(e for _, e in sent))
+check("each alert reaches the Mac once", len(sent) == 6 and not any(e for _, e in sent))
 check("a merge is not a docket alert", "#9" not in str([a for a in alerts.current() if a.get("docket", True)]))
 alerts.check()
-check("a second check sends nothing new", len(sent) == 5 and len(mailed) == 2)
-c = prs.cache(); [c.pop(u) for u in ("https://github.com/o/r/pull/9", "https://github.com/o/r/pull/10")]; json.dump(c, open(prs.CACHE, "w"))
+check("a second check sends nothing new", len(sent) == 6 and len(mailed) == 2)
+c = prs.cache(); c["https://github.com/o/r/pull/10"]["changes_at"] = utc(1.5); json.dump(c, open(prs.CACHE, "w"))
+alerts.check()
+check("requested changes still open after an hour are mailed", any("PR #10: changes requested" in t and "still open" in t for t in mailed))
+alerts.check()
+check("and only once", len([t for t in mailed if "#10" in t]) == 1)
+c = prs.cache(); [c.pop(u) for u in ("https://github.com/o/r/pull/9", "https://github.com/o/r/pull/10", "https://github.com/o/r/pull/11",
+                     "https://github.com/o/r/pull/12")]; json.dump(c, open(prs.CACHE, "w"))
 sent.clear(); sent.extend([("x", False)] * 3)
 c = prs.cache(); c[pr]["conflict"] = False; json.dump(c, open(prs.CACHE, "w"))
 alerts.check()
