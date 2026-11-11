@@ -247,6 +247,31 @@ def pane_busy(table, panes):
     return ""
 
 
+def pending_tool_calls(lines):
+    """Tool ids called in the log lines with no result. Only real assistant and user rows count:
+    api-request-blob rows replay old requests, so their tool_use ids have results before the tail."""
+    used, answered = set(), set()
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        kind = row.get("type")
+        if kind not in ("assistant", "user"):
+            continue
+        content = (row.get("message") or {}).get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if kind == "assistant" and block.get("type") == "tool_use":
+                used.add(block.get("id"))
+            elif kind == "user" and block.get("type") == "tool_result":
+                answered.add(block.get("tool_use_id"))      # a result can be logged before its call
+    return used - answered
+
+
 def log_busy(q, has_window):
     """The agent is still working after its report: a fresh session log, or a tool call with no result."""
     logs = session_logs(q)
@@ -262,23 +287,7 @@ def log_busy(q, has_window):
             tail = f.read().decode(errors="ignore").splitlines()[1:]
     except OSError:
         return ""
-    used, answered = set(), set()
-    for line in tail:
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        content = (row.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            if block.get("type") == "tool_use":
-                used.add(block.get("id"))
-            elif block.get("type") == "tool_result":
-                answered.add(block.get("tool_use_id"))      # a result can be logged before its call
-    pending = used - answered
+    pending = pending_tool_calls(tail)
     return "a tool call in its session has no result yet" if pending and has_window else ""
 
 
