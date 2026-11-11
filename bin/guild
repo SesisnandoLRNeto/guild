@@ -1648,6 +1648,9 @@ PY
   echo "closed $slug (branch $branch kept in $repo)"
 }
 
+# One block, read whole before it runs: a long command (guild wait) never reads this file
+# again on the way out, so editing bin/guild while it runs cannot break it.
+{
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   quest) shift; cmd_quest "$@" ;;
@@ -1734,3 +1737,5 @@ case "${1:-}" in
   ""|-h|--help|help) usage ;;
   *) die "unknown command $1 (see guild help)" ;;
 esac
+exit $?
+}

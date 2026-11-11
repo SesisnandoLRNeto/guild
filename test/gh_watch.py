@@ -211,3 +211,13 @@ new_ = [a[1] for a, _ in started[n:]]
 check("a PR that search cannot see is still found in a watched repo", "review-work-7" in new_)
 check("an @guild on a plain issue starts nothing", not any("work-8" in x for x in new_))
 
+
+# one poll at a time: while another holds the lock (a war table mid-restart), nothing is polled or posted
+import fcntl  # noqa: E402
+held = open(gh_watch.STATE + ".lock", "w")
+fcntl.flock(held, fcntl.LOCK_EX)
+calls.clear()
+gh_watch.once()
+check("a second poll waits its turn instead of posting twice", calls == [])
+fcntl.flock(held, fcntl.LOCK_UN)
+held.close()

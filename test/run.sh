@@ -1766,7 +1766,7 @@ tmux -L "$SB_SOCK" -f /dev/null new-session -d -s guild -n qm -x 120 -y 30 "slee
   fail=0   # count only this block's checks; the parent's count would be reported twice
   GUILD_TMUX_SOCKET="$SB_SOCK"
   # the functions of bin/guild, without its dispatch at the bottom
-  eval "$(sed '/^case /,$d' "$GUILD")"
+  eval "$(sed '/^# One block, read whole/,$d' "$GUILD")"
   set +e
   sbt() { tmux -L "$SB_SOCK" "$@"; }
   panes() { sbt list-panes -t "$1" -F x | wc -l | tr -d ' '; }

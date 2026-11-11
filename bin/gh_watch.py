@@ -338,6 +338,8 @@ def post(cfg, state, slug, info, review, mine):
                                                          for s in BLOCKING if any(f['severity'] == s for f in big))
                        if big else f"approved ({len(review['findings'])} small thing{'s' if len(review['findings']) > 1 else ''})"
                        if review["findings"] else "approved")
+    info["posted"] = verdict
+    save_state(state)              # at once: a restart after this line must not post the review again
     if cfg["delete_trigger"] and info.get("comment"):
         try:
             gh(f"repos/{repo}/issues/comments/{info['comment']}", "-X", "DELETE", user=me)
@@ -426,6 +428,21 @@ def once(cfg=None):
     cfg = cfg or load_config()
     if not cfg or not cfg.get("watch"):
         return
+    import fcntl
+    lock = open(STATE + ".lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # one poll at a time, even across war table restarts
+    except OSError:
+        log("another poll is running; skipped")
+        return
+    try:
+        _once(cfg)
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+
+
+def _once(cfg):
     state = load_state()
     mine = state.get("accounts") or accounts()
     state["accounts"] = mine
