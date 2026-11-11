@@ -46,7 +46,13 @@ def fake_gh(*args, body=None, user=None):
     if path == "user":
         return {"login": "me"}
     if path == "search/issues":
+        if GH.get("search_fails"):
+            raise RuntimeError("Validation Failed (HTTP 422)")
         return {"items": ITEMS}
+    if path.split("?")[0].endswith("/issues/comments"):          # a whole repo's comments, read without search
+        return GH.get("direct", {}).get(path.split("/issues/")[0][len("repos/"):], [])
+    if path.split("/issues/")[-1].isdigit():
+        return GH["issues"][path[len("repos/"):]]
     if "/issues/comments/" in path and "DELETE" in args:
         deleted.append(path.rsplit("/", 1)[1])
         return {}
@@ -181,3 +187,27 @@ os.remove(gh_watch.CONFIG)
 calls.clear()
 gh_watch.once()
 check("with no github.json nothing is polled", calls == [])
+
+# GitHub search refuses some org repos (SSO): a watched repo's comments are read directly instead
+GH["search_fails"] = True
+GH["direct"] = {"w/work": [{"id": 71, "issue_url": "https://api.github.com/repos/w/work/issues/7", "user": {"login": "me"}, "body": "@guild please"},
+                           {"id": 72, "issue_url": "https://api.github.com/repos/w/work/issues/8", "user": {"login": "me"}, "body": "@guild on an issue"}]}
+GH["issues"] = {"w/work/issues/7": {"number": 7, "state": "open", "pull_request": {}, "title": "Coworker PR",
+                                    "html_url": "https://github.com/w/work/pull/7", "user": {"login": "coworker"}},
+                "w/work/issues/8": {"number": 8, "state": "open", "title": "Not a PR", "html_url": "x", "user": {"login": "me"}}}
+GH["comments"]["w/work#7"] = GH["direct"]["w/work"][:1]
+cfg = {"watch": True, "repos": {"o/api": CLONE, "w/work": CLONE}, "max_active": 9}
+json.dump(cfg, open(gh_watch.CONFIG, "w"))
+_orig = fake_gh
+def fake_gh(*args, body=None, user=None):   # noqa: F811  comments of w/work#7 live under its own key
+    path = args[0]
+    if path.startswith("repos/w/work/issues/7/comments"):
+        return GH["comments"]["w/work#7"]
+    return _orig(*args, body=body, user=user)
+gh_watch.gh = fake_gh
+n = len(started)
+gh_watch.once()
+new_ = [a[1] for a, _ in started[n:]]
+check("a PR that search cannot see is still found in a watched repo", "review-work-7" in new_)
+check("an @guild on a plain issue starts nothing", not any("work-8" in x for x in new_))
+
