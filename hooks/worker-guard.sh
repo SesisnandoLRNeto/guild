@@ -32,6 +32,14 @@ case "$tool:$target" in
 esac
 
 case "$tool" in
+  Monitor|ScheduleWakeup|CronCreate)
+    # A finished quest has nothing left to watch. Each wake-up is a paid turn that only
+    # repeats the last message; the quartermaster watches the PR from here.
+    case "$(cut -f1 "$q/status" 2>/dev/null)" in
+      done|closed|failed)
+        echo "Blocked: this quest is finished. Do not watch, poll or schedule anything now. Stop; the quartermaster follows the PR." >&2
+        exit 2 ;;
+    esac ;;
   Edit|Write|MultiEdit|NotebookEdit)
     case "$target" in
       "$q/brief.md"|"$q/acceptance.json"|"$q/meta.json")

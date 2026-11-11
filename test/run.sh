@@ -368,6 +368,11 @@ is "retro counts the overruled call" "$(echo "$out" | python3 -c 'import json,sy
 is "retro counts the skipped trial" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["totals"]["trials_skipped"])')" "1"
 is "retro keeps the ticket" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["quests"][0]["ticket"])')" "ABC-1"
 
+is "report mode is off by default" "$("$GUILD" report)" "report mode: off"
+"$GUILD" report on >/dev/null
+is "and can be switched on" "$("$GUILD" report)" "report mode: on"
+"$GUILD" report off >/dev/null
+
 # ── revive and close ──────────────────────────────────────────────────────────
 section "revive and close"
 tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:alpha 2>/dev/null
@@ -676,6 +681,13 @@ is "the hook stops an adventurer editing its brief" "$(wg '{"tool_name":"Edit","
 is "or its acceptance file" "$(wg '{"tool_name":"Write","tool_input":{"file_path":"'"$QD"'/acceptance.json"}}')" "2"
 is "or running the reseal" "$(wg '{"tool_name":"Bash","tool_input":{"command":"guild check --reseal"}}')" "2"
 is "normal work is untouched" "$(wg '{"tool_name":"Edit","tool_input":{"file_path":"'"$WTD"'/hello.txt"}}')" "0"
+cp "$QD/status" "$QD/status.keep"
+printf 'working\tbuilding\t2026-01-01T00:00:00' > "$QD/status"
+is "a working quest may watch with Monitor" "$(wg '{"tool_name":"Monitor","tool_input":{}}')" "0"
+printf 'done\thttps://example.com/pr/1\t2026-01-01T00:00:00' > "$QD/status"
+is "a finished quest cannot keep re-arming a Monitor" "$(wg '{"tool_name":"Monitor","tool_input":{}}')" "2"
+is "or schedule a wake-up" "$(wg '{"tool_name":"ScheduleWakeup","tool_input":{}}')" "2"
+mv "$QD/status.keep" "$QD/status"
 
 out=$("$GUILD" retro --since 30d --json)
 delta_edd() { echo "$out" | python3 -c "import json,sys;q=[q for q in json.load(sys.stdin)['quests'] if q['slug']=='delta'][0]['edd'];print(q$1)"; }
