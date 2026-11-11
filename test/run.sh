@@ -846,6 +846,9 @@ has "and how it was run" "$tj" '"mode": "'
 has "the treasury page reads tokens by model and the kinds of work on the period" "$(curl -s "${url%/campaign}/treasury")" 'id="kind-cost"'
 has "with daily spend by scope" "$tj" '"by_scope"'
 has "and every quest's cost" "$tj" '"quests"'
+has "the hall of heroes is served" "$(curl -s "${url%/campaign}/heroes")" "The Hall of Heroes"
+is "each model is a hero: fable dragon, gpt codex, deepseek a sellsword" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import heroes as h;print(h.hero_of('claude-fable-5-1'),h.hero_of('gpt-5.6-codex'),h.hero_of('deepseek/deepseek-v4-pro'),h.hero_of('','codex'))")" "fable codex mercenary codex"
+is "a done quest with a PR and a 5 grade earns its XP, and levels climb" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import heroes as h;print(h.quest_xp(dict(state='done',pr='merged',grade=5,first_pass=True,cost=2)),h.level_of(0)['level'],h.level_of(150)['level'],h.level_of(450)['level'])")" "250 1 2 3"
 has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
 has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '<small>pr open</small></li>'
 

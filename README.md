@@ -229,6 +229,10 @@ Prices live in `~/.guild/local/pricing.json` (per million tokens, input, output,
 - **Was it worth it?** Per model, tier or harness: quests, total and average cost, your average grade, first-pass rate, overruled calls, stalls. A scatter of cost against grade, one dot per quest, and the token mix per model (cache reads are most tokens but cost little).
 - **Your own sessions by folder**, **Jev** calls and tokens by use, and a sortable table of every quest.
 
+### The hall of heroes
+
+`/heroes` on the war table (linked from the treasury) turns each model into a character that levels up. Fable is the dragon oracle, Opus the high elf archmage, Sonnet the dwarf knight, Haiku the scout, Codex the gnome artificer (ranks by effort), and OpenRouter models are hired sellswords. Each quest gives XP: 20 for setting out, +80 done, +40 for a PR, +15 per grade star, +25 for first-run green checks, +5 per dollar. Every hero shows its level and title, an XP bar, HP (how often it finishes), six stats (STR quests won, INT grades, DEX speed, CON finish rate, WIS first-run green, CHA advice you took), badges, gold spent, an XP line over time, and its quest log. Numbers come from the same quest list as the treasury (`bin/heroes.py`).
+
 Every Jev call is logged with its tokens (`~/.guild/jev-usage.jsonl`); add `"jev": {"input": N, "output": N}` (dollars per million tokens) to `pricing.json` to see dollars. A model with no price is flagged and priced with the default.
 
 How costs are counted: Claude Code writes one log line per content block of a reply, each carrying the same usage, so guild counts each reply once by its message id. A pooled worktree also holds the logs of earlier quests, so a quest counts only lines written after it started.
