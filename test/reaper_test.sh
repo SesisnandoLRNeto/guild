@@ -109,6 +109,10 @@ section "a revived quest gets a new grace period"
 out=$("$GUILD" reap 2>&1)
 is "it is not reaped again at once" "$(window gone)" yes
 
+section "the session log rule"
+if out=$(python3 "$REPO/test/reaper_test.py" 2>&1); then ok "replayed requests and live tool calls are told apart"
+else bad "replayed requests and live tool calls are told apart" "$out"; fi
+
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
