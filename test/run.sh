@@ -1859,7 +1859,8 @@ OPENER="$REPO/bin/opener.sh"
 mkdir -p "$TMP/ostub"
 printf '#!/bin/sh\necho "$@" >> "%s/opened.log"\n' "$TMP" > "$TMP/ostub/open"
 printf '#!/bin/sh\n[ "$1" = print ] && exit 0\nexit 0\n' > "$TMP/ostub/launchctl"
-chmod +x "$TMP/ostub/open" "$TMP/ostub/launchctl"
+printf '#!/bin/sh\necho Darwin\n' > "$TMP/ostub/uname"   # the queue path is macOS only; CI runs on Linux
+chmod +x "$TMP/ostub/open" "$TMP/ostub/launchctl" "$TMP/ostub/uname"
 : > "$GUILD_HOME/events.log"; rm -f "$TMP/opened.log"; rm -rf "$GUILD_HOME/open-queue"
 # no agent loaded (launchctl print fails): open directly
 mkdir -p "$TMP/offbin"; printf '#!/bin/sh\nexit 1\n' > "$TMP/offbin/launchctl"; cp "$TMP/ostub/open" "$TMP/offbin/open"; chmod +x "$TMP/offbin/"*
