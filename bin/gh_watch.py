@@ -338,6 +338,8 @@ def post(cfg, state, slug, info, review, mine):
                                                          for s in BLOCKING if any(f['severity'] == s for f in big))
                        if big else f"approved ({len(review['findings'])} small thing{'s' if len(review['findings']) > 1 else ''})"
                        if review["findings"] else "approved")
+    info["posted"] = verdict
+    save_state(state)              # at once: a restart after this line must not post the review again
     if cfg["delete_trigger"] and info.get("comment"):
         try:
             gh(f"repos/{repo}/issues/comments/{info['comment']}", "-X", "DELETE", user=me)
@@ -381,10 +383,66 @@ def settle(cfg, state, mine):
                 notify(f"{info['repo']}#{info['number']}: GitHub refused the review three times")
 
 
+def watched_repos(cfg):
+    """owner/repo of every repo guild knows: github.json's repos, plus the origin of jira.json's clones.
+    GitHub search cannot see some org repos (SSO), so these are also read directly."""
+    out = [k for k in cfg.get("repos", {}) if "/" in k]
+    paths = [v for v in cfg.get("repos", {}).values() if v]
+    try:
+        paths += list(json.load(open(os.path.join(GUILD_HOME, "local", "jira.json"))).get("repos", {}).values())
+    except (OSError, ValueError):
+        pass
+    for path in paths:
+        try:
+            url = subprocess.run(["git", "-C", os.path.expanduser(path), "remote", "get-url", "origin"],
+                                 capture_output=True, text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            continue
+        m = re.search(r"github[\w.-]*[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+        if m:
+            out.append(m.group(1))
+    return list(dict.fromkeys(out))
+
+
+def direct_items(cfg, me, since, repos):
+    """Open PRs in the watched repos where `me` wrote the trigger, in the same shape search returns."""
+    out = []
+    for repo in repos:
+        try:
+            comments = gh(f"repos/{repo}/issues/comments?per_page=100&since={since}", user=me)
+        except RuntimeError:
+            continue                                    # this account cannot read that repo
+        nums = {c["issue_url"].rsplit("/", 1)[1] for c in comments
+                if (c.get("user") or {}).get("login") == me and said(cfg["trigger"], c.get("body"))}
+        for n in sorted(nums):
+            try:
+                issue = gh(f"repos/{repo}/issues/{n}", user=me)
+            except RuntimeError:
+                continue
+            if "pull_request" in issue and issue.get("state") == "open":
+                out.append({**issue, "repository_url": f"https://api.github.com/repos/{repo}"})
+    return out
+
+
 def once(cfg=None):
     cfg = cfg or load_config()
     if not cfg or not cfg.get("watch"):
         return
+    import fcntl
+    lock = open(STATE + ".lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # one poll at a time, even across war table restarts
+    except OSError:
+        log("another poll is running; skipped")
+        return
+    try:
+        _once(cfg)
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+
+
+def _once(cfg):
     state = load_state()
     mine = state.get("accounts") or accounts()
     state["accounts"] = mine
@@ -392,13 +450,16 @@ def once(cfg=None):
     since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
     live = sum(1 for i in state["started"].values() if not i.get("posted"))
     taken = {str(i.get("comment")) for i in state["started"].values()}
+    repos = watched_repos(cfg)
     for me in mine:                                     # each account sees the PRs it can reach, and answers as itself
         q = f'is:pr is:open commenter:{me} "{cfg["trigger"]}" updated:>={since[:10]}'
         try:
             found = gh("-X", "GET", "search/issues", "-f", f"q={q}", "-f", "per_page=30", user=me).get("items", [])
         except RuntimeError as e:
             log(f"search as {me} failed: {e}")
-            continue
+            found = []
+        known = {(i["repository_url"], i["number"]) for i in found}
+        found += [i for i in direct_items(cfg, me, since, repos) if (i["repository_url"], i["number"]) not in known]
         for item in found:
             repo = item["repository_url"].split("/repos/", 1)[1]
             n = item["number"]

@@ -27,7 +27,7 @@ cat > "$GUILD_HOME/worker-settings.json" <<EOF
   "hooks": {
     "PreToolUse": [
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "$REPO/hooks/pr-gate.sh" }] },
-      { "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit", "hooks": [{ "type": "command", "command": "$REPO/hooks/worker-guard.sh" }] }
+      { "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|Monitor|ScheduleWakeup|CronCreate", "hooks": [{ "type": "command", "command": "$REPO/hooks/worker-guard.sh" }] }
     ],
     "Stop": [{ "hooks": [{ "type": "command", "command": "$REPO/hooks/worker-stop.sh" }] }]
   }

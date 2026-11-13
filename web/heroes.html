@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en" class="realm rm-dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hall of Heroes</title>
+<link rel="stylesheet" href="/icons.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/realm.css">
+<script src="/realm.js"></script>
+<style>
+  /* The hall of heroes: every model is a character that levels up with its quests.
+     Numbers come from /heroes.json (bin/heroes.py), the same quest list as the treasury. */
+  html:root body { max-width: 1180px; }
+  .roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin: 6px 0 26px; }
+  .card { position: relative; background: linear-gradient(180deg, #241d2b, #141018); border: 2px solid #4a3f52; border-radius: 6px;
+          padding: 16px 16px 14px; cursor: pointer; transition: transform .18s, border-color .18s, box-shadow .18s;
+          opacity: 0; transform: translateY(14px); animation: rise .5s ease forwards; }
+  .card:hover, .card:focus-visible, .card.open { border-color: var(--rm-gold); box-shadow: 0 0 22px rgba(217, 164, 65, .25); outline: none; }
+  .card.locked { filter: grayscale(1); opacity: .55 !important; cursor: default; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .top { display: flex; gap: 14px; align-items: center; }
+  .top .race.big { width: 74px; height: 74px; flex: none; }
+  .who { min-width: 0; flex: 1; }
+  .who h2 { margin: 0; font-size: 23px; color: var(--rm-gold-2); letter-spacing: .03em; }
+  .who .klass { color: #cbb9d6; font-size: 13.5px; }
+  .who .klass i { font-style: normal; color: #8f7e9c; }
+  .lvl { flex: none; text-align: center; width: 62px; height: 62px; border-radius: 50%; display: grid; place-content: center;
+         background: radial-gradient(circle at 35% 30%, #fbe6a3, #c08a22 60%, #6b4c12); color: #2a1d14; box-shadow: 0 0 0 2px #2a1d14, 0 0 0 4px var(--rm-gold-3); }
+  .lvl b { font-size: 24px; line-height: 1; }
+  .lvl small { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+  .title-line { margin: 10px 0 4px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--rm-gold); display: flex; justify-content: space-between; }
+  .bar { height: 12px; background: rgba(0, 0, 0, .5); border: 1px solid #3a3042; border-radius: 7px; overflow: hidden; }
+  .bar span { display: block; height: 100%; width: 0; border-radius: 7px; transition: width 1.4s cubic-bezier(.2, .8, .2, 1); }
+  .bar.xp span { background: linear-gradient(90deg, #8a6a1e, #f3cf6c); box-shadow: 0 0 10px rgba(243, 207, 108, .6); }
+  .bar.hp span { background: linear-gradient(90deg, #6b1e17, #d2553d); }
+  .bar-label { display: flex; justify-content: space-between; font-size: 11.5px; color: #a796b3; margin: 3px 0 8px; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 10px 0; }
+  .stat { text-align: center; background: rgba(0, 0, 0, .3); border: 1px solid #3a3042; border-radius: 4px; padding: 5px 0 4px; }
+  .stat b { display: block; font-size: 18px; color: #f2e6c9; font-variant-numeric: tabular-nums; }
+  .stat small { font-size: 10px; letter-spacing: .12em; color: #8f7e9c; }
+  .loot { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 12px; color: #a796b3; text-align: center; }
+  .loot b { display: block; color: var(--rm-gold-2); font-size: 16px; font-variant-numeric: tabular-nums; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .badge { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #2c2333; border: 1px solid var(--rm-gold-3); color: var(--rm-gold-2); font-size: 15px; }
+  .lore { font-size: 13px; color: #b9a8c4; font-style: italic; margin: 10px 0 0; }
+  .locked-note { font-size: 13px; color: #d8c8e2; margin: 10px 0 0; }
+  .ribbon { position: absolute; top: 10px; right: -6px; background: var(--rm-blood); color: #fff3e0; font-size: 10.5px; letter-spacing: .14em;
+            text-transform: uppercase; padding: 2px 10px; border-radius: 2px 0 0 2px; }
+  .levelup { animation: glow 1.6s ease-in-out 1.3s 2; }
+  @keyframes glow { 50% { box-shadow: 0 0 0 2px #2a1d14, 0 0 0 4px var(--rm-gold), 0 0 26px 8px rgba(243, 207, 108, .7); } }
+  h2.sec { color: var(--rm-gold-2); font-size: 20px; letter-spacing: .08em; text-transform: uppercase; margin: 28px 0 8px; }
+  .chart { width: 100%; height: auto; display: block; background: rgba(0, 0, 0, .25); border: 1px solid #3a3042; border-radius: 6px; }
+  .chart text { font: 11px system-ui, sans-serif; fill: #8f7e9c; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: #cbb9d6; margin: 8px 0 0; }
+  .legend i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+  #detail { scroll-margin-top: 20px; }
+  table.log { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.log th { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #8f7e9c; border-bottom: 1px solid #3a3042; padding: 6px 8px; }
+  table.log td { padding: 6px 8px; border-bottom: 1px solid #2a2230; color: #e3d6ec; }
+  table.log td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td .xpg { color: var(--rm-gold-2); }
+  .st-done { color: #8fd18f; } .st-failed, .st-stopped { color: #e2735c; } .st-working, .st-blocked, .st-needs-decision { color: #8ab4f8; }
+  .rules { font-size: 13px; color: #a796b3; line-height: 1.6; }
+  @media (max-width: 520px) { .roster { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(3, 1fr); } .loot { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<section class="rm-hero rm-frame" aria-label="The hall of heroes">
+  <div>
+    <p class="rm-kicker">The war table</p>
+    <h1 class="rm-title" style="display:block">The Hall of Heroes</h1>
+    <div class="rm-rule"></div>
+    <p class="rm-sub" style="display:block">Every model in the guild is a hero. Each quest gives it experience: more for finishing, a pull request, a good grade, checks green on the first run, and a little for the gold it burned. Click a hero to read its saga.</p>
+    <nav class="rm-nav" style="margin-top:12px"><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/docket"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The docket</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a></nav>
+  </div>
+  <div class="rm-party" id="realm-party" aria-label="The party"></div>
+</section>
+
+<div class="roster" id="roster"><p class="muted">Calling the heroes...</p></div>
+
+<h2 class="sec">The road so far</h2>
+<svg class="chart" id="chart" viewBox="0 0 1000 260" role="img" aria-label="Experience over time per hero"></svg>
+<div class="legend" id="legend"></div>
+
+<section id="detail"></section>
+
+<h2 class="sec">The rules of the hall</h2>
+<p class="rules">
+  <b>XP per quest:</b> 20 for setting out, +80 when done, +40 for a pull request, +15 per grade star, +25 for checks green on the first run, +5 per dollar spent.
+  Each level needs a little more than the last. Titles: Recruit, Squire (3), Adventurer (5), Veteran (8), Champion (12), Hero (16), Legend (20).<br>
+  <b>Stats (1 to 20):</b> STR quests finished, INT your grades, DEX speed, CON how often it finishes, WIS checks green on the first run, CHA how often you took its advice.
+</p>
+
+<script>
+const COLOR = { fable: "#ff7a1a", opus: "#b48cff", sonnet: "#d9a441", haiku: "#5fd3a5", codex: "#4fb3ff", mercenary: "#c9c2b0" };
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const money = (n) => "$" + (n >= 100 ? Math.round(n) : n.toFixed(2));
+let H = [];
+
+function card(h, i) {
+  const pct = h.recruited ? Math.min(100, 100 * (h.xp - h.floor) / (h.next - h.floor)) : 0;
+  const hp = h.quests ? Math.round(100 * h.done / h.quests) : 0;
+  const stats = ["STR", "INT", "DEX", "CON", "WIS", "CHA"].map((k) => `<div class="stat" title="${k}"><b>${h.stats[k] || "-"}</b><small>${k}</small></div>`).join("");
+  const badges = h.badges.map((b) => `<span class="badge" title="${esc(b.label)}: ${esc(b.why)}"><span class="gi-icon gi-${esc(b.icon)}"></span></span>`).join("");
+  const calm = h.calm ? ` <i>· ${esc(h.calm)} in calm mode</i>` : "";
+  const body = h.recruited ? `
+      <div class="title-line"><span>${esc(h.title)}</span><span>${h.xp.toLocaleString()} XP</span></div>
+      <div class="bar xp"><span data-w="${pct}"></span></div>
+      <div class="bar-label"><span>level ${h.level}</span><span>${(h.next - h.xp).toLocaleString()} XP to level ${h.level + 1}</span></div>
+      <div class="bar hp"><span data-w="${hp}"></span></div>
+      <div class="bar-label"><span>HP · finishes what it starts</span><span>${hp}%</span></div>
+      <div class="stats">${stats}</div>
+      <div class="loot"><div><b>${h.done}</b>quests won</div><div><b>${h.prs}</b>pull requests</div><div><b>${money(h.gold)}</b>gold spent</div><div><b>${h.grade ?? "-"}</b>avg grade</div></div>
+      <div class="badges">${badges}</div>
+      <p class="lore">${esc(h.lore)}</p>`
+    : `<p class="locked-note">Not recruited yet. Send it on a quest and it joins the hall.</p><p class="lore">${esc(h.lore)}</p>`;
+  return `<article class="card${h.recruited ? "" : " locked"}" tabindex="0" data-key="${h.key}" style="animation-delay:${i * 90}ms">
+      ${h.active ? `<span class="ribbon">${h.active} on the road</span>` : ""}
+      <div class="top">${rmRace(h.race, "big")}
+        <div class="who"><h2>${esc(h.name)}</h2><div class="klass">${esc(h.class)}${calm}</div></div>
+        <div class="lvl${h.level >= 8 ? " levelup" : ""}"><b>${h.level}</b><small>level</small></div>
+      </div>${body}</article>`;
+}
+
+function chart() {
+  const svg = document.getElementById("chart");
+  const live = H.filter((h) => h.timeline.length);
+  const days = [...new Set(live.flatMap((h) => h.timeline.map((t) => t[0])))].sort();
+  if (!days.length) { svg.innerHTML = `<text x="20" y="40">No quests yet.</text>`; return; }
+  const max = Math.max(...live.map((h) => h.xp)), W = 1000, Hh = 260, L = 54, R = 16, T = 14, B = 28;
+  const x = (d) => L + (days.length === 1 ? 0 : (W - L - R) * days.indexOf(d) / (days.length - 1));
+  const y = (v) => Hh - B - (Hh - T - B) * v / max;
+  let g = "";
+  for (let k = 0; k <= 4; k++) { const v = Math.round(max * k / 4); g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#2c2333"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toLocaleString()}</text>`; }
+  g += `<text x="${L}" y="${Hh - 8}">${days[0]}</text><text x="${W - R}" y="${Hh - 8}" text-anchor="end">${days[days.length - 1]}</text>`;
+  for (const h of live) {
+    const last = {}; for (const [d, v] of h.timeline) last[d] = v;
+    let v = 0; const pts = [];
+    for (const d of days) { if (last[d] != null) v = last[d]; if (d >= h.timeline[0][0]) pts.push(`${x(d).toFixed(1)},${y(v).toFixed(1)}`); }
+    g += `<polyline fill="none" stroke="${COLOR[h.key]}" stroke-width="2.5" stroke-linejoin="round" points="${pts.join(" ")}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"><animate attributeName="stroke-dashoffset" to="0" dur="1.6s" fill="freeze"/></polyline>`;
+  }
+  svg.innerHTML = g;
+  document.getElementById("legend").innerHTML = live.map((h) => `<span><i style="background:${COLOR[h.key]}"></i>${esc(h.name)} · lvl ${h.level}</span>`).join("");
+}
+
+function detail(key) {
+  const h = H.find((x) => x.key === key);
+  document.querySelectorAll(".card").forEach((c) => c.classList.toggle("open", c.dataset.key === key));
+  const rows = h.log.map((q) => `<tr><td>${esc(q.when)}</td><td>${esc(q.slug)}</td><td class="st-${esc(q.state)}">${esc(q.state)}</td>
+      <td>${q.grade ? "★".repeat(q.grade) : ""}</td><td>${q.pr ? esc(q.pr) : ""}</td><td class="n">${money(q.cost)}</td><td class="n"><span class="xpg">+${q.xp}</span></td></tr>`).join("");
+  const el = document.getElementById("detail");
+  el.innerHTML = `<h2 class="sec">The saga of ${esc(h.name)}</h2>
+    <p class="rules">${esc(h.class)}, ${esc(h.title.toLowerCase())} of level ${h.level}. On the road since ${esc(h.since)}: ${h.quests} quests, ${h.done} won, ${h.failed} lost, ${money(h.gold)} of gold. ${h.median_minutes ? "A quest takes it about " + h.median_minutes + " minutes." : ""}</p>
+    <table class="log"><thead><tr><th>When</th><th>Quest</th><th>End</th><th>Grade</th><th>PR</th><th style="text-align:right">Gold</th><th style="text-align:right">XP</th></tr></thead><tbody>${rows}</tbody></table>`;
+  el.scrollIntoView({ behavior: "smooth" });
+}
+
+(async () => {
+  try { H = (await (await fetch("/heroes.json", { cache: "no-store" })).json()).heroes; }
+  catch (e) { document.getElementById("roster").innerHTML = `<p class="muted">The heroes did not answer: ${esc(e)}</p>`; return; }
+  document.getElementById("roster").innerHTML = H.map(card).join("");
+  document.getElementById("realm-party").innerHTML = H.filter((h) => h.recruited).slice(0, 4)
+    .map((h) => rmFigure(h.race, h.level, h.title, `Level ${h.level} ${h.title}.`, { name: h.name })).join("");
+  requestAnimationFrame(() => setTimeout(() => document.querySelectorAll(".bar span").forEach((s) => s.style.width = s.dataset.w + "%"), 60));
+  document.querySelectorAll(".card:not(.locked)").forEach((c) => {
+    c.addEventListener("click", () => detail(c.dataset.key));
+    c.addEventListener("keydown", (e) => { if (e.key === "Enter") detail(c.dataset.key); });
+  });
+  chart();
+})();
+</script>
+</body>
+</html>

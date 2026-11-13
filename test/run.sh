@@ -368,6 +368,11 @@ is "retro counts the overruled call" "$(echo "$out" | python3 -c 'import json,sy
 is "retro counts the skipped trial" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["totals"]["trials_skipped"])')" "1"
 is "retro keeps the ticket" "$(echo "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin)["quests"][0]["ticket"])')" "ABC-1"
 
+is "report mode is off by default" "$("$GUILD" report)" "report mode: off"
+"$GUILD" report on >/dev/null
+is "and can be switched on" "$("$GUILD" report)" "report mode: on"
+"$GUILD" report off >/dev/null
+
 # ── revive and close ──────────────────────────────────────────────────────────
 section "revive and close"
 tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:alpha 2>/dev/null
@@ -375,6 +380,11 @@ out=$("$GUILD" revive 2>&1)
 has "an orphan quest is revived" "$out" "revived alpha"
 has "its window is back" "$(tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W')" "alpha"
 has "the revived launch continues instead of restarting" "$(cat "$GUILD_HOME/quests/alpha/launch.sh")" "continue"
+mkdir -p "$GUILD_HOME/quests/qm-pseudo" && echo '{"slug": "qm-pseudo", "pseudo": true}' > "$GUILD_HOME/quests/qm-pseudo/meta.json"
+printf 'working\tboards only\t2026-01-01T00:00:00' > "$GUILD_HOME/quests/qm-pseudo/status"
+"$GUILD" revive qm-pseudo >/dev/null 2>&1; "$GUILD" revive qm-pseudo >/dev/null 2>&1
+is "a pseudo quest is never revived, so clicks add no events" "$(grep -c "qm-pseudo.*revived" "$GUILD_HOME/events.log")" "0"
+rm -rf "$GUILD_HOME/quests/qm-pseudo"
 
 mkdir -p "$WT/node_modules" && echo cached > "$WT/node_modules/dep.txt"   # ignored build output
 is "a carried toolchain pin alone is not a change" "$(cd "$REPO" && GUILD_HOME="$GUILD_HOME" bash -c 'eval "$(sed -n "/^TOOLCHAIN_PINS=/p;/^worktree_dirty()/,/^}/p" bin/guild)"; worktree_dirty "'"$WT"'"' | wc -l | tr -d ' ')" "0"
@@ -671,6 +681,13 @@ is "the hook stops an adventurer editing its brief" "$(wg '{"tool_name":"Edit","
 is "or its acceptance file" "$(wg '{"tool_name":"Write","tool_input":{"file_path":"'"$QD"'/acceptance.json"}}')" "2"
 is "or running the reseal" "$(wg '{"tool_name":"Bash","tool_input":{"command":"guild check --reseal"}}')" "2"
 is "normal work is untouched" "$(wg '{"tool_name":"Edit","tool_input":{"file_path":"'"$WTD"'/hello.txt"}}')" "0"
+cp "$QD/status" "$QD/status.keep"
+printf 'working\tbuilding\t2026-01-01T00:00:00' > "$QD/status"
+is "a working quest may watch with Monitor" "$(wg '{"tool_name":"Monitor","tool_input":{}}')" "0"
+printf 'done\thttps://example.com/pr/1\t2026-01-01T00:00:00' > "$QD/status"
+is "a finished quest cannot keep re-arming a Monitor" "$(wg '{"tool_name":"Monitor","tool_input":{}}')" "2"
+is "or schedule a wake-up" "$(wg '{"tool_name":"ScheduleWakeup","tool_input":{}}')" "2"
+mv "$QD/status.keep" "$QD/status"
 
 out=$("$GUILD" retro --since 30d --json)
 delta_edd() { echo "$out" | python3 -c "import json,sys;q=[q for q in json.load(sys.stdin)['quests'] if q['slug']=='delta'][0]['edd'];print(q$1)"; }
@@ -841,6 +858,9 @@ has "and how it was run" "$tj" '"mode": "'
 has "the treasury page reads tokens by model and the kinds of work on the period" "$(curl -s "${url%/campaign}/treasury")" 'id="kind-cost"'
 has "with daily spend by scope" "$tj" '"by_scope"'
 has "and every quest's cost" "$tj" '"quests"'
+has "the hall of heroes is served" "$(curl -s "${url%/campaign}/heroes")" "The Hall of Heroes"
+is "each model is a hero: fable dragon, gpt codex, deepseek a sellsword" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import heroes as h;print(h.hero_of('claude-fable-5-1'),h.hero_of('gpt-5.6-codex'),h.hero_of('deepseek/deepseek-v4-pro'),h.hero_of('','codex'))")" "fable codex mercenary codex"
+is "a done quest with a PR and a 5 grade earns its XP, and levels climb" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import heroes as h;print(h.quest_xp(dict(state='done',pr='merged',grade=5,first_pass=True,cost=2)),h.level_of(0)['level'],h.level_of(150)['level'],h.level_of(450)['level'])")" "250 1 2 3"
 has "a quest page opens with an At a glance strip" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" 'aria-label="At a glance"'
 has "which says the steps in words" "$(curl -s "${url%/campaign}/b/$bq/$bid/content.html")" '<small>pr open</small></li>'
 
@@ -1529,6 +1549,29 @@ cat > "$TMP/flow.json" <<'JSON'
 {"edges": [{"from": "Open", "to": "Pick"}, {"from": "Pick", "to": "Save"}]}
 JSON
 has "a one-way path is a flow" "$("$GUILD" draw "$TMP/flow.json")" 'data-kind="flow"'
+# five edges over three modes, long labels, both ways: no label may sit on a node or on another label
+cat > "$TMP/busy.json" <<'JSON'
+{"kind": "state", "direction": "LR", "nodes": [{"id": "ON", "kind": "start"}, {"id": "CHECK", "label": "Checking (one probe)"},
+ {"id": "OFF", "label": "Offline: banner, actions disabled, queries paused"}],
+ "edges": [{"from": "ON", "to": "CHECK", "label": "a call got no answer", "trigger": "t"},
+  {"from": "CHECK", "to": "ON", "label": "probe answers", "trigger": "t"},
+  {"from": "CHECK", "to": "OFF", "label": "probe gets no answer either", "trigger": "t"},
+  {"from": "ON", "to": "OFF", "label": "browser offline event", "trigger": "t"},
+  {"from": "OFF", "to": "ON", "label": "probe answers, browser online event or any HTTP answer", "trigger": "t"}]}
+JSON
+sed 's/"LR"/"TB"/' "$TMP/busy.json" > "$TMP/busy-tb.json"
+for f in busy busy-tb spec; do
+  is "labels clear of nodes and of each other ($f)" "$("$GUILD" draw "$TMP/$f.json" | python3 -c '
+import re, sys
+s = sys.stdin.read()
+num = lambda r, k: float(re.search(k + r"=\"([-\d.]+)\"", r).group(1))
+box = lambda r: (num(r, "x"), num(r, "y"), num(r, "width"), num(r, "height"))
+nodes = [box(r) for r in re.findall(r"<rect [^>]*rx=\"7\"[^>]*>", s)]
+pills = [box(r) for r in re.findall(r"<g class=\"gd-label\"[^>]*><rect [^>]*>", s)]
+hit = lambda a, b: a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+bad = [p for p in pills if any(hit(p, n) for n in nodes)] + [p for i, p in enumerate(pills) if any(hit(p, q) for q in pills[i + 1:])]
+print("clear" if pills and not bad else "overlap %s" % bad)')" "clear"
+done
 printf '<!doctype html><body><h2>How the gears turn</h2>\n<p>x</p></body>' > "$TMP/page.html"
 "$GUILD" draw "$TMP/spec.json" --into "$TMP/page.html" >/dev/null
 has "--into lands the figure on the page" "$(cat "$TMP/page.html")" '<figure class="guild-draw"'
@@ -1746,7 +1789,7 @@ tmux -L "$SB_SOCK" -f /dev/null new-session -d -s guild -n qm -x 120 -y 30 "slee
   fail=0   # count only this block's checks; the parent's count would be reported twice
   GUILD_TMUX_SOCKET="$SB_SOCK"
   # the functions of bin/guild, without its dispatch at the bottom
-  eval "$(sed '/^case /,$d' "$GUILD")"
+  eval "$(sed '/^# One block, read whole/,$d' "$GUILD")"
   set +e
   sbt() { tmux -L "$SB_SOCK" "$@"; }
   panes() { sbt list-panes -t "$1" -F x | wc -l | tr -d ' '; }

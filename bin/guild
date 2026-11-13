@@ -119,6 +119,7 @@ guild impact [slug] [--rules FILE] [--into PAGE | --out FILE] [--base REF]
 guild draw <spec.json> [--into PAGE]    draw a state machine, flow, organogram or rules table for a page (picks the form, numbers the scenes)
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
+guild report [on|off]               the quartermaster says every quest event once (on) or only what needs you (off, default)
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
 guild doctor                        check the setup: tools, config, identities, orphans
 guild cost [slug] [--active]        what each quest spent (tokens, replies, time, dollars)
@@ -325,6 +326,7 @@ cmd_revive() {
     # a paused quest (guild reap) comes back when you ask for it by name, never in the sweep
     if [ -f "$d/paused" ]; then [ -n "$only" ] || continue
     else case "$state" in working|needs-decision|blocked|stopped) ;; *) continue ;; esac; fi
+    [ -f "$d/launch.sh" ] || continue   # pseudo quests (quartermaster, lessons) only hold boards, no window
     tm list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$slug" && continue
     open_tab "$slug" "$HOME" "GUILD_RESUME=1 bash '$d/launch.sh'" --bg >/dev/null
     if [ -f "$d/paused" ]; then rm -f "$d/paused"; date +%Y-%m-%dT%H:%M:%S > "$d/revived"; event "$slug" "$state" "window revived after a pause"
@@ -334,6 +336,17 @@ cmd_revive() {
   done
   [ "$revived" = 0 ] && echo "nothing to revive"
   return 0
+}
+
+# Report mode: on, the quartermaster says every quest event once as it happens; off (default),
+# only what needs you or is real news. A file, so the quartermaster reads it at any time.
+cmd_report() {
+  local f="$GUILD_HOME/local/report-mode"
+  case "${1:-}" in
+    on|off) mkdir -p "$GUILD_HOME/local"; echo "$1" > "$f"; echo "report mode: $1" ;;
+    "") echo "report mode: $(cat "$f" 2>/dev/null || echo off)" ;;
+    *) die "usage: guild report [on|off]" ;;
+  esac
 }
 
 cmd_cost() { GUILD_REPO="$GUILD_REPO" python3 "$GUILD_REPO/bin/ledger.py" cost "$@"; }
@@ -1635,6 +1648,9 @@ PY
   echo "closed $slug (branch $branch kept in $repo)"
 }
 
+# One block, read whole before it runs: a long command (guild wait) never reads this file
+# again on the way out, so editing bin/guild while it runs cannot break it.
+{
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   quest) shift; cmd_quest "$@" ;;
@@ -1653,6 +1669,7 @@ case "${1:-}" in
           dagger_guard "$d_slug"
           python3 "$GUILD_REPO/bin/decide.py" open "$d_slug" "$1" ;;
   calm) shift; cmd_calm "$@" ;;
+  report) shift; cmd_report "$@" ;;
   revive) shift; cmd_revive "$@" ;;
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;
@@ -1720,3 +1737,5 @@ case "${1:-}" in
   ""|-h|--help|help) usage ;;
   *) die "unknown command $1 (see guild help)" ;;
 esac
+exit $?
+}
