@@ -1234,7 +1234,8 @@ def ensure_server():
 def open_page(url, args):
     # GUILD_BOARD_NO_OPEN=1 keeps the tests (and any script) out of your browser.
     if not args.get("wrapup") and not args.get("no_open") and os.environ.get("GUILD_BOARD_NO_OPEN") != "1":
-        subprocess.run(["open", url], check=False)
+        # bin/opener.sh queues it for the login-session agent, or opens it, and logs a failure
+        subprocess.run([os.path.join(os.path.dirname(os.path.realpath(__file__)), "opener.sh"), "open", url], check=False)
     print(url)
 
 

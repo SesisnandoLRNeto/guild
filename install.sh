@@ -75,4 +75,6 @@ fi
 for f in dispatch identities pricing; do
   [ -f "$GUILD_HOME/local/$f.json" ] || { cp "$REPO/config/$f.example.json" "$GUILD_HOME/local/$f.json"; echo "config -> $GUILD_HOME/local/$f.json (edit it)"; }
 done
+# Pages open from the login session, so a detached tmux can still reach your browser.
+[ "$(uname)" = Darwin ] && "$REPO/bin/guild" opener install || true
 echo "done. Start with: guild up"

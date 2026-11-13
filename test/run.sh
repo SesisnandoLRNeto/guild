@@ -1896,6 +1896,47 @@ done < <(mkdir -p "$TMP/ghw/local" && GUILD_HOME="$TMP/ghw" python3 "$REPO/test/
 # ── quest emails ──────────────────────────────────────────────────────────────
 run_notify_email
 
+# ── opening pages ─────────────────────────────────────────────────────────────
+section "opening pages"
+OPENER="$REPO/bin/opener.sh"
+mkdir -p "$TMP/ostub"
+printf '#!/bin/sh\necho "$@" >> "%s/opened.log"\n' "$TMP" > "$TMP/ostub/open"
+printf '#!/bin/sh\n[ "$1" = print ] && exit 0\nexit 0\n' > "$TMP/ostub/launchctl"
+printf '#!/bin/sh\necho Darwin\n' > "$TMP/ostub/uname"   # the queue path is macOS only; CI runs on Linux
+chmod +x "$TMP/ostub/open" "$TMP/ostub/launchctl" "$TMP/ostub/uname"
+: > "$GUILD_HOME/events.log"; rm -f "$TMP/opened.log"; rm -rf "$GUILD_HOME/open-queue"
+# no agent loaded (launchctl print fails): open directly
+mkdir -p "$TMP/offbin"; printf '#!/bin/sh\nexit 1\n' > "$TMP/offbin/launchctl"; cp "$TMP/ostub/open" "$TMP/offbin/open"; chmod +x "$TMP/offbin/"*
+GUILD_BOARD_NO_OPEN= PATH="$TMP/offbin:$PATH" "$OPENER" open "http://x/direct"
+is "no agent: opens directly" "$(cat "$TMP/opened.log" 2>/dev/null)" "http://x/direct"
+# agent loaded: the URL is queued, not opened here
+rm -f "$TMP/opened.log"
+GUILD_BOARD_NO_OPEN= PATH="$TMP/ostub:$PATH" "$OPENER" open "http://x/queued"
+is "agent loaded: nothing opened by the caller" "$(cat "$TMP/opened.log" 2>/dev/null)" ""
+is "agent loaded: the URL waits in the queue" "$(cat "$GUILD_HOME"/open-queue/*.url 2>/dev/null)" "http://x/queued"
+PATH="$TMP/ostub:$PATH" "$OPENER" drain
+is "the agent opens the queued URL" "$(cat "$TMP/opened.log" 2>/dev/null)" "http://x/queued"
+is "the queue is empty after the drain" "$(ls "$GUILD_HOME/open-queue" | wc -l | tr -d ' ')" "0"
+# the opt-out
+rm -f "$TMP/opened.log"
+GUILD_BOARD_NO_OPEN=1 PATH="$TMP/offbin:$PATH" "$OPENER" open "http://x/silent"
+is "GUILD_BOARD_NO_OPEN opens nothing" "$(cat "$TMP/opened.log" 2>/dev/null)" ""
+# a failed open writes exactly one line
+printf '#!/bin/sh\nexit 1\n' > "$TMP/offbin/open"
+: > "$GUILD_HOME/events.log"
+GUILD_BOARD_NO_OPEN= PATH="$TMP/offbin:$PATH" "$OPENER" open "http://x/fails"; code=$?
+is "a failed open exits 1" "$code" "1"
+is "a failed open writes one events.log line" "$(wc -l < "$GUILD_HOME/events.log" | tr -d ' ')" "1"
+has "the line names the page" "$(cat "$GUILD_HOME/events.log")" "could not open the page: http://x/fails"
+# a failed open inside the drain is logged too
+: > "$GUILD_HOME/events.log"; mkdir -p "$GUILD_HOME/open-queue"; echo http://x/agentfail > "$GUILD_HOME/open-queue/1.url"
+PATH="$TMP/offbin:$PATH" "$OPENER" drain
+has "a failed drain open is logged" "$(cat "$GUILD_HOME/events.log")" "could not open the page: http://x/agentfail"
+# guild's helper goes through the same script
+: > "$GUILD_HOME/events.log"
+out=$(GUILD_BOARD_NO_OPEN= PATH="$TMP/offbin:$PATH" "$GUILD" docket 2>&1)
+has "guild docket logs a failed open" "$(cat "$GUILD_HOME/events.log")" "could not open the page: http://127.0.0.1:"
+
 # ── doctor ────────────────────────────────────────────────────────────────────
 section "doctor"
 out=$("$GUILD" doctor 2>&1); code=$?

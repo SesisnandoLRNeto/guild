@@ -121,6 +121,7 @@ guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild report [on|off]               the quartermaster says every quest event once (on) or only what needs you (off, default)
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
+guild opener install|status         the login-session agent that opens war table pages (guild up installs it)
 guild doctor                        check the setup: tools, config, identities, orphans
 guild cost [slug] [--active]        what each quest spent (tokens, replies, time, dollars)
 guild log [slug] [--since 7d] [--repo NAME]
@@ -137,6 +138,44 @@ event() { # slug state note
   printf '%s\t%s\t%s\t%s\n' "$(now)" "$1" "$2" "${3:-}" >> "$EVENTS"
   # a notification when it needs you (never blocks: a slow push must not slow the guild)
   ( python3 "$GUILD_REPO/bin/notify.py" event "$1" "$2" "${3:-}" >/dev/null 2>&1 & )
+}
+
+# Show a page in the guildmaster's browser. Never fatal, never silent: bin/opener.sh queues it for the
+# GUI-session agent, or opens it directly, and logs "could not open the page" to events.log on failure.
+open_url() { GUILD_HOME="$GUILD_HOME" "$GUILD_REPO/bin/opener.sh" open "$1" || true; }
+
+# The agent that opens pages from the login session (a detached tmux cannot run `open`).
+cmd_opener() { # install | status
+  local plist="$HOME/Library/LaunchAgents/com.guild.opener.plist" uid; uid=$(id -u)
+  case "${1:-status}" in
+    install)
+      [ "$(uname)" = Darwin ] || { echo "opener: not macOS, pages open directly"; return 0; }
+      mkdir -p "$GUILD_HOME/open-queue" "$(dirname "$plist")"
+      local new; new=$(cat <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.guild.opener</string>
+<key>ProgramArguments</key><array><string>$GUILD_REPO/bin/opener.sh</string><string>drain</string></array>
+<key>EnvironmentVariables</key><dict><key>GUILD_HOME</key><string>$GUILD_HOME</string><key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string></dict>
+<key>QueueDirectories</key><array><string>$GUILD_HOME/open-queue</string></array>
+<key>LimitLoadToSessionType</key><string>Aqua</string>
+<key>ThrottleInterval</key><integer>1</integer>
+</dict></plist>
+PL
+)
+      if [ "$new" = "$(cat "$plist" 2>/dev/null)" ] && launchctl print "gui/$uid/com.guild.opener" >/dev/null 2>&1; then
+        echo "opener: already loaded"; return 0
+      fi
+      printf '%s\n' "$new" > "$plist"
+      launchctl bootout "gui/$uid/com.guild.opener" >/dev/null 2>&1 || true
+      launchctl bootstrap "gui/$uid" "$plist" || die "could not load the opener agent (launchctl bootstrap gui/$uid $plist)"
+      echo "opener: loaded $plist" ;;
+    status)
+      if launchctl print "gui/$uid/com.guild.opener" >/dev/null 2>&1; then echo "opener: loaded"; else echo "opener: not loaded (guild opener install)"; fi
+      echo "queue: $(ls "$GUILD_HOME/open-queue" 2>/dev/null | grep -c '\.url$' || true) waiting" ;;
+    *) die "usage: guild opener install|status" ;;
+  esac
 }
 
 # Calm mode is opt-in: it rides on an early-access Claude Code surface, so guild turns it
@@ -297,6 +336,7 @@ cmd_up() {
     tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
       "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
     cmd_layout
+    [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || cmd_opener install >/dev/null 2>&1 || true
     tm set-option -p -t "$SESSION:qm.0" @guild_sidebar 1
     # The side menu and the campaign board cover what the deck showed; it stays one flag away.
     [ -n "${GUILD_DECK:-}" ] && command -v claude-deck >/dev/null && open_tab deck "$dir" "claude-deck; exec \$SHELL" --bg >/dev/null
@@ -499,7 +539,7 @@ cmd_docket() {
   local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
   local url="http://127.0.0.1:$port/"
   echo "$url"
-  [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+  [ "${1:-}" = --url ] || open_url "$url"
 }
 
 # The campaign board: quests, sessions, subagents, tickets and to-dos as one kanban.
@@ -507,7 +547,7 @@ cmd_campaign() {
   local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
   local url="http://127.0.0.1:$port/campaign"
   echo "$url"
-  [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+  [ "${1:-}" = --url ] || open_url "$url"
 }
 
 # The treasury: what the work cost (Claude, Jev) and what it was worth (grades, first pass).
@@ -515,7 +555,7 @@ cmd_treasury() {
   local port; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
   local url="http://127.0.0.1:$port/treasury"
   echo "$url"
-  [ "${1:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+  [ "${1:-}" = --url ] || open_url "$url"
 }
 
 cmd_shot() { python3 "$GUILD_REPO/bin/shot.py" "$@"; }
@@ -1211,7 +1251,7 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
     if [ -n "$w" ]; then
       local url; url="$(python3 "$GUILD_REPO/bin/wartable.py" url)b/$slug/$w/"
       event "$slug" "wrapup" "wrap-up ready: $url"
-      case "$url" in http*) [ "${GUILD_BOARD_NO_OPEN:-}" = 1 ] || open "$url" >/dev/null 2>&1 || true ;; esac
+      case "$url" in http*) open_url "$url" ;; esac
     fi
   fi
 }
@@ -1272,7 +1312,7 @@ cmd_validate() { # [export] slug [--out FILE] | ready | wait [--timeout S]
   port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
   local url="http://127.0.0.1:$port/q/$1/validate"
   echo "$url"
-  [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || true
+  [ "${2:-}" = --url ] || open_url "$url"
 }
 
 # A guarded quest's checklist goes before the guildmaster: only with a passed trial for HEAD and a
@@ -1298,7 +1338,7 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   url="http://127.0.0.1:$port/q/$slug/validate"
   printf 'needs-decision\t%s\t%s\n' "validate before the PR: run the checklist on ${head:0:8} -> $url" "$(now)" > "$q/status"
   event "$slug" needs-decision "validate before the PR: run the checklist on ${head:0:8} -> $url"
-  [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "$url" 2>/dev/null || true
+  open_url "$url"
   echo "$url"
   echo "now wait: guild validate wait --timeout 86400"
 }
@@ -1707,19 +1747,20 @@ case "${1:-}" in
   reel) shift; need_quest "${1:-}"
         port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
         echo "http://127.0.0.1:$port/q/$1/reel"
-        [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/reel" 2>/dev/null || true ;;
+        open_url "http://127.0.0.1:$port/q/$1/reel" ;;
   files) shift; need_quest "${1:-}"
     port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
-    echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/q/$1/files" 2>/dev/null || true ;;
+    echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || open_url "http://127.0.0.1:$port/q/$1/files" ;;
   reap) shift; python3 "$GUILD_REPO/bin/reaper.py" run "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
   lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
   behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
-    echo "http://127.0.0.1:$port/$page"; [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || open "http://127.0.0.1:$port/$page" 2>/dev/null || true ;;
+    echo "http://127.0.0.1:$port/$page"; open_url "http://127.0.0.1:$port/$page" ;;
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
+  opener) shift; cmd_opener "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   draw) shift; python3 "$GUILD_REPO/bin/draw.py" "$@" ;;
   harnesses) harness list ;;
