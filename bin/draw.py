@@ -190,7 +190,10 @@ def layout_graph(spec, kind):
     along = "h" if direction == "TB" else "w"
     widths = {r: sum(byid[i][cross] for i in L) + GAP_NODE * (len(L) - 1) for r, L in layers.items()}
     span = max(widths.values()) if widths else 0
-    gaps = max(GAP_LAYER, 40 + max((len(e["label"]) for e in edges), default=0) * 0) if edges else GAP_LAYER
+    # room between layers for the labels that sit there: their width side by side, their height top to bottom
+    sizes = [label_size(e["label"], e.get("scene")) for e in edges if e["label"] or e.get("scene")]
+    room = max((w if direction == "LR" else h for w, h in sizes), default=0)
+    gaps = max(GAP_LAYER, room + 56)
     offset = MARGIN
     for r in range(depth):
         L = layers[r]
@@ -264,6 +267,38 @@ def edge_path(a, b, direction, kind, side=1):
     return d, (x1 + 6, (y1 + y2) / 2, "right")
 
 
+def label_size(label, scene):
+    """(w, h) of an edge label pill: wrapped text, plus room for the scene badge."""
+    lines = wrap(label, 26) if label else [""]
+    w = (max(len(l) for l in lines) * LABEL_CHAR_W + 14 if label else 0) + (18 if scene else 0)
+    h = 16 * len(lines) + 6 if label else 22
+    return w, h
+
+
+def overlap(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return max(0, min(ax + aw, bx + bw) - max(ax, bx)) * max(0, min(ay + ah, by + bh) - max(ay, by))
+
+
+def place_label(x, y, w, h, nodes, labels):
+    """The free spot nearest to (x, y) for a w x h label: no node and no other label under it.
+    Tries rings of growing distance; if every spot touches something, the one that touches least."""
+    best, best_cost = (x, y), None
+    for ring in range(0, 13):
+        d = ring * 10
+        spots = [(0, 0)] if ring == 0 else [(dx * d, dy * d) for dx, dy in
+                                           ((0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1))]
+        for dx, dy in spots:
+            box = (x + dx, y + dy, w, h)
+            cost = 3 * sum(overlap(box, n) for n in nodes) + sum(overlap(box, b) for b in labels)
+            if cost == 0:
+                return x + dx, y + dy
+            if best_cost is None or cost < best_cost:
+                best, best_cost = (x + dx, y + dy), cost
+    return best
+
+
 def bezier_mid(p0, p1, p2, p3, t=.5):
     f = lambda a, b, c, d: (1 - t) ** 3 * a + 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t ** 2 * c + t ** 3 * d
     return f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])
@@ -277,6 +312,7 @@ def draw_graph(spec, kind):
         pairs.setdefault(frozenset((e["from"], e["to"])), []).append(e)
     back_count = 0
     out = []
+    pills = []     # label pills, drawn last so a node never hides one
     labels = []
     for e in edges:
         a, b = byid[e["from"]], byid[e["to"]]
@@ -313,23 +349,13 @@ def draw_graph(spec, kind):
     boxes = []
     for mx, my, where, label, scene in labels:
         lines = wrap(label, 26) if label else [""]
-        w = (max(len(l) for l in lines) * LABEL_CHAR_W + 14 if label else 0) + (18 if scene else 0)
-        h = 16 * len(lines) + 6 if label else 22
+        w, h = label_size(label, scene)
         x, y = mx - w / 2, my - h / 2
         if where == "right": x = mx + 6
         elif where == "left": x = mx - w - 6
         elif where == "above": y = my - h - 4
         elif where == "below": y = my + 4
-        for _ in range(8):
-            moved = False
-            for (bx, by, bw, bh) in node_boxes:          # off a node: step out sideways, away from its centre
-                if x < bx + bw and x + w > bx and y < by + bh and y + h > by:
-                    x = bx + bw + 4 if mx >= bx + bw / 2 else bx - w - 4; moved = True
-            for (bx, by, bw, bh) in boxes:               # off another label: step down
-                if x < bx + bw and x + w > bx and y < by + bh and y + h > by:
-                    y = by + bh + 4; moved = True
-            if not moved:
-                break
+        x, y = place_label(x, y, w, h, node_boxes, [(bx - 3, by - 3, bw + 6, bh + 6) for bx, by, bw, bh in boxes])
         boxes.append((x, y, w, h))
         badge = ""
         tx = x + w / 2
@@ -337,14 +363,16 @@ def draw_graph(spec, kind):
             badge = (f'<circle cx="{x + 11:.1f}" cy="{y + h / 2:.1f}" r="8" fill="var(--gd-line, #8a6a1e)"/>'
                      f'<text x="{x + 11:.1f}" y="{y + h / 2 + 3.5:.1f}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--gd-pill, #fff8e6)">{scene}</text>')
             tx = x + 18 + (w - 18) / 2
-        out.append(f'<g class="gd-label"{f" data-scene={chr(34)}{scene}{chr(34)}" if scene else ""}>'
+        pills.append(f'<g class="gd-label"{f" data-scene={chr(34)}{scene}{chr(34)}" if scene else ""}>'
                    f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{h / 2 if not label else 4}" fill="var(--gd-pill, #fff8e6)" '
                    f'stroke="var(--gd-line, #8a6a1e)" stroke-width=".6" opacity=".96"/>' + badge
                    + (text_lines(tx, y + h / 2, lines, 12, "500", fill="var(--gd-dim, #5b3e28)") if label else "") + "</g>")
         W = max(W, x + w + MARGIN); H = max(H, y + h + MARGIN)
-    # a label pushed past the left edge moves the whole picture right
+    # a label pushed past the left or top edge moves the whole picture right or down
     minx = min([bx for (bx, _, _, _) in boxes] + [MARGIN])
+    miny = min([by for (_, by, _, _) in boxes] + [MARGIN])
     shift = MARGIN / 2 - minx if minx < MARGIN / 2 else 0
+    shift_y = MARGIN / 2 - miny if miny < MARGIN / 2 else 0
     for n in nodes:
         if n["kind"] == "start":
             out.append(f'<circle cx="{n["x"]:.1f}" cy="{n["y"]:.1f}" r="8" fill="var(--gd-line, #8a6a1e)"/>')
@@ -355,10 +383,10 @@ def draw_graph(spec, kind):
             out.append(f'<rect x="{n["x"] - n["w"] / 2:.1f}" y="{n["y"] - n["h"] / 2:.1f}" width="{n["w"]:.1f}" height="{n["h"]:.1f}" rx="7" '
                        f'fill="var(--gd-node, #f6ecd2)" stroke="var(--gd-line, #8a6a1e)" stroke-width="1.4"/>'
                        + text_lines(n["x"], n["y"], n["lines"]))
-    body = "".join(out)
-    if shift:
-        body = f'<g transform="translate({shift:.1f},0)">{body}</g>'
-        W += shift
+    body = "".join(out + pills)
+    if shift or shift_y:
+        body = f'<g transform="translate({shift:.1f},{shift_y:.1f})">{body}</g>'
+        W += shift; H += shift_y
     return svg(W, H, body)
 
 

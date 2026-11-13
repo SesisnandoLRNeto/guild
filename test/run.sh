@@ -1549,6 +1549,29 @@ cat > "$TMP/flow.json" <<'JSON'
 {"edges": [{"from": "Open", "to": "Pick"}, {"from": "Pick", "to": "Save"}]}
 JSON
 has "a one-way path is a flow" "$("$GUILD" draw "$TMP/flow.json")" 'data-kind="flow"'
+# five edges over three modes, long labels, both ways: no label may sit on a node or on another label
+cat > "$TMP/busy.json" <<'JSON'
+{"kind": "state", "direction": "LR", "nodes": [{"id": "ON", "kind": "start"}, {"id": "CHECK", "label": "Checking (one probe)"},
+ {"id": "OFF", "label": "Offline: banner, actions disabled, queries paused"}],
+ "edges": [{"from": "ON", "to": "CHECK", "label": "a call got no answer", "trigger": "t"},
+  {"from": "CHECK", "to": "ON", "label": "probe answers", "trigger": "t"},
+  {"from": "CHECK", "to": "OFF", "label": "probe gets no answer either", "trigger": "t"},
+  {"from": "ON", "to": "OFF", "label": "browser offline event", "trigger": "t"},
+  {"from": "OFF", "to": "ON", "label": "probe answers, browser online event or any HTTP answer", "trigger": "t"}]}
+JSON
+sed 's/"LR"/"TB"/' "$TMP/busy.json" > "$TMP/busy-tb.json"
+for f in busy busy-tb spec; do
+  is "labels clear of nodes and of each other ($f)" "$("$GUILD" draw "$TMP/$f.json" | python3 -c '
+import re, sys
+s = sys.stdin.read()
+num = lambda r, k: float(re.search(k + r"=\"([-\d.]+)\"", r).group(1))
+box = lambda r: (num(r, "x"), num(r, "y"), num(r, "width"), num(r, "height"))
+nodes = [box(r) for r in re.findall(r"<rect [^>]*rx=\"7\"[^>]*>", s)]
+pills = [box(r) for r in re.findall(r"<g class=\"gd-label\"[^>]*><rect [^>]*>", s)]
+hit = lambda a, b: a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+bad = [p for p in pills if any(hit(p, n) for n in nodes)] + [p for i, p in enumerate(pills) if any(hit(p, q) for q in pills[i + 1:])]
+print("clear" if pills and not bad else "overlap %s" % bad)')" "clear"
+done
 printf '<!doctype html><body><h2>How the gears turn</h2>\n<p>x</p></body>' > "$TMP/page.html"
 "$GUILD" draw "$TMP/spec.json" --into "$TMP/page.html" >/dev/null
 has "--into lands the figure on the page" "$(cat "$TMP/page.html")" '<figure class="guild-draw"'
