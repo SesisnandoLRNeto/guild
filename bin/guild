@@ -120,6 +120,9 @@ guild draw <spec.json> [--into PAGE]    draw a state machine, flow, organogram o
 guild shot <url> --name before|after [--width W --height H]
                                     a screenshot taken the same way every time, filed under the quest
 guild report [on|off]               the quartermaster says every quest event once (on) or only what needs you (off, default)
+guild shepherd on|off|status|once   PR watch: quest PRs get new comments, conflicts and failing checks fixed by their
+                                    quest, behind branches updated, until merged (adopt your other PRs on the docket)
+guild shepherd reply <slug> <key> <text>   inside a quest: answer one comment the PR watch handed you
 guild revive [slug]                 bring an active quest's window back after a restart (all of them by default)
 guild doctor                        check the setup: tools, config, identities, orphans
 guild cost [slug] [--active]        what each quest spent (tokens, replies, time, dollars)
@@ -1670,6 +1673,7 @@ case "${1:-}" in
           python3 "$GUILD_REPO/bin/decide.py" open "$d_slug" "$1" ;;
   calm) shift; cmd_calm "$@" ;;
   report) shift; cmd_report "$@" ;;
+  shepherd) shift; python3 "$GUILD_REPO/bin/shepherd.py" "$@" ;;
   revive) shift; cmd_revive "$@" ;;
   pool) shift; cmd_pool "$@" ;;
   shot) shift; cmd_shot "$@" ;;

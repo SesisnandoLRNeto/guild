@@ -1898,6 +1898,15 @@ while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "gh_watch test said: $line" ;; esac
 done < <(mkdir -p "$TMP/ghw/local" && GUILD_HOME="$TMP/ghw" python3 "$REPO/test/gh_watch.py" "$REPO" 2>&1)   # its own home: the test war table never sees this github.json
 
+section "PR watch"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "shepherd test said: $line" ;; esac
+done < <(mkdir -p "$TMP/shep/local" && GUILD_HOME="$TMP/shep" python3 "$REPO/test/shepherd.py" "$REPO" 2>&1)
+has "guild shepherd says it is off by default" "$("$GUILD" shepherd status)" "PR watch: off"
+has "the docket carries the PR watch note" "$(curl -s http://127.0.0.1:4899/docket.json)" '"shepherd": {"on": false}'
+has "and draws it with an Adopt button" "$(curl -s http://127.0.0.1:4899/docket)" 'data-adopt='
+is "adopt refuses a PR it does not list" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4899/shepherd/adopt -d '{"url":"https://github.com/o/r/pull/1"}')" "400"
+
 # ── quest emails ──────────────────────────────────────────────────────────────
 run_notify_email
 

@@ -535,7 +535,23 @@ def docket_items():
     open_.sort(key=lambda i: (i["wrapup"], i["created"]))          # decisions first, then reviews
     held.sort(key=lambda i: i["held_until"])
     recent.sort(key=lambda i: i["at"], reverse=True)
-    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due(), "alerts": alert_list(open_)}
+    return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due(), "alerts": alert_list(open_),
+            "shepherd": shepherd_note()}
+
+
+def shepherd_note():
+    """The PR watch on the docket: on or off, how many quest PRs it watches, and your PRs to adopt."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import shepherd
+        if not shepherd.is_on():
+            return {"on": False}
+        s = shepherd.load_state()
+        return {"on": True, "watching": len(s.get("prs", {})), "at": s.get("at", ""),
+                "blocked": [{"slug": r["slug"], "why": r["blocked"]} for r in s.get("prs", {}).values() if r.get("blocked")],
+                "adopt": [{k: p[k] for k in ("url", "title", "repo", "number")} for p in s.get("unwatched", [])]}
+    except Exception:
+        return {"on": False}
 
 
 def alert_list(open_):
@@ -870,6 +886,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"ok": True}), "application/json")
             except Exception as e:
                 return self.send(500, json.dumps({"error": str(e)}), "application/json")
+        if path == "/shepherd/adopt":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import shepherd
+            err = shepherd.adopt(str(body.get("url", "")))
+            return self.send(400 if err else 200, json.dumps({"error": err} if err else {"ok": True}), "application/json")
         if path == "/rules/mark":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -1104,6 +1127,14 @@ def refresh_prs_forever():
         try:                                   # an @guild comment on a PR: a review quest, then the review posted
             import gh_watch
             gh_watch.once()
+        except Exception:
+            pass
+        try:                                   # PR watch: quest PRs get their comments, conflicts and checks handled
+            import shepherd
+            if shepherd.is_on():
+                import contextlib, io
+                with contextlib.redirect_stdout(io.StringIO()):
+                    shepherd.once()
         except Exception:
             pass
         try:                                   # a reply to a decision email answers that board
