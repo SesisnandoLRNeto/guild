@@ -245,6 +245,8 @@ Three habits, built in, so the rules behind the work reach you whole: why each e
 
 **The rule book.** Every backend wrap-up explains its business rule changes in a rules file (`guild impact --rules`): the rule, before, after, where, why, and an example with real values, its source and the tests that prove it. `guild rules` gathers them from every quest, live and closed, into one book per area, with search and the history of each rule (which quests changed it, and when).
 
+**What changed, by week.** The rule book opens on **What changed**: one week (or one month) at a time, with arrows (or the left and right keys) to walk back. It says in one line how many rules changed how the app already worked, how many are new, from which tickets and in which areas, then lists the behaviour changes first (before struck out, then now) and the new rules after. A rule you have not confirmed yet says "to confirm". **By area** is the full book.
+
 **The weekly drill.** `guild drill` asks three rules a week: first those you were never asked, then those you missed, then the ones asked longest ago. You answer first, then see the truth with where it lives in the code, and mark yourself right or wrong; a miss comes back the next week. The docket says when this week's drill waits.
 
 ## The learning loop

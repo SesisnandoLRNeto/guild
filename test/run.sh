@@ -1370,6 +1370,7 @@ out=$(echo "Bring the branch up to date with main" | GUILD_NO_WHY= "$GUILD" ques
 has "--why forces the card" "$out" "why card: on the docket"
 "$GUILD" close pr12-review-fix --force >/dev/null 2>&1; "$GUILD" close abc-7-sync --force >/dev/null 2>&1; "$GUILD" close abc-8-sync --force >/dev/null 2>&1
 has "the docket lists it" "$(curl -s http://127.0.0.1:4899/docket.json)" "Why card: whyq"
+has "a board keeps your picks as a draft until they are sent" "$(curl -s "http://127.0.0.1:4899/b/whyq/$wb/")" "restoreDraft();"
 is "a card does not park the quest" "$(cut -f1 "$GUILD_HOME/quests/whyq/status")" "working"
 curl -s -X POST "http://127.0.0.1:4899/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null
 has "the answer is kept with the quest" "$(cat "$GUILD_HOME/quests/whyq/why.json")" "a past start date is warned"
@@ -1393,6 +1394,10 @@ has "a Wrong mark keeps your note, and the rule book shows it" "$(curl -s http:/
 hasnt "and a marked rule leaves the digest" "$wk" '"rule": "A past start date is warned"'
 has "and the digest counts it" "$wk" '"wrong": 1'
 has "the page is served" "$(curl -s http://127.0.0.1:4899/rules/week)" "Rules Changed This Week"
+page=$(curl -s http://127.0.0.1:4899/rules)
+has "the rule book opens on what changed in a period" "$page" '<button data-v="period">What changed</button>'
+has "and walks back and forth a week or a month" "$page" '<option value="month">a month</option>'
+has "a before that says nothing was there is a new rule" "$page" "const NOTHING = "
 has "the docket says when the digest waits" "$(curl -s http://127.0.0.1:4899/docket)" "Rules changed this week"
 has "a rules file can name its own area" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import rulebook as r;print(r.business_area({'rule':'x','area':'Billing'},'repo'), r.business_area({'rule':'Archive is one-way','where':'src/com/appen/project/X.java'},'repo'), r.business_area({'rule':'Unit of pay','where':'com/appen/project/RateUom.java'},'repo'))")" "Billing Projects repo"
 dj=$(curl -s http://127.0.0.1:4899/drill.json)

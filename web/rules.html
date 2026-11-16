@@ -35,6 +35,24 @@
   details { font-size: 13px; margin-top: 6px; }
   details summary { cursor: pointer; color: var(--dim); }
   .empty { color: var(--dim); font-style: italic; }
+  /* the period view: what changed in one week or month, behaviour changes first */
+  .period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: -6px 0 14px; }
+  .period button.step { padding: 4px 11px; font: inherit; font-size: 15px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,0,0,.25); color: var(--text); cursor: pointer; }
+  .period button.step:disabled { opacity: .35; cursor: default; }
+  .period .when { font-size: 17px; font-weight: 700; min-width: 230px; text-align: center; }
+  .period select { font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 4px; background: rgba(0,0,0,.25); color: var(--text); border: 1px solid var(--line); }
+  .sum { font-size: 15px; margin: 0 0 16px; line-height: 1.5; }
+  .sum .chip { display: inline-block; font-size: 12.5px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; margin: 2px 4px 2px 0; }
+  h2.kind { font-size: 15px; margin: 18px 0 8px; letter-spacing: .04em; }
+  h4.area { font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 12px 0 6px; }
+  .chg { border-left: 3px solid var(--line); padding: 6px 12px; margin: 0 0 8px; background: rgba(0,0,0,.18); border-radius: 0 4px 4px 0; }
+  .chg.beh { border-left-color: #d9a441; }
+  .chg .t { font-weight: 700; font-size: 14.5px; }
+  .chg .ba { font-size: 13.5px; margin: 3px 0 0; }
+  .chg .ba s { color: var(--dim); }
+  .chg .m { font-size: 12px; color: var(--dim); margin-top: 3px; }
+  .badge { font-size: 11px; border-radius: 3px; padding: 0 5px; margin-left: 6px; border: 1px solid currentColor; }
+  .badge.agree { color: #8fb35a; } .badge.wrong { color: #e0573f; } .badge.unsure, .badge.todo { color: #a8987a; }
 </style>
 </head>
 <body>
@@ -57,17 +75,115 @@
 <h1>The Rule Book</h1>
 <p class="lead">Every business rule the guild's work changed, per area, in plain words: what the system does now, what it did before, why, and where it lives. Written by the adventurers in each backend wrap-up, gathered here.</p>
 <div class="bar">
+  <span class="tabs" id="views"><button data-v="period">What changed</button><button data-v="area">By area</button></span>
   <span class="tabs" id="tabs"></span>
   <input id="q" type="search" placeholder="Search rules, tickets, files" aria-label="Search the rules">
   <a class="drill" href="/drill" id="drill">This week's drill</a>
+</div>
+<div class="period" id="period" style="display:none">
+  <button class="step" id="prev" title="earlier (left arrow)" aria-label="earlier">&lsaquo;</button>
+  <span class="when" id="when"></span>
+  <button class="step" id="next" title="later (right arrow)" aria-label="later">&rsaquo;</button>
+  <select id="span" aria-label="period length"><option value="week">a week</option><option value="month">a month</option></select>
 </div>
 <div id="list"></div>
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const code = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
-let D = null, area = "";
-try { area = localStorage.getItem("rulebook-area") || ""; } catch (e) {}
+let D = null, area = "", view = "period", span = "week", anchor = null;
+try { area = localStorage.getItem("rulebook-area") || ""; view = localStorage.getItem("rulebook-view") || "period";
+      span = localStorage.getItem("rulebook-span") || "week"; } catch (e) {}
+const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+
+// ── periods: a week runs Monday to Sunday, a month is a calendar month (dates as YYYY-MM-DD) ──
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const day = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+function bounds(a) {
+  const d = day(a);
+  if (span === "month") return [iso(new Date(d.getFullYear(), d.getMonth(), 1)), iso(new Date(d.getFullYear(), d.getMonth() + 1, 0))];
+  const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  return [iso(mon), iso(sun)];
+}
+function shift(a, n) {
+  const d = day(a);
+  if (span === "month") return iso(new Date(d.getFullYear(), d.getMonth() + n, 1));
+  d.setDate(d.getDate() + 7 * n); return iso(d);
+}
+const fmt = (s, year) => day(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}) });
+function label([a, b]) {
+  if (span === "month") return day(a).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const today = iso(new Date()), [t0] = bounds(today);
+  const name = a === t0 ? "This week" : a === bounds(shift(today, -1))[0] ? "Last week" : "Week";
+  return `${name} · ${fmt(a)} to ${fmt(b, true)}`;
+}
+
+// a "before" that says nothing was there ("n/a", "no such endpoint", "not stored") makes it a new rule, not a change
+const NOTHING = /^$|^(n\/?a|none|nothing|-|—|new\b|no such|not stored|not applicable|did not exist|didn't exist|no\b.*\b(existed|support|stored)\b)/i;
+// every change of every rule in [a, b]: the last change in the period speaks for the rule
+function changes(a, b) {
+  const out = [];
+  for (const [ar, rules] of Object.entries(D.areas)) for (const e of rules) {
+    const h = e.history.filter((x) => x.date >= a && x.date <= b);
+    if (!h.length) continue;
+    const last = h[0];                       // history is newest first
+    const first = h[h.length - 1];
+    const before = first.before || "", after = last.after || "";
+    out.push({ e, area: ar, before, after, why: last.why || e.why || "", ticket: last.ticket || last.quest, date: last.date,
+               behaviour: !NOTHING.test(String(before).trim()), current: last.date === e.date });
+  }
+  return out;
+}
+function allDates() { return Object.values(D.areas).flatMap((rs) => rs.flatMap((e) => e.history.map((h) => h.date))).sort(); }
+
+function markBadge(c) {
+  if (!c.current) return "";
+  const m = c.e.mark && c.e.mark.mark;
+  return m ? `<span class="badge ${m}">${m === "unsure" ? "not sure" : m}</span>` : `<span class="badge todo">to confirm</span>`;
+}
+
+function renderPeriod() {
+  const dates = allDates();
+  if (!anchor) {                             // open on this period, or on the last one that changed anything
+    const today = iso(new Date());
+    const [a, b] = bounds(today);
+    anchor = dates.some((d) => d >= a && d <= b) || !dates.length ? today : dates[dates.length - 1];
+  }
+  const [a, b] = bounds(anchor);
+  $("#when").textContent = label([a, b]);
+  $("#prev").disabled = !dates.some((d) => d < a);
+  $("#next").disabled = !dates.some((d) => d > b);
+  const q = $("#q").value.trim().toLowerCase();
+  const list = changes(a, b).filter((c) => !q || JSON.stringify(c).toLowerCase().includes(q));
+  if (!list.length) {
+    $("#list").innerHTML = `<p class="empty">${q ? "No change matches." : "No rule changed in this period."}</p>`;
+    return;
+  }
+  const areas = {}, tickets = new Set();
+  for (const c of list) { areas[c.area] = (areas[c.area] || 0) + 1; if (c.ticket) tickets.add(c.ticket); }
+  const beh = list.filter((c) => c.behaviour), fresh = list.filter((c) => !c.behaviour);
+  const todo = list.filter((c) => c.current && (!c.e.mark || c.e.mark.mark === "unsure")).length;
+  $("#list").innerHTML = `<p class="sum"><b>${beh.length}</b> change${beh.length === 1 ? "" : "s"} to how the app already worked,
+      <b>${fresh.length}</b> new rule${fresh.length === 1 ? "" : "s"}, from ${tickets.size} ticket${tickets.size === 1 ? "" : "s"}.
+      ${todo ? `<a href="/rules/week">${todo} still to confirm</a>.` : ""}<br>
+      ${Object.entries(areas).sort((x, y) => y[1] - x[1]).map(([n, k]) => `<span class="chip">${esc(n)} ${k}</span>`).join("")}</p>`
+    + group("Changed how the app works", beh, true) + group("New rules", fresh, false);
+}
+
+function group(title, list, beh) {
+  if (!list.length) return "";
+  const by = {};
+  for (const c of list) (by[c.area] = by[c.area] || []).push(c);
+  return `<h2 class="kind">${title}</h2>` + Object.entries(by).sort((x, y) => y[1].length - x[1].length).map(([ar, cs]) =>
+    `<h4 class="area">${esc(ar)}</h4>` + cs.map((c) => `<div class="chg${beh ? " beh" : ""}">
+      <div class="t">${code(c.e.rule)}${markBadge(c)}</div>
+      ${beh ? `<p class="ba"><s>${code(c.before)}</s> &rarr; ${code(c.after)}</p>` : `<p class="ba">${code(c.after)}</p>`}
+      <div class="m">${esc(c.ticket || "")} · ${esc(c.date)}${c.e.where ? ` · <code>${esc(c.e.where)}</code>` : ""}</div>
+      ${c.why || c.e.example ? `<details><summary>why${c.e.example ? " and an example" : ""}</summary>
+        ${c.why ? `<p class="row"><b>Why</b>${code(c.why)}</p>` : ""}${example(c.e)}</details>` : ""}
+    </div>`).join("")).join("");
+}
 
 function example(e) {
   const x = e.example;
@@ -77,6 +193,11 @@ function example(e) {
 }
 
 function render() {
+  for (const b of document.querySelectorAll("#views button")) b.setAttribute("aria-pressed", b.dataset.v === view);
+  $("#tabs").style.display = view === "area" ? "" : "none";      // the hidden attribute loses to the display rules
+  $("#period").style.display = view === "period" ? "" : "none";
+  $("#span").value = span;
+  if (view === "period") return renderPeriod();
   const areas = Object.keys(D.areas);
   if (!areas.includes(area)) area = areas[0] || "";
   $("#tabs").innerHTML = areas.map((a) => `<button data-a="${esc(a)}" aria-pressed="${a === area}">${esc(a)} (${D.areas[a].length})</button>`).join("");
@@ -100,6 +221,10 @@ function render() {
 }
 
 document.addEventListener("click", (ev) => {
+  const v = ev.target.closest("#views button");
+  if (v) { view = v.dataset.v; keep("rulebook-view", view); return render(); }
+  if (ev.target.closest("#prev")) { anchor = shift(anchor, -1); return render(); }
+  if (ev.target.closest("#next")) { anchor = shift(anchor, 1); return render(); }
   const b = ev.target.closest("#tabs button");
   if (!b) return;
   area = b.dataset.a;
@@ -107,6 +232,12 @@ document.addEventListener("click", (ev) => {
   render();
 });
 $("#q").addEventListener("input", render);
+$("#span").addEventListener("change", (e) => { span = e.target.value; keep("rulebook-span", span); render(); });
+document.addEventListener("keydown", (e) => {          // left and right arrows walk the periods
+  if (view !== "period" || e.target.closest("input, select, textarea")) return;
+  if (e.key === "ArrowLeft" && !$("#prev").disabled) $("#prev").click();
+  if (e.key === "ArrowRight" && !$("#next").disabled) $("#next").click();
+});
 fetch("/rules.json", { cache: "no-store" }).then((r) => r.json()).then((d) => { D = d; render(); });
 </script>
 </body>
