@@ -138,6 +138,11 @@ addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); });   
 const QUESTIONS = {{QUESTIONS}};
 const WAITING = {{WAITING}};   // a wrap-up before the quest is done: nothing to grade yet
 const answers = {}, attachments = [];
+// Your choices are kept as a draft in this browser until they are sent, so a trip to the validation
+// page (or a reload) does not lose the grade and the next step you already picked.
+const DRAFT = "guild-draft:" + location.pathname.replace(/[^/]*$/, "");
+const saveDraft = () => { try { localStorage.setItem(DRAFT, JSON.stringify({ answers, message: box.value, attachments })); } catch (e) {} };
+const dropDraft = () => { try { localStorage.removeItem(DRAFT); } catch (e) {} };
 const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
 
 function draw() {
@@ -151,7 +156,7 @@ function draw() {
     if (q.type === "text") {
       const t = el("textarea");
       t.placeholder = q.placeholder || "your answer";
-      t.oninput = () => { answers[q.id] = t.value; };
+      t.oninput = () => { answers[q.id] = t.value; saveDraft(); };
       box.appendChild(t);
     } else {
       for (const o of q.options || []) {
@@ -171,6 +176,7 @@ function draw() {
           if (q.type === "multi") {
             for (const s of box.querySelectorAll("label.opt")) if (s.querySelector("input").checked) s.classList.add("chosen");
           } else lab.classList.add("chosen");
+          saveDraft();
         };
         lab.dataset.q = q.id; lab.dataset.o = o.id;     // lets the grade and verdict wear their own icons
         lab.appendChild(input);
@@ -195,9 +201,32 @@ async function upload(file) {
   const { path } = await r.json();
   attachments.push(path);
   const img = el("img"); img.src = path; document.getElementById("shots").appendChild(img);
+  saveDraft();
 }
 
 const box = document.getElementById("message");
+box.addEventListener("input", saveDraft);
+function restoreDraft() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(DRAFT) || "null"); } catch (e) {}
+  if (!d) return;
+  if (d.message) box.value = d.message;
+  for (const p of d.attachments || []) {
+    attachments.push(p);
+    const img = el("img"); img.src = p; document.getElementById("shots").appendChild(img);
+  }
+  const boxes = document.querySelectorAll("#questions .q");
+  QUESTIONS.forEach((q, i) => {
+    const v = (d.answers || {})[q.id];
+    if (v === undefined || !boxes[i]) return;
+    if (q.type === "text") { boxes[i].querySelector("textarea").value = v; answers[q.id] = v; return; }
+    for (const id of [].concat(v)) {
+      const input = boxes[i].querySelector(`label.opt[data-o="${CSS.escape(String(id))}"] input`);
+      if (input && !input.checked) { input.checked = true; input.dispatchEvent(new Event("change")); }
+    }
+  });
+  if (d.answers && d.answers.choice !== undefined) picked = true;   // a choice you made wins over the review's pick
+}
 box.addEventListener("paste", e => { for (const it of e.clipboardData.files) upload(it); });
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => { e.preventDefault(); for (const f of e.dataTransfer.files) upload(f); });
@@ -254,6 +283,7 @@ async function send(ended) {
     st.style.color = "#a8322a";
     return;
   }
+  dropDraft();
   document.getElementById("state").innerHTML = '<span class="sent">sent, the adventurer is working on it</span>';
 }
 document.getElementById("send").onclick = () => send(false);
@@ -261,10 +291,12 @@ document.getElementById("sendEnd").onclick = () => send(true);
 
 fetch("state.json").then(r => r.json()).then(s => {
   if (!s.answered) return;
+  dropDraft();
   document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = true;
   document.getElementById("state").innerHTML = '<span class="sent">already answered at ' + s.decision.at + '</span>';
 });
 draw();
+restoreDraft();
 if (WAITING) {
   const p = el("p", "hint"); p.textContent = WAITING;
   document.getElementById("questions").appendChild(p);

@@ -6,7 +6,7 @@ You are the **guildmaster**. You talk to one agent, the **quartermaster**. It tu
 
 Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate](https://github.com/kunchenguid/firstmate). This is a separate take, written from scratch for one person's workflow.
 
-> **Status: a personal tool, shared in the open.** It is built for one person's daily work on macOS (the core also runs on Linux, where CI runs the tests). It is not a product, and nothing here is supported or stable. There is no license yet, so reuse is not granted by default: open an issue if you want to use part of it. The RPG names (guildmaster, quest, war table) are a skin; [How it works](#how-it-works) maps each one to a plain engineering term.
+> **Status: a personal tool, shared in the open.** It is built for one person's daily work on macOS (the core also runs on Linux, where CI runs the tests). It is not a product, and nothing here is supported or stable. It is MIT licensed (see [LICENSE](LICENSE)): use it, fork it, take the parts you like. The RPG names (guildmaster, quest, war table) are a skin; [How it works](#how-it-works) maps each one to a plain engineering term.
 
 ## What it does
 
@@ -172,6 +172,8 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 **The quest console.** `/console` on the war table is made for the phone: every open tab (quests and the quartermaster) with its state; tap one to read its screen as plain text, refreshed every 3 seconds (cleaned for a narrow screen: calm mode's side panel, terminal-wide rules and the wide ASCII scene Claude Code draws while it works are left out, so nothing wraps into noise), and type to it in a normal text box, with the phone keyboard, autocorrect and dictation. Send does what `guild send` does. A row of keys (1, 2, 3, Enter, Esc, arrows, y, n) answers a prompt waiting on screen. Only tabs open now can be read or typed to, text is typed literally, and only those keys can be pressed. Typing needs a header another web site cannot add, so a page you open elsewhere cannot type into your quests. From the phone it is the remote war table (`guild remote url`), behind its key: keep that link to yourself, because it can type into your sessions.
 
+**PR watch.** `guild shepherd on` makes guild look after the open pull requests of your quests until they are merged (`off` stops it, `status` shows what it watches). Every few minutes the war table checks each quest PR. New comments and reviews from other people (bots left out), a merge conflict, or failing checks on the head go to the quest's adventurer: revived first if its window was closed, when there is room (at most 5 quest windows, 30% of memory free), and only when it is not busy. Comments wait 5 quiet minutes so a review written in pieces goes as one. The adventurer merges the target branch in (never a rebase), fixes, runs the checks and the trial, pushes to the PR's branch, answers each comment it addressed in one line with `guild shepherd reply` ("Fixed in <sha>: ..."), and reports done. A branch that is only behind its target is updated on GitHub, the same merge commit as the Update branch button, with no agent. Nothing is ever merged, approved or resolved, and the quest closes when its PR is merged. What was on a PR before you turned it on is history, not news. Your PRs opened by hand in the watched repos show on the docket with an **Adopt** button, which starts a fix quest on that branch and watches it from then on.
+
 **Alerts while you are away.** Every 2 minutes the war table looks for things that went wrong without you: a quest PR with a merge conflict, failing checks, or a reviewer who has waited a day for an answer; Claude usage over 80% of the 5-hour or weekly limit; a plan, decision or result waiting on you for an hour. Each one is sent once (it is sent again only if it goes away and comes back) and stays on the docket while it is true; `guild alerts` lists them. `guild notify email you@gmail.com` also emails them, through Gmail with an app password you keep in the macOS Keychain (`security add-generic-password -s guild-email -a you@gmail.com -w`), never in a file. Usage comes from Claude Code's status line (`rate_limits`), which only some plans report. Alerts never write to GitHub.
 
 **Waiting quests stay cheap.** A quest that ended its turn to wait for you, with a context over 80k tokens, gets `/compact` typed into its session in the last 90 seconds before the prompt cache goes cold (Claude Code keeps it 1 hour on your plan, so about 59 minutes after it went quiet). Your answer later is read from a short summary instead of the whole cold context. Done quests, the quartermaster and quests with `"nocompact": true` in their meta are never compacted. Tune it under `"alerts"` in `~/.guild/local/remote.json`: `cache_minutes`, `compact_tokens`, `compact`, `unanswered_hours`, `usage_percent`, `wait_minutes`.
@@ -244,6 +246,8 @@ Three habits, built in, so the rules behind the work reach you whole: why each e
 **The Why card.** Every quest starts by putting a card on the docket with five questions you answer in your own words: the **pain** (who suffers today, one real example), the **rule** (in one sentence), the **decision** (who decided, what was rejected), the **impact** (what changes, for which users, data or money) and the **future** (what it unlocks or blocks). The AI never fills it in: thinking first is the point. Your answers are kept in `why.json` and top the quest's plan and wrap-up, so you judge the result against your own why. The adventurer then checks your card against the ticket, the spec and the code, and raises up to three challenges on the war table where something contradicts it or is missing. Only a feature or an implementation gets the card: a PR review fix, a merge, a CI or conflict chore has no pain or rule of its own, so `guild quest` skips the card there (it reads the slug and the brief, `python3 bin/why.py wanted <slug>` shows the call) and says so. `--why` forces the card, `--no-why` drops it; helpers never get one.
 
 **The rule book.** Every backend wrap-up explains its business rule changes in a rules file (`guild impact --rules`): the rule, before, after, where, why, and an example with real values, its source and the tests that prove it. `guild rules` gathers them from every quest, live and closed, into one book per area, with search and the history of each rule (which quests changed it, and when).
+
+**What changed, by week.** The rule book opens on **What changed**: one week (or one month) at a time, with arrows (or the left and right keys) to walk back. It says in one line how many rules changed how the app already worked, how many are new, from which tickets and in which areas, then lists the behaviour changes first (before struck out, then now) and the new rules after. A rule you have not confirmed yet says "to confirm". **By area** is the full book.
 
 **The weekly drill.** `guild drill` asks three rules a week: first those you were never asked, then those you missed, then the ones asked longest ago. You answer first, then see the truth with where it lives in the code, and mark yourself right or wrong; a miss comes back the next week. The docket says when this week's drill waits.
 
@@ -551,6 +555,14 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 ## Folder trust
 
 Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspace/.guild-worktrees/` (change with `GUILD_WORKTREES`), and `guild quest` marks a new worktree as trusted in `~/.claude.json` only when its main repo, or a parent folder, is already trusted.
+
+## Just want one piece?
+
+Guild needs tmux, a local server and some setup. If you only want one habit inside your own agent, the core ideas also ship as single-file skills (one Python script plus instructions, no server) on Agensi, as **The Guild** line: The Quartermaster (quests, decisions and wrap-ups), The Oathkeeper (sealed acceptance checks), The Tracker (root-cause proof), The Archivist (memory hygiene), The Lorekeeper (a repo's vision from its history) and The Inspector (QA validation pages). See [agensi.io/creators/sesisnando-neto](https://www.agensi.io/r/SESISNANDONETO?to=/creators/sesisnando-neto&utm_source=github).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ## Contributing
 
