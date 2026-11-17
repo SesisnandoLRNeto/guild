@@ -220,7 +220,9 @@ has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
 is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 wb0=$(ls "$GUILD_HOME/quests/alpha/boards" | tail -1)
 has "before done, the wrap-up has no grading panel" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/")" "has not reported done yet"
-case "$(curl -s "http://127.0.0.1:4899/docket.json")" in *"alpha shipped"*) bad "and it is not on the docket" "listed" ;; *) ok "and it is not on the docket" ;; esac
+# the quest's own note may show under Underway; the wrap-up board must not be a docket item
+items=$(curl -s "http://127.0.0.1:4899/docket.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" | ".join(i.get("title","") for i in d.get("open",[])+d.get("held",[])))')
+case "$items" in *"alpha shipped"*) bad "and it is not on the docket" "listed" ;; *) ok "and it is not on the docket" ;; esac
 out=$("$GUILD" status alpha done "shipped it" 2>&1)
 has "a code quest needs its validation scenarios before done" "$out" "there is no scenarios.json"
 cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'

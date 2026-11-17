@@ -140,6 +140,17 @@ def usage_problems(cfg):
     return out
 
 
+OLD_FINISHED_DAYS = 7
+
+
+def quest_finished(slug):
+    """Done, failed or stopped. Their open questions block close, but old ones are not mailed."""
+    try:
+        return open(os.path.join(QUESTS, slug, "status")).read().split("\t")[0] in ("done", "failed", "stopped")
+    except OSError:
+        return False
+
+
 def board_problems(cfg, open_items):
     """A plan, a decision or results that have waited on you for an hour: worth a mail, once."""
     out = []
@@ -149,6 +160,8 @@ def board_problems(cfg, open_items):
         minutes = age_hours(i.get("created", "")) * 60
         if minutes < cfg["wait_minutes"]:
             continue
+        if quest_finished(i["quest"]) and minutes > OLD_FINISHED_DAYS * 24 * 60:
+            continue                     # an old question of a finished quest: on the docket, no mail
         where = f"/b/{i['quest']}/{i['board']}/"
         text = (f"{i['quest']}: results have waited {waited(minutes)} for your check" if i.get("wrapup") else
                 f"{i['quest']} has waited {waited(minutes)} on your answer: {i.get('title', '')}")
