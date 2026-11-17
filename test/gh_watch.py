@@ -1,4 +1,4 @@
-"""@guild on a PR: checks for test/run.sh. Prints "ok <name>" or "FAIL <name>" per check.
+"""!guild on a PR: checks for test/run.sh. Prints "ok <name>" or "FAIL <name>" per check.
 
 Runs in the test GUILD_HOME; GitHub (gh api) and the quest launch are stubbed, so nothing leaves the Mac.
 """
@@ -28,10 +28,10 @@ def check(name, cond):
 calls, posted, deleted, users = [], [], [], []
 GH = {"pulls": {"o/api#5": {"state": "open", "head": {"sha": "abc", "ref": "their-branch", "repo": {"full_name": "o/api"}}},
                 "o/api#6": {"state": "open", "head": {"sha": "def", "ref": "feat-rates", "repo": {"full_name": "o/api"}}}},
-      "comments": {"o/api#5": [{"id": 11, "user": {"login": "someone"}, "body": "@guild approve this please"},
-                               {"id": 12, "user": {"login": "me"}, "body": "@guild security"},
-                               {"id": 13, "user": {"login": "me"}, "body": "ask @guildmaster later"}],
-                   "o/api#6": [{"id": 21, "user": {"login": "me"}, "body": "@guild"}]},
+      "comments": {"o/api#5": [{"id": 11, "user": {"login": "someone"}, "body": "!guild approve this please"},
+                               {"id": 12, "user": {"login": "me"}, "body": "!guild security"},
+                               {"id": 13, "user": {"login": "me"}, "body": "ask !guildmaster later"}],
+                   "o/api#6": [{"id": 21, "user": {"login": "me"}, "body": "!guild"}]},
       "refuse_lines": False}
 ITEMS = [{"repository_url": "https://api.github.com/repos/o/api", "number": 5, "title": "Rates export", "html_url": "https://github.com/o/api/pull/5",
           "user": {"login": "teammate"}},
@@ -87,9 +87,9 @@ json.dump({"watch": True, "repos": {"o/api": CLONE}, "max_active": 2}, open(gh_w
 
 gh_watch.once()
 slugs = [a[1] for a, _ in started]
-check("your @guild on a PR starts a review quest", "review-api-5" in slugs)
-check("someone else's @guild is ignored", not any("approve this please" in (s or "") for _, s in started))
-check("@guildmaster is not the trigger", len([a for a, _ in started if a[1].startswith("review-api-5")]) == 1)
+check("your !guild on a PR starts a review quest", "review-api-5" in slugs)
+check("someone else's !guild is ignored", not any("approve this please" in (s or "") for _, s in started))
+check("!guildmaster is not the trigger", len([a for a, _ in started if a[1].startswith("review-api-5")]) == 1)
 brief = dict((a[1], s) for a, s in started)["review-api-5"]
 check("the brief runs pr-review on the PR, with your focus", "pr-review command on https://github.com/o/api/pull/5" in brief and "security" in brief)
 check("it tells the adventurer not to post anything itself", "Do not change code, push, approve, comment or post anything" in brief)
@@ -114,7 +114,7 @@ check("each finding with a line is a comment on that line", r.get("comments") an
 check("the body lists what blocks and the smaller things apart", "**To fix before merging**" in r.get("body", "")
       and "**Smaller things, not blocking**" in r.get("body", ""))
 check("it reviews the commit it saw", r.get("commit_id") == "abc")
-check("your @guild comment is deleted after the review", "12" in deleted)
+check("your !guild comment is deleted after the review", "12" in deleted)
 st = json.load(open(gh_watch.STATE))["started"]["review-api-5"]
 check("the state says what was posted", st.get("posted") == "requested changes: 1 major")
 n = len(posted)
@@ -122,10 +122,10 @@ gh_watch.once()
 check("a review is posted once", len(posted) == n)
 
 # only small things: approve; a line outside the diff falls back to the body alone
-GH["comments"]["o/api#5"].append({"id": 14, "user": {"login": "me"}, "body": "@guild once more"})
+GH["comments"]["o/api#5"].append({"id": 14, "user": {"login": "me"}, "body": "!guild once more"})
 gh_watch.once()
 q5b = os.path.join(HOME, "quests", "review-api-5-2")
-check("a new @guild on the same PR gets its own quest", os.path.isdir(q5b))
+check("a new !guild on the same PR gets its own quest", os.path.isdir(q5b))
 GH["refuse_lines"] = True
 json.dump({"summary": "Ready.", "findings": [{"severity": "minor", "file": "a.py", "line": 900, "title": "A long name"}]},
           open(os.path.join(q5b, "review.json"), "w"))
@@ -145,7 +145,7 @@ check("the findings go on the war table instead", os.path.exists(os.path.join(q6
 check("and your comment is still removed", "21" in deleted)
 
 # a broken review.json is not posted while the quest works, and is given up when it ends
-GH["comments"]["o/api#5"].append({"id": 15, "user": {"login": "me"}, "body": "@guild"})
+GH["comments"]["o/api#5"].append({"id": 15, "user": {"login": "me"}, "body": "!guild"})
 gh_watch.once()
 q5c = os.path.join(HOME, "quests", "review-api-5-3")
 json.dump({"findings": [{"severity": "huge", "title": "x"}]}, open(os.path.join(q5c, "review.json"), "w"))
@@ -159,7 +159,7 @@ check("and once the quest ends, it says so instead", "not posted" in json.load(o
 # two accounts (personal and work): each is searched, and the review goes out as the one that asked
 json.dump({"Work": {"gh_user": "me-work"}, "*": {"gh_user": "me"}}, open(os.path.join(HOME, "local", "identities.json"), "w"))
 st = json.load(open(gh_watch.STATE)); st.pop("accounts", None); json.dump(st, open(gh_watch.STATE, "w"))
-GH["comments"]["o/api#5"].append({"id": 31, "user": {"login": "me-work"}, "body": "@guild from work"})
+GH["comments"]["o/api#5"].append({"id": 31, "user": {"login": "me-work"}, "body": "!guild from work"})
 users.clear()
 gh_watch.once()
 info = json.load(open(gh_watch.STATE))["started"].get("review-api-5-4", {})
@@ -169,19 +169,19 @@ json.dump({"summary": "Ready.", "findings": []}, open(os.path.join(HOME, "quests
 users.clear()
 gh_watch.once()
 check("and the review is posted as that account", posted[-1]["event"] == "APPROVE" and "me-work" in users)
-# @guild fix: only on your own PR, a code quest on its branch, the comment gone at once
-GH["comments"]["o/api#5"].append({"id": 41, "user": {"login": "me"}, "body": "@guild fix this for them"})
-GH["comments"]["o/api#6"].append({"id": 42, "user": {"login": "me"}, "body": "@guild fix: the null check first"})
+# !guild fix: only on your own PR, a code quest on its branch, the comment gone at once
+GH["comments"]["o/api#5"].append({"id": 41, "user": {"login": "me"}, "body": "!guild fix this for them"})
+GH["comments"]["o/api#6"].append({"id": 42, "user": {"login": "me"}, "body": "!guild fix: the null check first"})
 n = len(started)
 gh_watch.once()
 fixes = [(a, b) for a, b in started[n:] if a[1].startswith("fix-")]
-check("@guild fix on someone else's PR starts nothing", not any(a[1] == "fix-api-5" for a, _ in fixes))
-check("@guild fix on your own PR starts a fix quest", any(a[1] == "fix-api-6" for a, _ in fixes))
+check("!guild fix on someone else's PR starts nothing", not any(a[1] == "fix-api-5" for a, _ in fixes))
+check("!guild fix on your own PR starts a fix quest", any(a[1] == "fix-api-6" for a, _ in fixes))
 fa, fb = next((a, b) for a, b in fixes if a[1] == "fix-api-6")
 check("it starts from the PR's branch, freshly fetched", "origin/feat-rates" in fa and ("-C", CLONE, "fetch", "-q", "origin", "feat-rates") in fetched)
 check("it fixes what reviewers and checks asked, with your focus", "every unresolved review comment" in fb and "the null check first" in fb)
 check("it pushes to the same branch, never a new PR or a force-push", "git push origin HEAD:feat-rates" in fb and "Never force-push, never open a new PR" in fb)
-check("your @guild fix comment is deleted at once", "42" in deleted and "41" not in deleted)
+check("your !guild fix comment is deleted at once", "42" in deleted and "41" not in deleted)
 check("nothing is posted for a fix", json.load(open(gh_watch.STATE))["started"]["fix-api-6"]["posted"] == "fixing on its branch")
 os.remove(gh_watch.CONFIG)
 calls.clear()
@@ -190,8 +190,8 @@ check("with no github.json nothing is polled", calls == [])
 
 # GitHub search refuses some org repos (SSO): a watched repo's comments are read directly instead
 GH["search_fails"] = True
-GH["direct"] = {"w/work": [{"id": 71, "issue_url": "https://api.github.com/repos/w/work/issues/7", "user": {"login": "me"}, "body": "@guild please"},
-                           {"id": 72, "issue_url": "https://api.github.com/repos/w/work/issues/8", "user": {"login": "me"}, "body": "@guild on an issue"}]}
+GH["direct"] = {"w/work": [{"id": 71, "issue_url": "https://api.github.com/repos/w/work/issues/7", "user": {"login": "me"}, "body": "!guild please"},
+                           {"id": 72, "issue_url": "https://api.github.com/repos/w/work/issues/8", "user": {"login": "me"}, "body": "!guild on an issue"}]}
 GH["issues"] = {"w/work/issues/7": {"number": 7, "state": "open", "pull_request": {}, "title": "Coworker PR",
                                     "html_url": "https://github.com/w/work/pull/7", "user": {"login": "coworker"}},
                 "w/work/issues/8": {"number": 8, "state": "open", "title": "Not a PR", "html_url": "x", "user": {"login": "me"}}}
@@ -209,7 +209,7 @@ n = len(started)
 gh_watch.once()
 new_ = [a[1] for a, _ in started[n:]]
 check("a PR that search cannot see is still found in a watched repo", "review-work-7" in new_)
-check("an @guild on a plain issue starts nothing", not any("work-8" in x for x in new_))
+check("an !guild on a plain issue starts nothing", not any("work-8" in x for x in new_))
 
 
 # one poll at a time: while another holds the lock (a war table mid-restart), nothing is polled or posted

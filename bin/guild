@@ -32,7 +32,7 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                    [--epic-dagger ["<why>"]]  everything --quick drops, and no interaction at all:
                                     no questions, no boards, no wrap-up; build it and open the PR
                    [--guarded ["<why>"]]  no plan; build, trial, then the guildmaster validates the
-                                    branch end to end before the PR may open (what @guild on Jira starts)
+                                    branch end to end before the PR may open (what !guild on Jira starts)
                    [--why | --no-why]    the Why card is optional: --why puts one on the docket. Rule
                                     changes are confirmed in the weekly digest (/rules/week)
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
@@ -59,7 +59,7 @@ guild check [slug] [--baseline]     run the brief's acceptance checks in the que
 guild check <slug> --reseal        accept a changed Acceptance block (guildmaster only)
 guild vision <repo path>           collect a repo's merged, declined and reverted work (vision skill)
 guild vision status <repo>         is there a sealed vision for this repo
-guild jira on|once|watch|status    start quests from your comments on tickets: @guild starts a guarded
+guild jira on|once|watch|status    start quests from your comments on tickets: !guild starts a guarded
                                     quest at once, @quartermaster asks on the war table first
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
@@ -83,7 +83,7 @@ guild treasury                      what the work cost and what it was worth, as
 guild validate <slug>               the quest's end-to-end checklist (run it before a merge)
 guild reel <slug>                   what a quest did, as a pixel-art reel you can watch or save as a video
 guild video spec|check|build|status <slug>   the plan video: a one-minute explainer for plans that are a story
-guild github once|status             @guild on a PR: a review quest, then guild posts the review (request changes or approve)
+guild github once|status             !guild on a PR: a review quest, then guild posts the review (request changes or approve)
 guild validate ready | wait [--timeout S]   inside a guarded quest: put the checklist before the
                                     guildmaster, then block until it is validated or sent back
 guild files <slug>                  the map room: find any file of the quest, read it with its changes marked, compare with any commit
