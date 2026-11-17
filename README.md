@@ -88,7 +88,7 @@ guild up ~/Workspace
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
 | `guild scope sort <findings.json>` / `report` / `answer <id> no` | Inside a quest, during the trial: sort the review's findings against the agreed plan. In-scope ones get fixed; each expansion becomes a yes/no card for you and is not fixed. See [The trial](#the-trial) |
-| `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
+| `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest. Refused while a question of the quest is neither answered nor snoozed (it lists them). `--force` still closes and logs the questions it left |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
 | `guild pool list\|drop [repo]` | The warm worktree slots quests start from |
 | `guild check [slug] [--baseline]` | Run the brief's acceptance checks in the quest worktree (EDD) |
@@ -112,6 +112,9 @@ guild up ~/Workspace
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
+| `guild ask answer <slug> <id> "<your words>" [--pick OPTION]` | Answer a question from the terminal. Every answer, here or on the docket, is kept as a decision in your words (`decisions.md` beside the quest, and a `decided` event) |
+| `guild ask snooze <slug> <id> --until 7d\|YYYY-MM-DD [--note T]` | Park a question until a date (the docket's Snooze). It comes back under Needs you that day |
+| `guild sweep [slug]` | Where everything stands, in four sections: Needs you (every open question, most urgent first), Underway, Next (snoozed, by date), Landed (last 7 days). With a slug, that one quest |
 | `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
 | `guild new [dir] [name] [--harness H] [--tier T]` | A plain agent session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |
 | `guild campaign` | The campaign board: every quest, session, subagent, ticket and to-do as a kanban (`Ctrl-g k`) |
@@ -140,7 +143,7 @@ guild up ~/Workspace
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
-Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
+Skills: `/campfire` (catch up: needs you, underway, next, landed), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
 ## The war table
 
@@ -172,7 +175,11 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 `guild status done` refuses a backend quest whose wrap-up lacks the section, or leaves a rule candidate unexplained (`--no-impact "<why>"` is the recorded way out). No database and no build are needed: it reads the repo and git.
 
-**The docket.** `guild docket` (or `Ctrl-g g`) is the war table's front page: every open decision from every quest on one parchment ledger, one row each. Pick a ruling (a star marks the adventurer's suggestion), add a note, or hold it until a date, then send them all with one button. A held decision parks its quest and tells the adventurer to stop waiting; on its date `guild wait` raises it again and the quartermaster brings it back to you. Wrap-ups waiting for your grade are rows too. The full list of boards stays at `/boards`.
+**The docket.** `guild docket` (or `Ctrl-g g`) is the war table's front page: every open decision from every quest on one parchment ledger, one row each. Pick a ruling (a star marks the adventurer's suggestion), add a note, or snooze it until a date, then send them all with one button. A snoozed decision parks its quest and tells the adventurer to stop waiting; on its date `guild wait` raises it again and the quartermaster brings it back to you. Wrap-ups waiting for your grade are rows too. The full list of boards stays at `/boards`.
+
+**One status shape.** The docket, the `/campfire` catch-up and every wrap-up page say where things stand in the same four sections, in this order: **Needs you** (only what needs your decision), **Underway**, **Next** (snoozed questions and the day each comes back) and **Landed**. Every section always shows, with a plain sentence when it is empty ("Nothing needs you right now."), and each one is a full snapshot, never only what changed. `guild sweep` prints it in the terminal; on a wrap-up it sits under the At a glance strip and lists every unanswered question of the quest.
+
+**A quest cannot close with an open question.** `guild close` refuses while any question of the quest is neither answered nor snoozed, and prints them. A snooze counts only until its date: then the question is back under Needs you and holds the close again. An open question of a finished quest stays on the docket for the same reason. `--force` still closes (the quartermaster asks you first), and the event log keeps the questions it left. When a merged PR closes its quest on its own, an open question holds that back too.
 
 **From your phone.** `guild remote on` opens a second copy of the war table on your Tailscale address (Tailscale must be running), behind a random key: `guild remote qr` prints the link as a QR code to scan with the phone camera (and `guild remote on` prints it too; a bigger one is at `127.0.0.1:4711/remote/qr`, served on the Mac only). The link opens the quest console and sets a cookie, so the next pages need no key. `guild remote url` prints it as text. `guild remote restart` applies it, `guild remote off` closes it. Guild sends a Mac notification when something waits for you (a decision, a block, a failure, a wrap-up to grade); add `"ntfy": "https://ntfy.sh/<a-private-topic>"` to `~/.guild/local/remote.json` for a phone push too. The push says only which quest waits and links to the docket: never the note, the ticket text or code, because the topic lives on a third-party service. `"mac": false` turns the Mac notifications off; `guild notify test` checks both.
 
@@ -385,7 +392,7 @@ The branch is `SARA-812/fair-pay-values`, the way the repo already names branche
 
 - The sidebar shows each quest, its model and its live cost. `*` wants a decision, `!` is blocked, `?` stopped without reporting.
 - Answer boards the same day. A blocked adventurer costs nothing and moves nothing.
-- `/campfire` tells you what landed, what runs, what waits on you.
+- `/campfire` tells you what needs you, what runs, what comes next and what landed.
 - Review each PR as it arrives. A merged dependency is what unblocks the next wave.
 
 **Closing a wave**

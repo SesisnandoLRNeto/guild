@@ -302,13 +302,16 @@ def load_json_safe(path):
         return None
 
 
-def with_glance(body, quest):
-    """Put the header right after <body>. A page can opt out with <meta name="guild-glance" content="off">."""
+def with_glance(body, quest, board=None):
+    """Put the header right after <body>. A page can opt out with <meta name="guild-glance" content="off">.
+    A wrap-up also gets where the quest stands: Needs you (every unanswered question), Underway, Next, Landed."""
     low = body.lower()
     if b'name="guild-glance" content="off"' in low:
         return body
     try:
         strip = glance(quest).encode()
+        if board and (load_json_safe(os.path.join(board_dir(quest, board), "board.json")) or {}).get("wrapup"):
+            strip += standing_html(quest).encode()
     except Exception:
         return body
     if not strip:
@@ -418,6 +421,7 @@ def answer_board(quest, board, payload):
     if meta.get("wrapup"):
         grade_wrapup(quest, board, meta, decision)
         return
+    log_decision(quest, meta, decision, board_questions(d, meta))
     if meta.get("kind") == "why":             # the guildmaster's own words on why this quest exists
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import why
@@ -456,8 +460,8 @@ def answer_board(quest, board, payload):
                          "`guild status <slug> failed \"stopped at budget\"` if you have not, and end your turn.")
         return
     picked = ", ".join(f"{k}={v}" for k, v in decision["answers"].items()) or "message only"
-    record(quest, "working", f"war table answered ({meta.get('title', board)}): {picked}")
-    if meta.get("held_until"):           # it stopped waiting when you held it: wake it up
+    record_open(quest, "working", f"war table answered ({meta.get('title', board)}): {picked}")
+    if meta.get("held_until") and quest_state(quest) not in FINISHED:   # it stopped waiting when you held it: wake it up
         nudge(quest, f"Your held decision '{meta.get('title', board)}' is answered. Read it with "
                      f"`guild board wait {board}` and carry on.")
 
@@ -473,6 +477,19 @@ def quest_state(quest):
         return open(os.path.join(QUESTS, quest, "status")).read().split("\t")[0].strip()
     except OSError:
         return ""
+
+
+FINISHED = ("done", "failed")
+
+
+def record_open(quest, state, note):
+    """record() for a question's answer, snooze or return. A finished quest stays finished: its
+    leftover questions are settled before it closes, without reopening it. Only the event is logged."""
+    if quest_state(quest) in FINISHED:
+        with open(EVENTS, "a") as f:
+            f.write(f"{now()}\t{quest}\tquestion\t{note}\n")
+        return
+    record(quest, state, note)
 
 
 def board_questions(bdir, meta):
@@ -495,23 +512,26 @@ def drill_due():
 
 def docket_items():
     today = datetime.date.today().isoformat()
-    items, recent = [], []
+    items, recent, quests = [], [], []
     if not os.path.isdir(QUESTS):
-        return {"open": [], "held": [], "recent": []}
+        return {"open": [], "held": [], "recent": [], "blocked": [], "underway": [], "landed": landed_list([])}
     for quest in sorted(os.listdir(QUESTS)):
         qdir = os.path.join(QUESTS, quest)
         bdir = os.path.join(qdir, "boards")
-        if not os.path.isdir(bdir):
-            continue
         qmeta = {}
         try:
             qmeta = json.load(open(os.path.join(qdir, "meta.json")))
         except (OSError, ValueError):
             pass
         try:
-            qstate = open(os.path.join(qdir, "status")).read().split("\t")[0]
+            qstate, qnote = (open(os.path.join(qdir, "status")).read().split("\t") + [""])[:2]
         except OSError:
-            qstate = ""
+            qstate, qnote = "", ""
+        if qmeta and not qmeta.get("pseudo"):
+            quests.append({"quest": quest, "state": qstate, "note": qnote.strip(), "model": qmeta.get("model", ""),
+                           "ticket": qmeta.get("ticket", "")})
+        if not os.path.isdir(bdir):
+            continue
         for board in sorted(os.listdir(bdir)):
             d = os.path.join(bdir, board)
             try:
@@ -529,8 +549,7 @@ def docket_items():
                 answer = json.load(open(dec))
                 recent.append(dict(base, answers=answer.get("answers", {}), message=answer.get("message", ""), at=answer.get("at", "")))
                 continue
-            if qstate in ("done", "failed") and not meta.get("wrapup"):
-                continue                     # the quest moved on: an old unanswered question is not a decision
+            # an unanswered question of a finished quest stays: guild close refuses until it is answered or snoozed
             if meta.get("wrapup") and qstate not in ("done", "failed"):
                 continue                     # the wrap-up waits for the end of the quest
             item = dict(base, questions=board_questions(d, meta), held_until=meta.get("held_until", ""),
@@ -538,11 +557,142 @@ def docket_items():
             items.append(item)
     held = [i for i in items if i["held_until"] and i["held_until"] > today]
     open_ = [i for i in items if i not in held]
-    open_.sort(key=lambda i: (i["wrapup"], i["created"]))          # decisions first, then reviews
+    state_of = {q["quest"]: q["state"] for q in quests}
+    # decisions first, then reviews; within each, the most urgent quest first, then the oldest
+    open_.sort(key=lambda i: (i["wrapup"], URGENT.get(state_of.get(i["quest"], ""), 9), i["created"]))
     held.sort(key=lambda i: i["held_until"])
     recent.sort(key=lambda i: i["at"], reverse=True)
+    waiting = {i["quest"] for i in open_}
     return {"open": open_, "held": held, "recent": recent[:12], "today": today, "drill": drill_due(), "alerts": alert_list(open_),
-            "shepherd": shepherd_note()}
+            "shepherd": shepherd_note(),
+            # the rest of the status shape (Needs you, Underway, Next, Landed): quests, not boards
+            "blocked": [q for q in quests if q["state"] in ("blocked", "failed") and q["quest"] not in waiting],
+            "underway": [q for q in quests if q["state"] not in ("", "done", "failed", "stopped", "blocked")],
+            "landed": landed_list(quests)}
+
+
+# How urgent an open question is, by its quest's state: a stuck quest first, then one that cannot close.
+URGENT = {"blocked": 0, "failed": 1, "done": 2, "needs-decision": 3, "held": 4}
+LANDED_DAYS = 7
+
+
+def landed_list(quests):
+    """Quests that reported done, and quests closed in the last LANDED_DAYS days (from the events log)."""
+    out = [{"quest": q["quest"], "note": q["note"], "when": ""} for q in quests if q["state"] == "done"]
+    cut = (datetime.date.today() - datetime.timedelta(days=LANDED_DAYS)).isoformat()
+    seen = {q["quest"] for q in out}
+    try:
+        lines = open(EVENTS).read().splitlines()
+    except OSError:
+        lines = []
+    for line in reversed(lines):
+        p = line.split("\t")
+        if len(p) >= 3 and p[2] == "closed" and p[0][:10] >= cut and p[1] not in seen:
+            seen.add(p[1])
+            out.append({"quest": p[1], "note": "closed" + (f": {p[3]}" if len(p) > 3 and p[3] else ""), "when": p[0][:10]})
+    return out
+
+
+def open_questions(quest):
+    """The questions of one quest nobody answered, as docket items. "due" is False while one is
+    snoozed (held until a future date). A wrap-up is a report, not a question."""
+    d = docket_items()
+    out = [dict(i, due=True) for i in d["open"] if i["quest"] == quest and not i["wrapup"]]
+    return out + [dict(i, due=False) for i in d["held"] if i["quest"] == quest and not i["wrapup"]]
+
+
+def until_date(arg):
+    """3d, 2w or YYYY-MM-DD, as a date string after today."""
+    m = re.match(r"^(\d+)([dw])$", arg or "")
+    if m:
+        days = int(m.group(1)) * (7 if m.group(2) == "w" else 1)
+        if days < 1:
+            raise SystemExit("guild: a snooze date must be after today")
+        return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+    try:
+        day = datetime.date.fromisoformat(arg or "")
+    except ValueError:
+        raise SystemExit("guild: --until takes 3d, 2w or a date like 2026-12-01")
+    if day <= datetime.date.today():
+        raise SystemExit("guild: a snooze date must be after today")
+    return day.isoformat()
+
+
+STANDING = ("Needs you", "Underway", "Next", "Landed")
+
+
+def standing(quest=None):
+    """One status shape for the campfire, the docket and the wrap-up: four sections, always in this
+    order, each with an empty sentence. A full snapshot every time, never what changed since the last.
+    Returns [(title, [lines], empty sentence)]. Only a human decision goes under Needs you."""
+    d = docket_items()
+    if quest:
+        qs = open_questions(quest)
+        needs = [f"{i['title']} (#{i['board']}, waiting since {i['created'][:10] or '?'})" for i in qs if i["due"]]
+        if not os.path.exists(os.path.join(QUESTS, quest, "grade.json")):
+            needs.append("Grade this report and pick a verdict.")
+        under = [f"{q['quest']}: {q['state']}" + (f", {q['note']}" if q["note"] else "") for q in d["underway"]
+                 if q["quest"].startswith(quest + "-")]          # its helpers
+        nxt = [f"{i['title']} (#{i['board']}): snoozed, back on {i['held_until']}" for i in qs if not i["due"]]
+        try:
+            landed = [l[2:].strip() for l in open(os.path.join(QUESTS, quest, "decisions.md")).read().splitlines()
+                      if l.startswith("- ")]
+        except OSError:
+            landed = []
+        trial = load_json_safe(os.path.join(QUESTS, quest, "trial.json")) or {}
+        if trial.get("result"):
+            landed.append(f"Trial {trial['result']} on {trial.get('sha', '')[:8]}" + (f": {trial['note']}" if trial.get("note") else ""))
+        return list(zip(STANDING, (needs, under, nxt, landed),
+                        ("Nothing needs you right now.", "Nothing else is running for this quest.",
+                         "Nothing is snoozed.", "No decision or trial recorded yet.")))
+    needs = [f"{i['quest']} #{i['board']}: {i['title']}" + (" (grade the wrap-up)" if i["wrapup"] else "")
+             + (f" (snoozed until {i['held_until']}, due now)" if i["held_until"] else "") for i in d["open"]]
+    needs += [f"{q['quest']}: {q['state']}" + (f", {q['note']}" if q["note"] else "") for q in d["blocked"]]
+    under = [q["quest"] + (f" ({q['model']})" if q["model"] else "") + f": {q['state']}" + (f", {q['note']}" if q["note"] else "")
+             for q in d["underway"]]
+    nxt = [f"{i['quest']} #{i['board']}: {i['title']}, back on {i['held_until']}" for i in d["held"]]
+    landed = [f"{q['quest']}: {q['note'] or 'done'}" + (f" ({q['when']})" if q["when"] else "") for q in d["landed"]]
+    return list(zip(STANDING, (needs, under, nxt, landed),
+                    ("Nothing needs you right now.", "Nothing is being worked on.", "Nothing is snoozed or queued.",
+                     f"Nothing landed in the last {LANDED_DAYS} days.")))
+
+
+def standing_text(quest=None):
+    out = []
+    for title, rows, empty in standing(quest):
+        out.append(title)
+        out += [f"  {n}. {r}" if title == "Needs you" else f"  - {r}" for n, r in enumerate(rows, 1)] or [f"  {empty}"]
+        out.append("")
+    return "\n".join(out)
+
+
+def standing_html(quest):
+    """The four sections as a block under the At a glance strip of a wrap-up page."""
+    parts = []
+    for title, rows, empty in standing(quest):
+        lis = "".join(f"<li>{_html.escape(r)}</li>" for r in rows) or f'<li class="gs-empty">{_html.escape(empty)}</li>'
+        parts.append(f"<div><h3>{title}</h3><ul>{lis}</ul></div>")
+    return ('<style>.gs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px;margin:0 0 28px;'
+            'padding:14px 22px;border:1px solid #4a3f52;background:#17121c;color:#e9dcc0;font-size:14px}'
+            '.gs h3{margin:0 0 4px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#d9a441}'
+            '.gs ul{margin:0;padding-left:18px}.gs .gs-empty{list-style:none;margin-left:-18px;color:#a8987a;font-style:italic}</style>'
+            '<section class="gs rm-frame" aria-label="Where it stands">' + "".join(parts) + "</section>")
+
+
+def log_decision(quest, meta, decision, questions):
+    """Every answer is a decision in the guildmaster's own words: one line in decisions.md beside
+    the quest (it moves to the archive with it) and one event."""
+    labels = {(q.get("id"), o.get("id")): o.get("label", "") for q in questions for o in q.get("options") or []}
+    picked = ", ".join(labels.get((k, v)) or str(v) for k, v in decision.get("answers", {}).items()
+                       if not isinstance(v, (dict, list)))
+    words = " ".join((decision.get("message") or "").split())
+    line = f"{meta.get('title', '')}: " + (picked or "no option picked") + (f'. In your words: "{words}"' if words else "")
+    qdir = os.path.join(QUESTS, quest)
+    if os.path.isdir(qdir):
+        with open(os.path.join(qdir, "decisions.md"), "a") as f:
+            f.write(f"- {decision.get('at', now())[:16].replace('T', ' ')} {line}\n")
+    with open(EVENTS, "a") as f:
+        f.write(f"{now()}\t{quest}\tdecided\t{line[:200]}\n")
 
 
 def shepherd_note():
@@ -586,12 +736,13 @@ def hold_board(quest, board, until, note=""):
     json.dump(meta, open(path, "w"), indent=2)
     title = meta.get("title", board)
     if until:
-        record(quest, "held", f"held until {until}: {title}" + (f" ({note})" if note else ""))
-        nudge(quest, f"The guildmaster held the decision '{title}' until {until}"
-                     + (f": {note}" if note else "") + ". Stop waiting on that board, park this part of the work, "
-                     "and end your turn. You will be told when it is answered.")
+        record_open(quest, "held", f"held until {until}: {title}" + (f" ({note})" if note else ""))
+        if quest_state(quest) not in FINISHED:
+            nudge(quest, f"The guildmaster held the decision '{title}' until {until}"
+                  + (f": {note}" if note else "") + ". Stop waiting on that board, park this part of the work, "
+                  "and end your turn. You will be told when it is answered.")
     else:
-        record(quest, "needs-decision", f"back on the docket: {title}")
+        record_open(quest, "needs-decision", f"back on the docket: {title}")
 
 
 def due_boards():
@@ -606,7 +757,7 @@ def due_boards():
             continue
         meta["held_announced"] = today
         json.dump(meta, open(path, "w"), indent=2)
-        record(item["quest"], "needs-decision", f"held decision is due again: {item['title']}")
+        record_open(item["quest"], "needs-decision", f"held decision is due again: {item['title']}")
 
 
 def fleet():
@@ -857,7 +1008,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if target.endswith(".html"):
                 body = themed(body)
                 if rest == "content.html":
-                    body = with_glance(body, quest)
+                    body = with_glance(body, quest, board)
             return self.send(200, body, ctype)
         except Exception as e:  # never take the server down for one bad request
             return self.send(500, f"error: {e}")
@@ -1855,6 +2006,46 @@ def main():
         return
     if cmd == "sweep":
         sweep()
+        return
+    if cmd == "standing":               # guild sweep: the four sections, every open question first
+        print(standing_text(rest[0] if rest else None), end="")
+        return
+    if cmd == "questions":              # guild close: exit 1 while a question is neither answered nor snoozed
+        due = [i for i in open_questions(rest[0]) if i["due"]]
+        for i in due:
+            print(f"  #{i['board']}  {i['title']}")
+        raise SystemExit(1 if due else 0)
+    if cmd == "snooze":                 # guild ask snooze <slug> <id> --until 7d|YYYY-MM-DD [--note T]
+        quest, board = rest[0], rest[1]
+        flags = dict(zip(rest[2::2], rest[3::2]))
+        until = until_date(flags.get("--until", ""))
+        if not os.path.exists(os.path.join(board_dir(quest, board), "board.json")):
+            raise SystemExit(f"guild: no board {board} in quest {quest}")
+        if os.path.exists(os.path.join(board_dir(quest, board), "decision.json")):
+            raise SystemExit(f"guild: board {board} is already answered")
+        hold_board(quest, board, until, flags.get("--note", ""))
+        print(f"snoozed until {until}: it comes back on the docket that day")
+        return
+    if cmd == "answer":                 # guild ask answer <slug> <id> "<your words>" [--pick OPTION]
+        quest, board, words = rest[0], rest[1], rest[2] if len(rest) > 2 else ""
+        flags = dict(zip(rest[3::2], rest[4::2]))
+        d = board_dir(quest, board)
+        if not os.path.exists(os.path.join(d, "board.json")):
+            raise SystemExit(f"guild: no board {board} in quest {quest}")
+        if os.path.exists(os.path.join(d, "decision.json")):
+            raise SystemExit(f"guild: board {board} is already answered")
+        qs = board_questions(d, json.load(open(os.path.join(d, "board.json"))))
+        answers = {}
+        if flags.get("--pick"):
+            if not qs:
+                raise SystemExit("guild: this board has no options; give your answer as words only")
+            answers[qs[0]["id"]] = flags["--pick"]
+        elif len(qs) == 1 and qs[0].get("type") == "text":
+            answers[qs[0]["id"]] = words
+        if not words.strip() and not answers:
+            raise SystemExit("guild: an answer needs your words or --pick")
+        answer_board(quest, board, {"answers": answers, "message": words})
+        print(f"answered and recorded as a decision in {quest}/decisions.md")
         return
     if cmd == "daemon":
         serve()
