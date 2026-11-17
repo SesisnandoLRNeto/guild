@@ -6,7 +6,7 @@ You are the **guildmaster**. You talk to one agent, the **quartermaster**. It tu
 
 Inspired by the "one orchestrator, many workers" idea from Kun Chen's [firstmate](https://github.com/kunchenguid/firstmate). This is a separate take, written from scratch for one person's workflow.
 
-> **Status: a personal tool, shared in the open.** It is built for one person's daily work on macOS (the core also runs on Linux, where CI runs the tests). It is not a product, and nothing here is supported or stable. There is no license yet, so reuse is not granted by default: open an issue if you want to use part of it. The RPG names (guildmaster, quest, war table) are a skin; [How it works](#how-it-works) maps each one to a plain engineering term.
+> **Status: a personal tool, shared in the open.** It is built for one person's daily work on macOS (the core also runs on Linux, where CI runs the tests). It is not a product, and nothing here is supported or stable. It is MIT licensed (see [LICENSE](LICENSE)): use it, fork it, take the parts you like. The RPG names (guildmaster, quest, war table) are a skin; [How it works](#how-it-works) maps each one to a plain engineering term.
 
 ## What it does
 
@@ -555,6 +555,14 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 ## Folder trust
 
 Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspace/.guild-worktrees/` (change with `GUILD_WORKTREES`), and `guild quest` marks a new worktree as trusted in `~/.claude.json` only when its main repo, or a parent folder, is already trusted.
+
+## Just want one piece?
+
+Guild needs tmux, a local server and some setup. If you only want one habit inside your own agent, the core ideas also ship as single-file skills (one Python script plus instructions, no server) on Agensi, as **The Guild** line: The Quartermaster (quests, decisions and wrap-ups), The Oathkeeper (sealed acceptance checks), The Tracker (root-cause proof), The Archivist (memory hygiene), The Lorekeeper (a repo's vision from its history) and The Inspector (QA validation pages). See [agensi.io/creators/sesisnando-neto](https://www.agensi.io/creators/sesisnando-neto).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ## Contributing
 
