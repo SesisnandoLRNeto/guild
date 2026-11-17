@@ -33,6 +33,10 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                                     no questions, no boards, no wrap-up; build it and open the PR
                    [--guarded ["<why>"]]  no plan; build, trial, then the guildmaster validates the
                                     branch end to end before the PR may open (what @guild on Jira starts)
+                   [--bug]               a bug quest: a failing repro first (guild repro), the diagnosis on the
+                                    plan board before the fix, and the trial checks it failed before and passes now
+                   [--scout]             a scout (ranger): an investigation in its own worktree that ends in
+                                    findings.md with evidence and a recommendation; never a trial or a PR
                    [--why | --no-why]    the Why card is optional: --why puts one on the docket. Rule
                                     changes are confirmed in the weekly digest (/rules/week)
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
@@ -41,6 +45,12 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                                     create a worktree + branch quest/<slug> and launch an adventurer
                                     (brief is read from stdin when --brief is not given)
 guild roster                        list quests and their state
+guild promote <scout> [<new-slug>] [--brief FILE] [quest options]
+                                    start a normal quest from a clean base with the scout's findings in its
+                                    brief; the scout's code stays behind on its branch
+guild repro new --cmd "<cmd>" [--with PATH] | facts | compare | bisect | theory | verify | report | cleanup
+                                    inside a bug quest: prove the bug with a command that fails today, compare
+                                    paths, bisect, test theories, then verify the fix (guild repro -h for flags)
 guild status <slug> <state> [note] [--no-wrapup] [--no-scenarios]
                                     set state: working|blocked|needs-decision|done|failed|stopped|planned
                                     (a code quest needs a wrap-up board before done; --no-wrapup opts out)
@@ -62,6 +72,9 @@ guild vision status <repo>         is there a sealed vision for this repo
 guild jira on|once|watch|status    start quests from your comments on tickets: @guild starts a guarded
                                     quest at once, @quartermaster asks on the war table first
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
+guild scope sort <findings.json>    inside a quest: sort review findings against the agreed plan; in scope
+                                    gets fixed, each expansion becomes a yes/no card for the guildmaster
+guild scope report | answer <id> no the counts for trial.md, or turn a waiting expansion into a follow-up
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
                                     (--wrapup marks it as the quest's end-of-work report)
@@ -70,6 +83,10 @@ guild board wait <id> [--timeout S]  block until the guildmaster answers that bo
 guild board list | guild board url   boards and their state, or the war table address
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id] [--image "path=caption"]...
                                     put the question on the war table as a page and open it (inside a quest)
+guild ask answer <slug> <id> "<your words>" [--pick OPTION]   answer a question; kept as a decision in your words
+guild ask snooze <slug> <id> --until 7d|YYYY-MM-DD [--note T]  park a question; it comes back on the docket that day
+guild sweep [slug]                  where everything (or one quest) stands: Needs you (every open question, most urgent first),
+                                    Underway, Next, Landed
 guild pool list|drop [repo]          the warm worktree pool quests are started from
 guild new [dir] [name] [--harness H] [--model M | --tier T] [--resume SESSION]
                                     a plain agent session in a new cockpit tab (Ctrl-g n, or click + claude)
@@ -99,6 +116,12 @@ guild reap [--dry-run]              stop what finished quests left running: wind
 guild tidy [--dry-run]              move old events to monthly files, delete the dead pages and pictures of
                                     closed quests (runs monthly on its own, and at every guild close)
 guild lore                          the bestiary: which class each model is, what each state looks like
+guild lore check                    lessons and vision lines past their date (file:line), duplicates, and
+                                    the tokens a quest loads per repo (weekly; guild tidy prints a summary)
+guild lore refresh <file:line> "<evidence>"   re-date a stale line; refused without what you checked
+guild lore archive <file:line> "<reason>"     move a line to <name>.archive.md (a pinned one asks you first)
+guild lore mark <file:line> pinned|aging|perishable [--check "<what>"]   set a line's tier
+guild lore read [repo]              lessons.md and the repo's vision as quests read them (stale lines flagged)
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|qr|restart   the war table on your Tailscale address, behind a key (qr: scan it)
@@ -134,6 +157,7 @@ guild calm on|off|status            draw a party walking through a forest instea
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
 guild edit [slug|path]              your editor with the file tree: a quest, a folder, or your work root
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
+                                    (refused while a question is neither answered nor snoozed; --force is logged)
 EOF
 }
 
@@ -778,7 +802,7 @@ cmd_quest() {
   [ -n "$slug" ] || die "quest needs a slug"
   [[ "$slug" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "slug must be lowercase letters, digits and dashes"
   local repo="" base="" harness="claude" model="" tier="" plan="" brief="" ticket="" fresh="" branch="" effort="" budget="" parent=""
-  local machine="" headless="" noaccept="" noplan="" quick="" dagger="" guarded="" all_args=("$@")
+  local machine="" headless="" noaccept="" noplan="" quick="" dagger="" guarded="" kind="" from_scout="" all_args=("$@")
   while [ $# -gt 0 ]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
@@ -797,6 +821,9 @@ cmd_quest() {
       --guarded)
         if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then guarded="$2"; shift 2
         else guarded="the guildmaster validates it before the PR"; shift; fi ;;
+      --bug) [ -z "$kind" ] || die "--bug and --scout are two kinds of quest; pick one"; kind=bug; shift ;;
+      --scout) [ -z "$kind" ] || die "--bug and --scout are two kinds of quest; pick one"; kind=scout; shift ;;
+      --from-scout) from_scout="$2"; shift 2 ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
       --parent) parent="$2"; shift 2 ;;
@@ -853,6 +880,19 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   # --epic-dagger is --quick and then some: the adventurer never turns to the guildmaster. No
   # question, no board, no wrap-up; it decides alone, writes the choices in the PR body, opens
   # the PR and reports done. The guildmaster meets the work as a PR, nowhere else.
+  # --bug: a failing repro before any fix. The plan phase is where the diagnosis goes before the
+  # guildmaster, so a bug quest always plans first and none of the skip flags apply.
+  # --scout: an investigation in its own worktree that ends in findings, never a PR. Nothing to
+  # plan or accept; `guild promote` later starts the real quest from a clean base.
+  if [ "$kind" = bug ]; then
+    [ -z "$quick$dagger$guarded$noplan$parent" ] || die "--bug shows its diagnosis on the plan board before the fix, so it does not mix with --quick, --epic-dagger, --guarded, --no-plan or a helper"
+    plan=1
+  elif [ "$kind" = scout ]; then
+    [ -z "$quick$dagger$guarded$parent$plan" ] || die "--scout ends in findings, not code: it does not mix with --quick, --epic-dagger, --guarded, --plan or a helper"
+    noplan="scout: an investigation, nothing to build"
+    [ -n "$noaccept" ] || noaccept="scout: ends in findings, not code"
+    export GUILD_NO_WHY=1
+  fi
   if [ -n "$dagger" ]; then
     [ -n "$quick" ] || quick="$dagger"
   fi
@@ -877,7 +917,7 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   # validate: the PR it serves already holds all of that. It gets no plan, no contract and no
   # checklist; the trial stays, so the result is still reviewed and tested. --plan keeps the plan.
   local light=""
-  if [ -z "$plan" ] && [ -z "$guarded" ] && [ -z "$quick" ] && [ -z "$parent" ] && [ -z "${GUILD_WHY:-}" ] \
+  if [ -z "$plan" ] && [ -z "$kind" ] && [ -z "$guarded" ] && [ -z "$quick" ] && [ -z "$parent" ] && [ -z "${GUILD_WHY:-}" ] \
      && ! light=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$brief_tmp" 2>/dev/null); then
     light="housekeeping: ${light#why card: skipped, }"
     [ -n "$noplan" ] || noplan="$light"
@@ -926,7 +966,8 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   # Teams name branches after the ticket. Follow that when there is one, so a quest's
   # branch, PR and ticket line up without anyone renaming anything.
   if [ -z "$branch" ]; then
-    if [ -n "$ticket" ]; then branch="$ticket/$slug"; else branch="quest/$slug"; fi
+    if [ "$kind" = scout ]; then branch="scout/$slug"
+    elif [ -n "$ticket" ]; then branch="$ticket/$slug"; else branch="quest/$slug"; fi
   fi
 
   local wt=""
@@ -963,6 +1004,7 @@ json.dump({"slug": "$slug", "repo": "$repo", "worktree": "$wt", "branch": "$bran
            "phase": "${plan:+plan}", "build_model": "$build_model", "build_effort": "$build_effort",
            "effort": "$effort", "budget": float("${budget:-0}") or "", "parent": "$parent", "no_acceptance": """$noaccept""",
            "no_plan": """$noplan""", "quick": """$quick""", "dagger": """$dagger""", "guarded": """$guarded""", "light": """$light""",
+           "kind": "$kind", "from_scout": "$from_scout",
            "qm": "${GUILD_QM:-qm}",
            "identity": "$email", "gh_user": "$ghu", "ticket": "$ticket",
            "pooled": "${fresh:+no}${fresh:-yes}", "created": "$(now)"}, open("$q/meta.json", "w"), indent=2)
@@ -975,11 +1017,13 @@ PY
     -e "s#{{BRANCH}}#$branch#g" -e "s#{{TICKET}}#${ticket:-none}#g" \
     "$GUILD_REPO/prompts/adventurer.md" > "$q/prompt.md"
   if [ -f "$vision_file" ]; then
+    # the quest reads a copy: archived lines are gone, markers out, stale lines flagged
+    GUILD_HOME="$GUILD_HOME" python3 "$GUILD_REPO/bin/decay.py" render "$vision_file" > "$q/vision.md" 2>/dev/null || cp "$vision_file" "$q/vision.md"
     cat >> "$q/prompt.md" <<VISION
 
 ## This repo's vision
 
-The guildmaster wrote down what this repo accepts and what it resists: \`$vision_file\`. Read it before you start.
+The guildmaster wrote down what this repo accepts and what it resists: \`$q/vision.md\`. Read it before you start. A line marked stale is still the guildmaster's word, but check it before you rely on it.
 When your change goes against it, or it does not say, stop and put the question on the war table. The vision is the guildmaster's, not yours to reinterpret.
 VISION
   fi
@@ -1040,6 +1084,38 @@ The guildmaster asked for speed on this one: "$quick". The gates are off.
 QUICK
   fi
 
+  if [ "$kind" = bug ]; then cat >> "$q/prompt.md" <<BUG
+
+## This is a bug quest: a failing repro first
+
+Before you change any code, prove the bug with a command (\`guild repro\`, state in \`$q/repro.json\`):
+1. \`guild repro new --cmd "<command>"\`: a command that exits non-zero today, for the reason in the report. Guild refuses one that passes. A new test file goes in with \`--with <path>\`, so older commits can run it too.
+2. \`guild repro facts --trigger "..." --condition "..." --symptom "..."\`: what sets it off, why it happens only sometimes, what the user sees.
+3. \`guild repro compare --ref <older commit>\` or \`--cmd "<the same with another input>"\`: a failing path against a working one, then \`guild repro facts --difference "..."\`. Older commits run in a temporary worktree, removed after each run.
+4. Optional: \`guild repro bisect --good <ref>\` names the first commit where the repro fails.
+5. \`guild repro theory "<theory>" --check "<cmd>" --expect pass|fail\`: each theory with a command that could prove it wrong. Keep the disproved ones in the record.
+6. \`guild plan ready\` puts the diagnosis (\`guild repro report\`) above your plan. It refuses until steps 1, 2, 3 and 5 are recorded. Approving the plan is the guildmaster's yes to the fix.
+7. After the fix: commit, then \`guild repro verify\`. The trial refuses until the repro failed before and passes on HEAD. \`guild pr-body\` carries the diagnosis block; put \`guild repro report\` on the wrap-up page too.
+BUG
+  elif [ "$kind" = scout ]; then cat >> "$q/prompt.md" <<SCOUT
+
+## This is a scout quest: findings, never a PR
+
+You are the ranger: you investigate and report. Your worktree and branch \`$branch\` are scratch space. Try things, add logs, write throwaway tests; none of it is merged.
+- No plan phase, no acceptance contract, no trial, no PR. Guild refuses \`guild trial\` and \`gh pr create\` on a scout.
+- Write \`$q/findings.md\` with \`## Findings\` (each one with its evidence: a command and its output, a \`file:line\`, a log line) and \`## Recommendation\` (what to do, and what not to). Add an \`Acceptance:\` block at the end, in the brief format (\`- check: <command>\` lines), when you can say how a fix would be proven.
+- A question only the guildmaster can answer still goes on the war table (\`guild ask\`).
+- Finish with \`guild status $slug done "<one line: the answer>"\`. Guild refuses done until findings.md has both sections. The guildmaster may then run \`guild promote $slug\`, which starts a normal quest from a clean base with your findings in its brief. Your code stays behind.
+SCOUT
+  fi
+  if [ -n "$from_scout" ]; then cat >> "$q/prompt.md" <<PROMOTED
+
+## Promoted from scout \`$from_scout\`
+
+The brief carries that scout's findings and recommendation. Its code was left behind on purpose: you start from a clean base. Port only the intended change, never the scout's scratch code. Check each finding still holds before you build on it.
+PROMOTED
+  fi
+
   [ -n "$plan" ] && cat >> "$q/prompt.md" <<PLAN
 
 ## You start in the plan phase
@@ -1097,6 +1173,81 @@ PLAN
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
+# A scout's findings start a normal quest from a clean base. The scout's code stays behind on its
+# branch: it was scratch work, and the new quest ports only the intended change.
+cmd_promote() { # scout [new-slug] [--brief FILE] [quest options]
+  local scout="${1:-}"; shift || true
+  [ -n "$scout" ] || die "usage: guild promote <scout> [<new-slug>] [--brief FILE] [quest options]"
+  need_quest "$scout"
+  [ "$(quest_kind "$scout")" = scout ] || die "$scout is not a scout; only a scout's findings can be promoted"
+  local slug="$scout-fix"
+  if [ -n "${1:-}" ] && [ "${1#--}" = "$1" ]; then slug="$1"; shift; fi
+  local gaps; gaps=$(scout_findings_missing "$scout")
+  [ -z "$gaps" ] || die "the scout has no findings to carry yet:
+$(printf '%s\n' "$gaps" | sed 's/^/     - /')"
+  local own="" rest=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --brief) own="$2"; [ -f "$own" ] || die "--brief: no file $own"; shift 2 ;;
+      --repo|--base|--branch|--from-scout|--scout|--parent) die "promote takes the repo and the base from the scout; $1 is not allowed here" ;;
+      *) rest+=("$1"); shift ;;
+    esac
+  done
+  local m repo base ticket sbranch
+  m="$(qdir "$scout")/meta.json"
+  repo=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['repo'])" "$m")
+  base=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('base',''))" "$m")
+  ticket=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('ticket',''))" "$m")
+  sbranch=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('branch',''))" "$m")
+  local brief="$GUILD_HOME/.promote-$slug-$$"
+  trap "rm -f '$brief'" EXIT
+  python3 - "$(qdir "$scout")/findings.md" "$scout" "$sbranch" "$own" "$brief" <<'PY'
+import re, sys
+findings, scout, branch, own, out = sys.argv[1:6]
+lines = open(findings).read().splitlines()
+acc = []
+start = next((i for i, l in enumerate(lines) if re.match(r"^Acceptance\s*:", l, re.I)), None)
+if start is not None:
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    acc, lines = lines[start:end], lines[:start] + lines[end:]
+sections, key = {}, None
+for l in lines:
+    m = re.match(r"^##\s+(.*)", l)
+    if m:
+        key = m.group(1).strip().lower()
+        sections[key] = []
+    elif key:
+        sections[key].append(l)
+pick = lambda name: "\n".join(next((v for k, v in sections.items() if k.startswith(name)), [])).strip()
+block = [f"## From scout `{scout}`",
+         f"An investigation found this, with evidence. Its code was left behind on branch `{branch}`: "
+         "start clean and port only the intended change.", "",
+         "### Findings", pick("findings"), "", "### Recommendation", pick("recommendation"), ""]
+if own:
+    text = "\n".join(block) + "\n" + open(own).read()
+else:
+    text = (f"Intent: act on the findings of scout `{scout}`: build what its recommendation says.\n\n"
+            + "\n".join(block) + "\n" + "\n".join(acc) + "\n")
+open(out, "w").write(text)
+PY
+  if [ -z "$own" ] && [ "$(python3 "$GUILD_REPO/bin/checks.py" count "$brief")" = 0 ] \
+     && ! printf '%s\n' ${rest[@]+"${rest[@]}"} | grep -qxE -- '--no-acceptance|--quick|--epic-dagger'; then
+    die "the scout's findings have no Acceptance: block, so the new quest has no contract. Add one at the end of
+     $(qdir "$scout")/findings.md (- check: <command> lines), or pass --brief FILE with your own brief"
+  fi
+  [ -n "$base" ] && git -C "$repo" fetch -q origin 2>/dev/null || true
+  cmd_quest "$slug" --repo "$repo" ${base:+--base "$base"} ${ticket:+--ticket "$ticket"} --from-scout "$scout" \
+    --brief "$brief" ${rest[@]+"${rest[@]}"}
+  cp "$(qdir "$scout")/findings.md" "$(qdir "$slug")/scout-findings.md"
+  python3 - "$m" "$slug" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1])); m["promoted_to"] = sys.argv[2]
+json.dump(m, open(sys.argv[1], "w"), indent=2)
+PY
+  event "$scout" promoted "findings carried to quest $slug; the scout's code stays on $sbranch"
+  echo "promoted scout $scout to quest $slug (clean base ${base:-default}; findings in its brief)"
+}
+
 cmd_roster() {
   if [ "${1:-}" = "--count" ]; then
     python3 "$GUILD_REPO/bin/watch.py" --count
@@ -1128,6 +1279,17 @@ quest_light() { # slug: why a housekeeping quest has no plan, contract or checkl
 }
 quest_dagger() { # slug: the reason a quest was started with --epic-dagger, or empty
   python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('dagger',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+quest_kind() { # slug: bug, scout, or empty for a normal quest
+  python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('kind',''))" "$(qdir "$1")/meta.json" 2>/dev/null || true
+}
+# A scout's findings.md, with both sections a promote carries. Prints what is missing, or nothing.
+scout_findings_missing() { # slug
+  local f; f="$(qdir "$1")/findings.md"
+  [ -s "$f" ] || { echo "$f does not exist"; return 0; }
+  grep -qiE '^##[[:space:]]+findings' "$f" || echo "a '## Findings' section (each finding with its evidence)"
+  grep -qiE '^##[[:space:]]+recommendation' "$f" || echo "a '## Recommendation' section"
+  return 0
 }
 # An epic dagger never turns to the guildmaster: every way of asking is refused inside one.
 dagger_guard() { # [slug]
@@ -1198,6 +1360,16 @@ cmd_status() {
     [ "$state" = needs-decision ] && dagger_guard "$slug"
   fi
   case "$state" in working|blocked|needs-decision|done|failed|stopped|planned) ;; *) die "bad state $state" ;; esac
+  # A scout ends in findings with evidence, never a PR or a wrap-up of code.
+  if [ "$(quest_kind "$slug")" = scout ]; then
+    export GUILD_NO_WRAPUP=1 GUILD_NO_SCENARIOS=1
+    if [ "$state" = done ]; then
+      local gaps; gaps=$(scout_findings_missing "$slug")
+      [ -z "$gaps" ] || die "a scout ends in findings, and they are not ready:
+$(printf '%s\n' "$gaps" | sed 's/^/     - /')
+     Write $(qdir "$slug")/findings.md with '## Findings' (each with its evidence) and '## Recommendation', then report done again."
+    fi
+  fi
   [ "$state" = planned ] && { handoff "$slug" "$note"; return; }
   # Every decision reaches the guildmaster as a page on the war table, never as a line of
   # terminal text. Without a board, guild builds one from the question itself.
@@ -1280,6 +1452,7 @@ cut = text.find("## You start in the plan phase")
 if cut >= 0:
     open(p, "w").write(text[:cut] + "## The plan phase is over\n\nThe guildmaster approved `plan.md`. Build it now, on the build model, then finish the quest as usual.\n")
 PY2
+  [ "$(quest_kind "$1")" = bug ] && python3 "$GUILD_REPO/bin/rootcause.py" _approve "$1" "plan approved on the war table${2:+: $2}"
   printf 'working\t%s\t%s\n' "plan approved, building on $build" "$(now)" > "$q/status"
   event "$1" planned "${2:-plan approved} -> building on $build"
   local pane; pane=$(content_pane "$SESSION:$1")
@@ -1455,6 +1628,13 @@ ensure_pseudo_quest() { # slug what
 }
 
 cmd_ask() {
+  # the guildmaster's side of a question: answer it (a decision in their words) or snooze it to a date
+  case "${1:-}" in
+    answer|snooze)
+      [ $# -ge 3 ] || die "usage: guild ask answer <slug> <id> \"<your words>\" [--pick OPTION] | guild ask snooze <slug> <id> --until 7d|YYYY-MM-DD [--note T]"
+      need_quest "$2"
+      exec python3 "$GUILD_REPO/bin/wartable.py" "$@" ;;
+  esac
   local slug; slug=$(current_quest)
   if [ -z "$slug" ]; then
     slug="quartermaster"            # the quartermaster asks too
@@ -1592,11 +1772,18 @@ cmd_trial() {
     skip) [ -n "$note" ] || die "skip needs a reason, e.g. guild trial skip \"spec only, no code\"" ;;
     *) die "usage: guild trial pass [note] | skip <reason>" ;;
   esac
+  local kind; kind=$(quest_kind "$slug")
+  [ "$kind" = scout ] && die "trial refused: $slug is a scout. A scout ends in findings, never a PR. To build the fix: guild promote $slug"
   sha=$(git rev-parse HEAD)
   [ -n "$quick" ] && [ -z "$nobehaviour" ] && nobehaviour="quick quest: $quick"
   if [ "$result" = pass ]; then
     local why
     why=$(python3 "$GUILD_REPO/bin/checks.py" status "$(qdir "$slug")" "$sha") || die "trial refused: $why"
+    why=$(python3 "$GUILD_REPO/bin/scope.py" status "$(qdir "$slug")") || die "trial refused: $why"
+    # A bug quest: the repro failed before the fix and passes on this commit.
+    if [ "$kind" = bug ]; then
+      why=$(python3 "$GUILD_REPO/bin/rootcause.py" gate "$slug" "$sha") || die "trial refused: $why"
+    fi
     if [ -z "$nobehaviour" ]; then
       why=$(python3 "$GUILD_REPO/bin/behaviour.py" status "$slug" "$sha") || die "trial refused: $why
      Nothing a validator can run (docs, config)? guild trial pass --no-behaviour \"<why>\""
@@ -1608,6 +1795,23 @@ cmd_trial() {
     "$sha" "$result" "$note" "$(now)" "$(qdir "$slug")/trial.json"
   event "$slug" "trial-$result" "${note:-$sha}"
   echo "trial $result recorded for $sha"
+}
+
+# The trial's scope check: review findings sorted against the agreed plan (bin/scope.py).
+cmd_scope() {
+  local slug; slug=$(current_quest)
+  [ -n "$slug" ] || die "guild scope runs inside a quest (GUILD_QUEST not set)"
+  need_quest "$slug"
+  local sub="${1:-report}"; shift || true
+  case "$sub" in
+    sort) [ -f "${1:-}" ] || die "usage: guild scope sort <findings.json>  (the trial skill shows the format)"
+          python3 "$GUILD_REPO/bin/scope.py" sort "$(qdir "$slug")" "$1" ;;
+    answer) [ $# -ge 2 ] || die "usage: guild scope answer <id> yes|no"
+          python3 "$GUILD_REPO/bin/scope.py" answer "$(qdir "$slug")" "$1" "$2"
+          event "$slug" scope "$1: $2" ;;
+    report|status) python3 "$GUILD_REPO/bin/scope.py" "$sub" "$(qdir "$slug")" ;;
+    *) die "usage: guild scope sort <findings.json> | report | status | answer <id> yes|no" ;;
+  esac
 }
 
 # War table. Inside a quest the slug is implicit, so `guild board open --html page.html` is enough.
@@ -1648,6 +1852,15 @@ cmd_board() {
 cmd_close() {
   local slug="$1" force="${2:-}"
   need_quest "$slug"
+  # A quest cannot close while a question of it is neither answered nor snoozed. --force (the
+  # guildmaster's word, asked for first) still closes, and the questions it left are logged.
+  local open_q
+  if ! open_q=$(python3 "$GUILD_REPO/bin/wartable.py" questions "$slug"); then
+    [ "$force" = "--force" ] || die "$slug still has open questions:
+$open_q
+     answer each one (docket, or guild ask answer $slug <id> \"<words>\"), or snooze it (guild ask snooze $slug <id> --until 7d)"
+    event "$slug" close-forced "closed with open questions: $(echo "$open_q" | sed 's/^ *//' | paste -sd ';' -)"
+  fi
   # a quest on another machine closes there first (its worktree lives there)
   if python3 -c "import json,sys;sys.exit(0 if json.load(open('$(qdir "$slug")/meta.json')).get('machine') else 1)"; then
     python3 "$GUILD_REPO/bin/machines.py" sync 2>/dev/null
@@ -1698,11 +1911,14 @@ case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   quest) shift; cmd_quest "$@" ;;
   roster) shift; cmd_roster "$@" ;;
+  repro) shift; python3 "$GUILD_REPO/bin/rootcause.py" "$@" ;;
+  promote) shift; cmd_promote "$@" ;;
   status) shift; [ $# -ge 2 ] || die "usage: guild status <slug> <state> [note]"; cmd_status "$@" ;;
   wait) shift; cmd_wait "$@" ;;
   peek) shift; [ $# -ge 1 ] || die "usage: guild peek <slug> [lines]"; cmd_peek "$@" ;;
   send) shift; [ $# -ge 2 ] || die "usage: guild send <slug> <message>"; cmd_send "$@" ;;
   trial) shift; cmd_trial "$@" ;;
+  scope) shift; cmd_scope "$@" ;;
   board) shift; cmd_board "$@" ;;
   ask) shift; cmd_ask "$@" ;;
   findings) shift; [ -f "${1:-}" ] || die "usage: guild findings <findings.json> [--quest <slug>]  (a code review's findings, marked point by point)"
@@ -1733,6 +1949,10 @@ case "${1:-}" in
   plan) shift; [ "${1:-}" = ready ] || die "usage: guild plan ready \"<one sentence>\" [--shape small|standard|full]  (inside a quest, after writing plan.md)"
         me=$(current_quest); [ -n "$me" ] || die "guild plan ready runs inside a quest"
         dagger_guard "$me"
+        if [ "$(quest_kind "$me")" = bug ] && ! gaps=$(python3 "$GUILD_REPO/bin/rootcause.py" ready "$me"); then
+          die "a bug quest shows its diagnosis before the fix, and it still lacks:
+$(printf '%s\n' "$gaps" | sed 's/^/     - /')"
+        fi
         python3 "$GUILD_REPO/bin/wartable.py" plan "$me" "${2:-}" "${@:3}" ;;
   jev) shift
        if [ "${1:-}" = risk ] && [ -z "${2:-}" ]; then set -- risk "$(current_quest)"; fi
@@ -1757,13 +1977,17 @@ case "${1:-}" in
     echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || open_url "http://127.0.0.1:$port/q/$1/files" ;;
   reap) shift; python3 "$GUILD_REPO/bin/reaper.py" run "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
-  lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
+  lore) shift; case "${1:-show}" in
+          show) python3 "$GUILD_REPO/bin/lore.py" show ;;
+          *) GUILD_HOME="$GUILD_HOME" python3 "$GUILD_REPO/bin/decay.py" "$@" ;;
+        esac ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
   behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
     echo "http://127.0.0.1:$port/$page"; open_url "http://127.0.0.1:$port/$page" ;;
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
+  sweep) shift; python3 "$GUILD_REPO/bin/wartable.py" standing "$@" ;;
   opener) shift; cmd_opener "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   draw) shift; python3 "$GUILD_REPO/bin/draw.py" "$@" ;;

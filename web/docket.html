@@ -56,6 +56,8 @@
   .hold button, .back { font: inherit; font-size: 12px; padding: 3px 8px; border-radius: 3px; border: 1px solid var(--held); background: transparent; color: var(--ink); cursor: pointer; margin-top: 6px; display: block; }
   .hold button:hover, .back:hover { background: var(--held); color: #fff; }
   .empty { padding: 18px 10px; color: var(--ink-dim); font-style: italic; }
+  ul.plain { margin: 6px 0 0; padding-left: 20px; }
+  ul.plain li.empty { list-style: none; margin-left: -20px; padding: 8px 10px; }
   .held td { color: var(--ink-dim); }
   .recent td { font-size: 13px; padding: 7px 10px; }
   .picked { font-weight: 700; color: var(--ok); }
@@ -129,7 +131,7 @@
     <p class="rm-kicker">The war table</p>
     <h1 class="rm-title">The Docket</h1>
     <div class="rm-rule"></div>
-    <p class="rm-sub">The oracle's hall. High elves, dwarves and gnomes wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
+    <p class="rm-sub">The oracle's hall. High elves, dwarves and gnomes wait for your word, guildmaster: one ruling per row, a note if you like, or snooze it until a date. Then send them all with the horn.</p>
     <nav class="rm-nav" style="margin-top:12px"><a href="/campaign"><span class="gi-icon gi-map" aria-hidden="true"></span>The campaign</a><a href="/treasury"><span class="gi-icon gi-chest" aria-hidden="true"></span>The treasury</a><a href="/boards"><span class="gi-icon gi-flag" aria-hidden="true"></span>The notice wall</a><a href="/console"><span class="gi-icon gi-scroll" aria-hidden="true"></span>The console</a></nav>
   </div>
   <div class="rm-party" id="realm-party" aria-label="Who waits"></div>
@@ -137,7 +139,7 @@
 <header>
   <div>
     <h1><span class="gi-icon gi-scroll" aria-hidden="true"></span>The Docket</h1>
-    <p class="sub">The oracle's hall. Archmages, knights and scouts wait for your word, guildmaster: one ruling per row, a note if you like, or hold it until a date. Then send them all with the horn.</p>
+    <p class="sub">The oracle's hall. Archmages, knights and scouts wait for your word, guildmaster: one ruling per row, a note if you like, or snooze it until a date. Then send them all with the horn.</p>
   </div>
   <nav><a href="/campaign">Campaign</a><a href="/boards">All boards</a><a href="/console">Console</a></nav>
 </header>
@@ -146,22 +148,29 @@
   <p class="drillnote alertnote" id="alertnote" hidden></p>
   <p class="drillnote" id="drillnote" hidden></p>
   <p class="drillnote" id="shepnote" hidden></p>
-  <h2 id="h-open"><span class="gi-icon gi-swords" aria-hidden="true"></span>Awaiting your ruling</h2>
-  <p class="lead">Decisions first, then finished work waiting for your grade. A little crown marks the adventurer's suggestion.</p>
+  <h2 id="h-open"><span class="gi-icon gi-swords" aria-hidden="true"></span>Needs you</h2>
+  <p class="lead">Decisions first, most urgent quest first, then finished work waiting for your grade. A little crown marks the adventurer's suggestion. A quest cannot close while one of its questions is here.</p>
   <table>
-    <thead><tr><th></th><th>Item</th><th>Ruling</th><th>Note</th><th>Hold</th></tr></thead>
+    <thead><tr><th></th><th>Item</th><th>Ruling</th><th>Note</th><th>Snooze until</th></tr></thead>
     <tbody id="open"></tbody>
   </table>
+  <ul class="plain" id="blocked"></ul>
+</section>
+
+<section class="sheet rm-frame" aria-labelledby="h-under">
+  <h2 id="h-under"><span class="gi-icon gi-map" aria-hidden="true"></span>Underway</h2>
+  <ul class="plain" id="underway"></ul>
 </section>
 
 <section class="sheet rm-frame" aria-labelledby="h-held">
-  <h2 id="h-held"><span class="gi-icon gi-hourglass" aria-hidden="true"></span>Held in the vault</h2>
-  <p class="lead">Parked until their date. The quartermaster brings each one back to you when its day comes.</p>
+  <h2 id="h-held"><span class="gi-icon gi-hourglass" aria-hidden="true"></span>Next</h2>
+  <p class="lead">Snoozed until their date. Each one comes back under Needs you when its day comes.</p>
   <table><tbody id="held"></tbody></table>
 </section>
 
 <section class="sheet rm-frame" aria-labelledby="h-recent">
-  <h2 id="h-recent"><span class="gi-icon gi-crown" aria-hidden="true"></span>Recent rulings</h2>
+  <h2 id="h-recent"><span class="gi-icon gi-crown" aria-hidden="true"></span>Landed</h2>
+  <ul class="plain" id="landed"></ul>
   <table class="recent"><tbody id="recent"></tbody></table>
 </section>
 
@@ -200,7 +209,7 @@ function rowHtml(i, n) {
     <td class="item"><b>${esc(i.title)}</b>${i.subtitle ? `<span>${esc(i.subtitle)}</span>` : ""}<div class="meta">${chips}<a href="${esc(i.url)}" target="_blank" rel="noopener">open page</a></div></td>
     <td class="ruling">${qs}</td>
     <td><textarea data-note="${esc(k)}" aria-label="Note for ${esc(i.title)}" placeholder="Anything to add">${esc(notes[k] || "")}</textarea></td>
-    <td class="hold"><input type="date" data-until="${esc(k)}" min="${data.today}" aria-label="Hold until"><button data-hold="${esc(k)}">Hold</button></td>
+    <td class="hold"><input type="date" data-until="${esc(k)}" min="${data.today}" aria-label="Snooze until"><button data-hold="${esc(k)}">Snooze</button></td>
   </tr>`;
 }
 
@@ -242,15 +251,21 @@ function render() {
     dd.week_due ? `<b>Rules changed this week</b>: ${dd.week_count} to confirm. Agree, Wrong or Not sure, one click each. <a href="/rules/week">Confirm them</a>` : "",
     dd.due ? `<b>This week's rule drill</b>: ${dd.count} question${dd.count === 1 ? "" : "s"} on the business rules of your work, about five minutes. <a href="/drill">Take it</a>` : "",
   ].filter(Boolean).join("<br>") + ` &middot; <a href="/rules">the rule book</a>`;
-  $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || `<tr><td class="empty" colspan="5"><span class="gi-icon gi-potion" aria-hidden="true"></span>Nothing waits for your seal. The guild is on the road, or resting at the tavern.</td></tr>`;
+  const blocked = data.blocked || [];
+  $("#open").innerHTML = open.map((i, n) => rowHtml(i, n + 1)).join("") || (blocked.length ? "" : `<tr><td class="empty" colspan="5"><span class="gi-icon gi-potion" aria-hidden="true"></span>Nothing needs you right now.</td></tr>`);
+  const line = (q) => `<li><b>${esc(q.quest)}</b>: ${esc(q.state || q.when || "")}${q.note ? `, ${esc(q.note)}` : ""}</li>`;
+  $("#blocked").innerHTML = blocked.map(line).join("");
+  $("#underway").innerHTML = (data.underway || []).map(line).join("") || `<li class="empty">Nothing is being worked on.</li>`;
+  $("#landed").innerHTML = (data.landed || []).map((q) => `<li><b>${esc(q.quest)}</b>: ${esc(q.note || "done")}${q.when ? ` (${esc(q.when)})` : ""}</li>`).join("")
+    || `<li class="empty">Nothing landed in the last 7 days.</li>`;
   $("#held").innerHTML = (data.held || []).map((i) =>
     `<tr class="held"><td class="item"><b>${esc(i.title)}</b><div class="meta"><span class="chip">${esc(i.quest)}</span>${i.held_note ? esc(i.held_note) : ""}</div></td>
-     <td>until <b>${esc(i.held_until)}</b></td><td><button class="back" data-unhold="${esc(key(i))}">Bring back now</button></td></tr>`).join("")
-    || `<tr><td class="empty">The vault is empty.</td></tr>`;
+     <td>back on <b>${esc(i.held_until)}</b></td><td><button class="back" data-unhold="${esc(key(i))}">Bring back now</button></td></tr>`).join("")
+    || `<tr><td class="empty">Nothing is snoozed or queued.</td></tr>`;
   $("#recent").innerHTML = (data.recent || []).map((r) =>
     `<tr><td>${esc(r.at.replace("T", " ").slice(0, 16))}</td><td>${esc(r.title)}</td>
      <td class="picked">${esc(Object.entries(r.answers || {}).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k}=${v}`).join(", ") || "message")}</td>
-     <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("") || `<tr><td class="empty">No rulings yet. The ink is still wet.</td></tr>`;
+     <td>${esc((r.message || "").slice(0, 80))}</td></tr>`).join("");
   const ready = open.filter(isReady).length;
   $("#send").disabled = !ready;
   $("#send .lbl").textContent = ready ? `Send ${ready} ruling${ready > 1 ? "s" : ""}` : "Send rulings";
@@ -283,10 +298,10 @@ document.addEventListener("click", async (ev) => {
     render();
   } else if (b.dataset.hold) {
     const until = document.querySelector(`input[data-until="${CSS.escape(b.dataset.hold)}"]`).value;
-    if (!until) { $("#status").textContent = "Pick a date to hold it until."; return; }
+    if (!until) { $("#status").textContent = "Pick a date to snooze it until."; return; }
     const [quest, board] = b.dataset.hold.split("/");
     await post("/docket/hold", { quest, board, until, note: notes[b.dataset.hold] || "" });
-    $("#status").textContent = `Held until ${until}. The adventurer was told to park it.`;
+    $("#status").textContent = `Snoozed until ${until}. The adventurer was told to park it.`;
     load();
   } else if (b.dataset.unhold) {
     const [quest, board] = b.dataset.unhold.split("/");

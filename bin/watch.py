@@ -340,6 +340,11 @@ def row_for(it, width, highlight, spend):
     tone = TEXT if highlight else (DIM if not it["tab"] else SUBTEXT)
     name = f"{BORDER}{it.get('glyph', '')}{RESET}{tone}{BOLD if highlight else ''}{label}{RESET}"
     mark = f" {YELLOW}*{RESET}" if it["extra"] == "board" else ""
+    kind = (it.get("quest") or {}).get("kind")
+    if kind == "scout":                                 # a ranger: findings, never a PR
+        mark += f" {GREEN}scout{RESET}"
+    elif kind == "bug":
+        mark += f" {DIM}bug{RESET}"
     if (it.get("quest") or {}).get("machine"):
         mark += f" {DIM}@{it['quest']['machine']}{RESET}"
     num = f"{it['n']}" if it["n"] is not None and it["n"] < 10 else " "

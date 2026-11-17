@@ -173,7 +173,8 @@ def decide(ident, choice, note=""):
     if item["status"] == "accepted":
         refs = "; ".join(f'{e["quest"]}: "{e["quote"][:80]}"' for e in item["evidence"])
         with open(LESSONS, "a") as f:
-            f.write(f"- {item['text']}" + (f" ({note})" if note else "") + f"\n  evidence: {refs}\n")
+            import decay   # accepted lessons start as aging: stale after 30 days unless re-checked
+            f.write(f"- {item['text']}" + (f" ({note})" if note else "") + f"  {decay.marker('aging')}\n  evidence: {refs}\n")
     return item["status"]
 
 

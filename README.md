@@ -83,11 +83,16 @@ guild up ~/Workspace
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
 | `guild quest <slug> --repo PATH [--ticket KEY] [--harness NAME] [--tier T \| --model M] [--plan] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>`. See [Routing](#routing-which-model-does-which-work) |
 | `guild quest ... --quick ["<why>"]` / `--epic-dagger ["<why>"]` | Quick: no plan, no acceptance contract, no Why card, no validation checklist, trial skipped; a wrap-up is still owed. Epic dagger: all of that and no interaction at all. The adventurer never asks or opens a board, decides alone (choices listed in the PR body under "Decisions taken alone"), opens the PR and reports done. Only the guildmaster's own `--epic-dagger` (or the Jira label `epic-dagger`) means this flag; the quartermaster never skips a step on its own, and a PR review-fix quest keeps every step |
+| `guild quest ... --bug` | A [bug quest](#bug-quests-and-scouts): a failing repro before any fix, the diagnosis on the plan board, and a trial that checks the repro failed before and passes on HEAD |
+| `guild quest ... --scout` | A [scout](#bug-quests-and-scouts) (the ranger): an investigation in its own worktree that ends in findings with evidence and a recommendation, never a trial or a PR |
+| `guild promote <scout> [<new-slug>] [--brief FILE]` | Start a normal quest from a clean base with the scout's findings in its brief; the scout's code stays on its branch |
+| `guild repro new\|facts\|compare\|bisect\|theory\|verify\|report` | Inside a bug quest: record the repro, compare paths, bisect, test theories, verify the fix (state in the quest's `repro.json`) |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
-| `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
+| `guild scope sort <findings.json>` / `report` / `answer <id> no` | Inside a quest, during the trial: sort the review's findings against the agreed plan. In-scope ones get fixed; each expansion becomes a yes/no card for you and is not fixed. See [The trial](#the-trial) |
+| `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest. Refused while a question of the quest is neither answered nor snoozed (it lists them). `--force` still closes and logs the questions it left |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
 | `guild pool list\|drop [repo]` | The warm worktree slots quests start from |
 | `guild check [slug] [--baseline]` | Run the brief's acceptance checks in the quest worktree (EDD) |
@@ -111,6 +116,9 @@ guild up ~/Workspace
 | `guild board wait <id>` | Block until the guildmaster answers, then print the answer |
 | `guild board list` / `guild board url` | Boards and their state |
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
+| `guild ask answer <slug> <id> "<your words>" [--pick OPTION]` | Answer a question from the terminal. Every answer, here or on the docket, is kept as a decision in your words (`decisions.md` beside the quest, and a `decided` event) |
+| `guild ask snooze <slug> <id> --until 7d\|YYYY-MM-DD [--note T]` | Park a question until a date (the docket's Snooze). It comes back under Needs you that day |
+| `guild sweep [slug]` | Where everything stands, in four sections: Needs you (every open question, most urgent first), Underway, Next (snoozed, by date), Landed (last 7 days). With a slug, that one quest |
 | `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
 | `guild new [dir] [name] [--harness H] [--tier T]` | A plain agent session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |
 | `guild campaign` | The campaign board: every quest, session, subagent, ticket and to-do as a kanban (`Ctrl-g k`) |
@@ -123,7 +131,12 @@ guild up ~/Workspace
 | `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
 | `guild reap [--dry-run]` | Stop what finished quests left running: window (paused, `guild revive <slug>` brings it back), stray processes by exact PID, `s<ticket>-*` containers. After 30 minutes in done, failed or stopped (`GUILD_REAP_AFTER`); runs on its own every 5 minutes. Skips a quest that looks busy. `"auto_reap": false` in `local/dispatch.json` turns it off |
 | `/rules/week` on the war table | This week's rule changes, drafted by the quests, grouped by business area. You mark each Agree, Wrong (with the real rule) or Not sure; a mark holds until the rule changes again. The docket says when it waits. It replaces the Why card, which is now optional (`guild quest --why`) |
-| `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
+| `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own); also prints a one-line lore summary |
+| `guild lore check` | Lessons and vision lines past their date, with file:line; duplicates; tokens a quest loads per repo. See [Lore that expires](#lore-that-expires) |
+| `guild lore refresh <file:line> "<evidence>"` | Re-date a stale line; refused without what you checked (logged) |
+| `guild lore archive <file:line> "<reason>"` | Move a line to `<name>.archive.md` next to it; a pinned line asks you on the docket first |
+| `guild lore mark <file:line> pinned\|aging\|perishable [--check "<what>"]` | Set a line's tier |
+| `guild lore read [repo]` | `lessons.md` and the repo's vision as quests read them: archived lines gone, stale ones flagged |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
 | `guild decide <spec.json>` | A decision page: options as cards, case table, flows, screens, numbers |
@@ -134,7 +147,7 @@ guild up ~/Workspace
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |
 | `guild edit [slug\|path]` | Your editor: a quest's worktree or any folder (with the file tree), one file, or your work root |
 
-Skills: `/campfire` (catch up: landed, under way, waiting on you), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
+Skills: `/campfire` (catch up: needs you, underway, next, landed), `trial` (the pre-PR gate) and `war-table` (decision boards and wrap-up reports).
 
 ## The war table
 
@@ -166,7 +179,11 @@ guild impact --into wrapup.html --rules rules.json    # inside a quest; rerunnin
 
 `guild status done` refuses a backend quest whose wrap-up lacks the section, or leaves a rule candidate unexplained (`--no-impact "<why>"` is the recorded way out). No database and no build are needed: it reads the repo and git.
 
-**The docket.** `guild docket` (or `Ctrl-g g`) is the war table's front page: every open decision from every quest on one parchment ledger, one row each. Pick a ruling (a star marks the adventurer's suggestion), add a note, or hold it until a date, then send them all with one button. A held decision parks its quest and tells the adventurer to stop waiting; on its date `guild wait` raises it again and the quartermaster brings it back to you. Wrap-ups waiting for your grade are rows too. The full list of boards stays at `/boards`.
+**The docket.** `guild docket` (or `Ctrl-g g`) is the war table's front page: every open decision from every quest on one parchment ledger, one row each. Pick a ruling (a star marks the adventurer's suggestion), add a note, or snooze it until a date, then send them all with one button. A snoozed decision parks its quest and tells the adventurer to stop waiting; on its date `guild wait` raises it again and the quartermaster brings it back to you. Wrap-ups waiting for your grade are rows too. The full list of boards stays at `/boards`.
+
+**One status shape.** The docket, the `/campfire` catch-up and every wrap-up page say where things stand in the same four sections, in this order: **Needs you** (only what needs your decision), **Underway**, **Next** (snoozed questions and the day each comes back) and **Landed**. Every section always shows, with a plain sentence when it is empty ("Nothing needs you right now."), and each one is a full snapshot, never only what changed. `guild sweep` prints it in the terminal; on a wrap-up it sits under the At a glance strip and lists every unanswered question of the quest.
+
+**A quest cannot close with an open question.** `guild close` refuses while any question of the quest is neither answered nor snoozed, and prints them. A snooze counts only until its date: then the question is back under Needs you and holds the close again. An open question of a finished quest stays on the docket for the same reason. `--force` still closes (the quartermaster asks you first), and the event log keeps the questions it left. When a merged PR closes its quest on its own, an open question holds that back too.
 
 **From your phone.** `guild remote on` opens a second copy of the war table on your Tailscale address (Tailscale must be running), behind a random key: `guild remote qr` prints the link as a QR code to scan with the phone camera (and `guild remote on` prints it too; a bigger one is at `127.0.0.1:4711/remote/qr`, served on the Mac only). The link opens the quest console and sets a cookie, so the next pages need no key. `guild remote url` prints it as text. `guild remote restart` applies it, `guild remote off` closes it. Guild sends a Mac notification when something waits for you (a decision, a block, a failure, a wrap-up to grade); add `"ntfy": "https://ntfy.sh/<a-private-topic>"` to `~/.guild/local/remote.json` for a phone push too. The push says only which quest waits and links to the docket: never the note, the ticket text or code, because the topic lives on a third-party service. `"mac": false` turns the Mac notifications off; `guild notify test` checks both.
 
@@ -281,6 +298,12 @@ Acceptance:
 - `guild check` runs them in the worktree; `guild trial pass` is refused until the last run was green on the current commit.
 - The retro reports **first-pass rate per model**: how often a quest met its own acceptance on its first real run. That is how you find out, with numbers, whether a cheaper model is enough for a kind of ticket.
 
+## Bug quests and scouts
+
+**A bug quest** (`guild quest ... --bug`) proves the bug before anyone fixes it. Before changing code, the adventurer records a command that fails today (`guild repro new --cmd "..."`; guild refuses one that passes), the trigger, the condition (why it happens only sometimes) and the symptom (`guild repro facts`). It runs the repro on an older commit or with another input to get a failing path and a working one (`guild repro compare`), can let `git bisect` name the first bad commit (`guild repro bisect --good <ref>`), and writes each theory with a command that could prove it wrong (`guild repro theory`). Older commits run in a temporary worktree that is removed after every run, bisect state included; the quest's pool slot is never moved, so its build cache stays warm. A bug quest always plans first: `guild plan ready` refuses until the diagnosis is complete, then shows it above the plan, and your approval is the yes to the fix. After the fix, `guild repro verify` runs the repro on the last commit. `guild trial pass` refuses until it failed before and passes on HEAD, and `guild pr-body` puts the diagnosis block in the PR. This is the [root-cause-proof](#just-want-one-piece) idea, inside guild.
+
+**A scout** (`guild quest ... --scout`, drawn as a Ranger on the campaign board and marked `scout` in the sidebar) investigates in its own worktree on a `scout/<slug>` branch. It has no plan, no contract and no trial. It ends in `findings.md` in the quest folder: `## Findings`, each with its evidence, and `## Recommendation`, plus an `Acceptance:` block when it can say how a fix would be proven. Guild refuses `guild trial` and `gh pr create` on a scout, and refuses `done` until both sections exist. When you want the fix, `guild promote <scout> [<new-slug>]` starts a normal quest from the scout's base, with the findings and the recommendation in its brief. The scout's code is left behind on its branch.
+
 ## A repo's vision
 
 A vision is an acceptance policy for a whole repo: given a change, would this repo accept it or resist it?
@@ -288,6 +311,7 @@ A vision is an acceptance policy for a whole repo: given a change, would this re
 - `guild vision <repo>` collects the evidence: merged PRs, declined PRs, reverts, read with the repo owner's GitHub account. It refuses when there is too little history to find real values.
 - The `vision` skill drafts principles that each cite that evidence, then writes 8 to 12 hard hypothetical changes and puts them on the war table as one board. You rule on them; your answers are folded back in and the result is sealed in `~/.guild/visions/<repo>.md`, outside the repo.
 - Every new quest on that repo is told to read it and to stop and ask when a change goes against it. The quartermaster reads it before writing a brief.
+- Principles are written as aging lines and your rulings as pinned lines (see [Lore that expires](#lore-that-expires)).
 
 ## From ticket to quest
 
@@ -317,9 +341,28 @@ This is the one part of guild that acts without you typing a command, so it is b
 
 Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` and `JIRA_API_TOKEN=...` in `~/.guild/local/env`. `guild jira once` polls one time; with `"watch": true` the cockpit opens a `jira` tab running `guild jira watch`.
 
+## Lore that expires
+
+`lessons.md` and the repo visions only grow. Old lines go stale, every quest pays for them in tokens, and a quest follows them as rules even when they no longer hold. So each line carries a small dated marker, an HTML comment that Markdown hides:
+
+```markdown
+- Pass --ticket on every quest from Jira  <!-- lore:aging 2026-11-17 -->
+- Staging is read-only  <!-- lore:perishable 2026-11-17 check="ask in #ops" -->
+- Money is never a float  <!-- lore:pinned 2026-11-17 -->
+```
+
+- **pinned** never goes stale. Vision rulings start pinned.
+- **aging** is stale 30 days after its date. Accepted lessons and vision principles start aging.
+- **perishable** is stale after 7 days and says what to check.
+- A line without a marker counts as aging from the file's last git commit, or from the day guild first saw it. Indented lines under a line (a lesson's evidence) belong to it.
+
+Once a week the quartermaster runs `guild lore check`: stale lines with file:line, near-duplicate lines across lessons and visions (word overlap), and the tokens a quest loads per repo. Each stale line is either refreshed with named evidence (`guild lore refresh`, logged in `lore-log.jsonl`) or moved with its reason to `lessons.archive.md` or `visions/<repo>.archive.md` (`guild lore archive`). Nothing is deleted. A pinned line is only archived with your yes: the archive puts a board on the docket, and the line moves when you pick Archive.
+
+A quest reads a copy of the vision made at its start (`<quest>/vision.md`): archived lines are not in it, markers are stripped, and stale lines still load with a flag, so the quest checks them before it relies on them. `guild lore read <repo>` shows the quartermaster the same view of lessons and vision.
+
 ## Housekeeping
 
-Once a month the war table server runs `guild tidy`: events older than 30 days move from `events.log` to `events/YYYY-MM.log` (the readers' byte cursors are shifted, so nothing is replayed or missed, and history, the retro and lessons read the monthly files too), and quests closed more than 60 days ago get their boards and screenshots packed into `files.tar.gz`, keeping meta, costs, grades and certificates as they are. `guild tidy --dry-run` shows what it would do.
+Once a month the war table server runs `guild tidy`: events older than 30 days move from `events.log` to `events/YYYY-MM.log` (the readers' byte cursors are shifted, so nothing is replayed or missed, and history, the retro and lessons read the monthly files too), and quests closed more than 60 days ago get their boards and screenshots packed into `files.tar.gz`, keeping meta, costs, grades and certificates as they are. It also prints one lore line: how many lessons and vision lines are stale, the duplicate pairs, and the most tokens a quest loads on one repo. `guild tidy --dry-run` shows what it would do.
 
 ## Tests
 
@@ -359,7 +402,7 @@ The branch is `SARA-812/fair-pay-values`, the way the repo already names branche
 
 - The sidebar shows each quest, its model and its live cost. `*` wants a decision, `!` is blocked, `?` stopped without reporting.
 - Answer boards the same day. A blocked adventurer costs nothing and moves nothing.
-- `/campfire` tells you what landed, what runs, what waits on you.
+- `/campfire` tells you what needs you, what runs, what comes next and what landed.
 - Review each PR as it arrives. A merged dependency is what unblocks the next wave.
 
 **Closing a wave**
@@ -548,7 +591,11 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 
 **An independent behaviour check.** The reviewer agent and the project checks both look at what the implementing agent wrote, so a test that passes against a mock, or a stub that hides a defect, gets past both. `guild behaviour` starts a separate Claude run that cannot read the code: it gets only the scenarios, its file tools are off and it starts in an empty folder, it starts the app from the quest's worktree and drives each scenario against the real local API, and anything that needs a mock is "blocked", never "pass". Afterwards guild reads that run's own session log; a run that looked at a diff or opened a source file is marked tainted and does not count. `guild trial pass` needs a clean run on the current commit with no fail (`--no-behaviour "<why>"` is the recorded way out).
 
+**Bug quests and scouts.** On a bug quest the trial also needs the repro to have failed before the fix and to pass on HEAD (`guild repro verify`), and the PR body must carry the diagnosis block. A scout never reaches the trial: the gate refuses it.
+
 **A PR body that cannot drift.** `gh pr create` needs the section `guild pr-body` prints: the sealed contract, each check's result on HEAD, the behaviour check and the checklist state, stamped with the contract hash and the commit. The adventurer writes the rest; the gate refuses a body without a current section.
+
+**A review that cannot grow the PR.** Each round of review finds more, and fixing all of it slowly adds options, guarantees, abstractions and refactors you never approved. So the trial sorts every finding against the plan, the brief and the sealed acceptance list (`guild scope sort`). In scope (a bug in the new code, a missing test for agreed behaviour, a security hole in the new code) is fixed as before. An expansion (something not agreed, something destructive, or a theme already fixed that comes back with more machinery) is not fixed: it becomes one short card on the war table with what was agreed, what the review wants, the smallest option, what yes and no each mean, and a recommendation. Labels like "security" or "required" are evidence on the card, not a reason to widen scope. Yes adds it to `plan.md`; no records it as a follow-up on the campaign board (`guild todo`). `guild trial pass` waits for every card, and `trial.md` shows the counts: fixed in scope, sent to you, follow-ups.
 
 **CI that did not run is red.** An open PR with no checks at all (a conflict, a skipped workflow) shows "no CI run" on the campaign board and the wrap-up, says NO CI RUN in `guild prs`, and sends one notification, instead of looking quiet.
 
