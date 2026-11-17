@@ -389,6 +389,8 @@ rm -rf "$GUILD_HOME/quests/qm-pseudo"
 mkdir -p "$WT/node_modules" && echo cached > "$WT/node_modules/dep.txt"   # ignored build output
 is "a carried toolchain pin alone is not a change" "$(cd "$REPO" && GUILD_HOME="$GUILD_HOME" bash -c 'eval "$(sed -n "/^TOOLCHAIN_PINS=/p;/^worktree_dirty()/,/^}/p" bin/guild)"; worktree_dirty "'"$WT"'"' | wc -l | tr -d ' ')" "0"
 echo "work in progress" > "$WT/unsaved.txt"
+# its open question (the needs-decision above) would hold the close back first: answer it
+for b in $(python3 "$REPO/bin/wartable.py" questions alpha | sed -n 's/^ *#\([^ ]*\).*/\1/p'); do "$GUILD" ask answer alpha "$b" "yes, rename it" >/dev/null 2>&1; done
 out=$("$GUILD" close alpha 2>&1); has "a dirty worktree is protected" "$out" "uncommitted"
 [ -d "$GUILD_HOME/quests/alpha" ] && ok "a protected quest stays live" || bad "a protected quest stays live"
 "$GUILD" close alpha --force >/dev/null 2>&1
@@ -880,7 +882,7 @@ PY
 col() { python3 "$REPO/bin/fleet.py" json | python3 -c "import json,sys;b=json.load(sys.stdin);print(next(c['key'] for c in b['columns'] for x in c['cards'] if x['title']=='pr1'))"; }
 is "finished work with an open PR waits in review" "$(col)" "trial"
 hasnt "an empty board folder is not a decision" "$(python3 "$REPO/bin/fleet.py" json)" '"label": "decide"'
-hasnt "nor is an old question of a finished quest" "$(curl -s "${url%/campaign}/docket.json")" "an old question"
+has "an open question of a finished quest stays on the docket (it holds the close back)" "$(curl -s "${url%/campaign}/docket.json")" "an old question"
 python3 -c "
 import json;p='$GUILD_HOME/.pr-cache.json';c=json.load(open(p));c['https://github.com/Org/r/pull/7']['state']='merged';json.dump(c,open(p,'w'))"
 is "merged, it is returned" "$(col)" "done"
@@ -1906,6 +1908,11 @@ has "guild shepherd says it is off by default" "$("$GUILD" shepherd status)" "PR
 has "the docket carries the PR watch note" "$(curl -s http://127.0.0.1:4899/docket.json)" '"shepherd": {"on": false}'
 has "and draws it with an Adopt button" "$(curl -s http://127.0.0.1:4899/docket)" 'data-adopt='
 is "adopt refuses a PR it does not list" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4899/shepherd/adopt -d '{"url":"https://github.com/o/r/pull/1"}')" "400"
+
+section "open questions and the status shape"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "questions test said: $line" ;; esac
+done < <(mkdir -p "$TMP/qs/local" && GUILD_HOME="$TMP/qs" python3 "$REPO/test/questions.py" "$REPO" 2>&1)
 
 # ── quest emails ──────────────────────────────────────────────────────────────
 run_notify_email

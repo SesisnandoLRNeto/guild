@@ -70,6 +70,10 @@ guild board wait <id> [--timeout S]  block until the guildmaster answers that bo
 guild board list | guild board url   boards and their state, or the war table address
 guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend id] [--image "path=caption"]...
                                     put the question on the war table as a page and open it (inside a quest)
+guild ask answer <slug> <id> "<your words>" [--pick OPTION]   answer a question; kept as a decision in your words
+guild ask snooze <slug> <id> --until 7d|YYYY-MM-DD [--note T]  park a question; it comes back on the docket that day
+guild sweep [slug]                  where everything (or one quest) stands: Needs you (every open question, most urgent first),
+                                    Underway, Next, Landed
 guild pool list|drop [repo]          the warm worktree pool quests are started from
 guild new [dir] [name] [--harness H] [--model M | --tier T] [--resume SESSION]
                                     a plain agent session in a new cockpit tab (Ctrl-g n, or click + claude)
@@ -134,6 +138,7 @@ guild calm on|off|status            draw a party walking through a forest instea
 guild watch [seconds]               the cockpit sidebar: quests by repo, recent events (runs in a pane)
 guild edit [slug|path]              your editor with the file tree: a quest, a folder, or your work root
 guild close <slug> [--force]        kill the window, remove the worktree, archive the quest
+                                    (refused while a question is neither answered nor snoozed; --force is logged)
 EOF
 }
 
@@ -1455,6 +1460,13 @@ ensure_pseudo_quest() { # slug what
 }
 
 cmd_ask() {
+  # the guildmaster's side of a question: answer it (a decision in their words) or snooze it to a date
+  case "${1:-}" in
+    answer|snooze)
+      [ $# -ge 3 ] || die "usage: guild ask answer <slug> <id> \"<your words>\" [--pick OPTION] | guild ask snooze <slug> <id> --until 7d|YYYY-MM-DD [--note T]"
+      need_quest "$2"
+      exec python3 "$GUILD_REPO/bin/wartable.py" "$@" ;;
+  esac
   local slug; slug=$(current_quest)
   if [ -z "$slug" ]; then
     slug="quartermaster"            # the quartermaster asks too
@@ -1648,6 +1660,15 @@ cmd_board() {
 cmd_close() {
   local slug="$1" force="${2:-}"
   need_quest "$slug"
+  # A quest cannot close while a question of it is neither answered nor snoozed. --force (the
+  # guildmaster's word, asked for first) still closes, and the questions it left are logged.
+  local open_q
+  if ! open_q=$(python3 "$GUILD_REPO/bin/wartable.py" questions "$slug"); then
+    [ "$force" = "--force" ] || die "$slug still has open questions:
+$open_q
+     answer each one (docket, or guild ask answer $slug <id> \"<words>\"), or snooze it (guild ask snooze $slug <id> --until 7d)"
+    event "$slug" close-forced "closed with open questions: $(echo "$open_q" | sed 's/^ *//' | paste -sd ';' -)"
+  fi
   # a quest on another machine closes there first (its worktree lives there)
   if python3 -c "import json,sys;sys.exit(0 if json.load(open('$(qdir "$slug")/meta.json')).get('machine') else 1)"; then
     python3 "$GUILD_REPO/bin/machines.py" sync 2>/dev/null
@@ -1764,6 +1785,7 @@ case "${1:-}" in
     echo "http://127.0.0.1:$port/$page"; open_url "http://127.0.0.1:$port/$page" ;;
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
+  sweep) shift; python3 "$GUILD_REPO/bin/wartable.py" standing "$@" ;;
   opener) shift; cmd_opener "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   draw) shift; python3 "$GUILD_REPO/bin/draw.py" "$@" ;;
