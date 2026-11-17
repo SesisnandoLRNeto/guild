@@ -441,6 +441,12 @@ def answer_board(quest, board, payload):
         status = lessons.decide(meta["lesson"], decision["answers"].get("lesson", "reject"), decision.get("message", ""))
         record(quest, "working", f"lesson {status}: {meta.get('title', board)}")
         return
+    if meta.get("kind") == "lore-archive":   # the guildmaster's yes or no on archiving a pinned line
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import decay
+        result = decay.decide(meta, decision)
+        record(quest, "working", f"pinned line {result}: {meta.get('text', '').strip()[:80]}")
+        return
     if meta.get("kind") == "budget":         # raise the cap, or stop the quest
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
         import budget

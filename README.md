@@ -87,6 +87,7 @@ guild up ~/Workspace
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
+| `guild scope sort <findings.json>` / `report` / `answer <id> no` | Inside a quest, during the trial: sort the review's findings against the agreed plan. In-scope ones get fixed; each expansion becomes a yes/no card for you and is not fixed. See [The trial](#the-trial) |
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest. Refused while a question of the quest is neither answered nor snoozed (it lists them). `--force` still closes and logs the questions it left |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
 | `guild pool list\|drop [repo]` | The warm worktree slots quests start from |
@@ -126,7 +127,12 @@ guild up ~/Workspace
 | `guild rules` / `guild drill` | The rule book (every business rule the work changed, per area) and this week's three-question drill |
 | `guild reap [--dry-run]` | Stop what finished quests left running: window (paused, `guild revive <slug>` brings it back), stray processes by exact PID, `s<ticket>-*` containers. After 30 minutes in done, failed or stopped (`GUILD_REAP_AFTER`); runs on its own every 5 minutes. Skips a quest that looks busy. `"auto_reap": false` in `local/dispatch.json` turns it off |
 | `/rules/week` on the war table | This week's rule changes, drafted by the quests, grouped by business area. You mark each Agree, Wrong (with the real rule) or Not sure; a mark holds until the rule changes again. The docket says when it waits. It replaces the Why card, which is now optional (`guild quest --why`) |
-| `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own) |
+| `guild tidy [--dry-run]` | Move old events to monthly files and pack old closed quests (runs monthly on its own); also prints a one-line lore summary |
+| `guild lore check` | Lessons and vision lines past their date, with file:line; duplicates; tokens a quest loads per repo. See [Lore that expires](#lore-that-expires) |
+| `guild lore refresh <file:line> "<evidence>"` | Re-date a stale line; refused without what you checked (logged) |
+| `guild lore archive <file:line> "<reason>"` | Move a line to `<name>.archive.md` next to it; a pinned line asks you on the docket first |
+| `guild lore mark <file:line> pinned\|aging\|perishable [--check "<what>"]` | Set a line's tier |
+| `guild lore read [repo]` | `lessons.md` and the repo's vision as quests read them: archived lines gone, stale ones flagged |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
 | `guild decide <spec.json>` | A decision page: options as cards, case table, flows, screens, numbers |
@@ -295,6 +301,7 @@ A vision is an acceptance policy for a whole repo: given a change, would this re
 - `guild vision <repo>` collects the evidence: merged PRs, declined PRs, reverts, read with the repo owner's GitHub account. It refuses when there is too little history to find real values.
 - The `vision` skill drafts principles that each cite that evidence, then writes 8 to 12 hard hypothetical changes and puts them on the war table as one board. You rule on them; your answers are folded back in and the result is sealed in `~/.guild/visions/<repo>.md`, outside the repo.
 - Every new quest on that repo is told to read it and to stop and ask when a change goes against it. The quartermaster reads it before writing a brief.
+- Principles are written as aging lines and your rulings as pinned lines (see [Lore that expires](#lore-that-expires)).
 
 ## From ticket to quest
 
@@ -324,9 +331,28 @@ This is the one part of guild that acts without you typing a command, so it is b
 
 Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` and `JIRA_API_TOKEN=...` in `~/.guild/local/env`. `guild jira once` polls one time; with `"watch": true` the cockpit opens a `jira` tab running `guild jira watch`.
 
+## Lore that expires
+
+`lessons.md` and the repo visions only grow. Old lines go stale, every quest pays for them in tokens, and a quest follows them as rules even when they no longer hold. So each line carries a small dated marker, an HTML comment that Markdown hides:
+
+```markdown
+- Pass --ticket on every quest from Jira  <!-- lore:aging 2026-11-17 -->
+- Staging is read-only  <!-- lore:perishable 2026-11-17 check="ask in #ops" -->
+- Money is never a float  <!-- lore:pinned 2026-11-17 -->
+```
+
+- **pinned** never goes stale. Vision rulings start pinned.
+- **aging** is stale 30 days after its date. Accepted lessons and vision principles start aging.
+- **perishable** is stale after 7 days and says what to check.
+- A line without a marker counts as aging from the file's last git commit, or from the day guild first saw it. Indented lines under a line (a lesson's evidence) belong to it.
+
+Once a week the quartermaster runs `guild lore check`: stale lines with file:line, near-duplicate lines across lessons and visions (word overlap), and the tokens a quest loads per repo. Each stale line is either refreshed with named evidence (`guild lore refresh`, logged in `lore-log.jsonl`) or moved with its reason to `lessons.archive.md` or `visions/<repo>.archive.md` (`guild lore archive`). Nothing is deleted. A pinned line is only archived with your yes: the archive puts a board on the docket, and the line moves when you pick Archive.
+
+A quest reads a copy of the vision made at its start (`<quest>/vision.md`): archived lines are not in it, markers are stripped, and stale lines still load with a flag, so the quest checks them before it relies on them. `guild lore read <repo>` shows the quartermaster the same view of lessons and vision.
+
 ## Housekeeping
 
-Once a month the war table server runs `guild tidy`: events older than 30 days move from `events.log` to `events/YYYY-MM.log` (the readers' byte cursors are shifted, so nothing is replayed or missed, and history, the retro and lessons read the monthly files too), and quests closed more than 60 days ago get their boards and screenshots packed into `files.tar.gz`, keeping meta, costs, grades and certificates as they are. `guild tidy --dry-run` shows what it would do.
+Once a month the war table server runs `guild tidy`: events older than 30 days move from `events.log` to `events/YYYY-MM.log` (the readers' byte cursors are shifted, so nothing is replayed or missed, and history, the retro and lessons read the monthly files too), and quests closed more than 60 days ago get their boards and screenshots packed into `files.tar.gz`, keeping meta, costs, grades and certificates as they are. It also prints one lore line: how many lessons and vision lines are stale, the duplicate pairs, and the most tokens a quest loads on one repo. `guild tidy --dry-run` shows what it would do.
 
 ## Tests
 
@@ -556,6 +582,8 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 **An independent behaviour check.** The reviewer agent and the project checks both look at what the implementing agent wrote, so a test that passes against a mock, or a stub that hides a defect, gets past both. `guild behaviour` starts a separate Claude run that cannot read the code: it gets only the scenarios, its file tools are off and it starts in an empty folder, it starts the app from the quest's worktree and drives each scenario against the real local API, and anything that needs a mock is "blocked", never "pass". Afterwards guild reads that run's own session log; a run that looked at a diff or opened a source file is marked tainted and does not count. `guild trial pass` needs a clean run on the current commit with no fail (`--no-behaviour "<why>"` is the recorded way out).
 
 **A PR body that cannot drift.** `gh pr create` needs the section `guild pr-body` prints: the sealed contract, each check's result on HEAD, the behaviour check and the checklist state, stamped with the contract hash and the commit. The adventurer writes the rest; the gate refuses a body without a current section.
+
+**A review that cannot grow the PR.** Each round of review finds more, and fixing all of it slowly adds options, guarantees, abstractions and refactors you never approved. So the trial sorts every finding against the plan, the brief and the sealed acceptance list (`guild scope sort`). In scope (a bug in the new code, a missing test for agreed behaviour, a security hole in the new code) is fixed as before. An expansion (something not agreed, something destructive, or a theme already fixed that comes back with more machinery) is not fixed: it becomes one short card on the war table with what was agreed, what the review wants, the smallest option, what yes and no each mean, and a recommendation. Labels like "security" or "required" are evidence on the card, not a reason to widen scope. Yes adds it to `plan.md`; no records it as a follow-up on the campaign board (`guild todo`). `guild trial pass` waits for every card, and `trial.md` shows the counts: fixed in scope, sent to you, follow-ups.
 
 **CI that did not run is red.** An open PR with no checks at all (a conflict, a skipped workflow) shows "no CI run" on the campaign board and the wrap-up, says NO CI RUN in `guild prs`, and sends one notification, instead of looking quiet.
 
