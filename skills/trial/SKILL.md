@@ -61,6 +61,11 @@ For each expansion guild opens a card through `guild ask` (board id `scope-<roun
 
 **The PR body.** `gh pr create` needs the section `guild pr-body` prints: the acceptance contract sealed when the quest started, each check's result on HEAD, the behaviour check and the checklist state. Paste it as is (do not edit it; it carries the contract hash and HEAD and the gate checks both), then write the rest of the body yourself: what changed and why, reusing the Risk and Testing sections of `trial.md`. Describe only what is in the branch now; never copy a body from an earlier PR.
 
+## Bug quests and scouts
+
+- **Bug quest** (`meta.json` has `"kind": "bug"`): commit the fix, then run `guild repro verify`. `guild trial pass` refuses until the repro failed before the fix and passes on HEAD with a clean tree. Put the result in the Testing part of `trial.md`. The section `guild pr-body` prints carries the diagnosis block; the gate refuses a bug PR body without it.
+- **Scout** (`"kind": "scout"`): there is no trial. `guild trial` and `gh pr create` are refused. A scout ends in findings; `guild promote` starts the quest that gets a trial.
+
 ## Skipping
 
 Allowed only when the brief allows it or the change has no code (docs, specs, config comments): `guild trial skip "<reason>"`. The PR body must then include `Trial: skipped - <reason>`. The PR hook checks this.

@@ -240,7 +240,8 @@ VIDEO = """<section class="pvideo" data-q="__Q__"><h2>Watch the plan</h2>
 })();</script>"""
 
 
-def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full", video=False):
+def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full", video=False,
+           diagnosis=""):
     parts = split(md)
     esc = html.escape
     shots = {k: IMG.findall(v) for k, v in parts.items()}
@@ -304,7 +305,7 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
              f'{md_to_html(parts["questions"])}</section>') if kit["decide_first"] else ""
     return (PAGE.replace("__QUEST__", esc(quest)).replace("__SUMMARY__", md_inline(summary or "", auto_code=True))
             .replace("__SHAPE__", SHAPE_LEAD[kind] + shown).replace("__REEL__", reel + first)
-            .replace("__MINUTE__", minute)
+            .replace("__MINUTE__", diag_html(diagnosis, md_to_html) + minute)
             .replace("__TA__", ta)
             .replace("__COMPARE__", compare)
             .replace("__CONTRACT__", contract_html)
@@ -314,6 +315,18 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
             .replace("__REVIEW__", review_html(quest, groups) if groups else "")
             .replace("__IF_GO__", "".join(f"<li>{x}</li>" for x in go))
             .replace("__PATH__", esc(plan_path)))
+
+
+def diag_html(diagnosis, md_to_html):
+    """A bug quest's diagnosis (guild repro report), first on the plan page: approving is the yes to the fix."""
+    if not diagnosis:
+        return ""
+    body = re.sub(r"<!--.*?-->", "", diagnosis)
+    body = re.sub(r"^##\s+Diagnosis.*\n", "", body.strip() + "\n", count=1)
+    return ('<section class="sec diagnosis"><h2>Diagnosis: the bug, proven before the fix</h2>'
+            '<p class="lead2">A command that fails today, what sets it off, a failing path against a working one, '
+            'and the theories that were tested. Approving this plan is your yes to the fix.</p>'
+            + md_to_html(body) + "</section>")
 
 
 REVIEW = """<section class="review" id="review" data-label="__LABEL__" data-change="__CHANGE__">

@@ -72,6 +72,7 @@ You are the **quartermaster** of the guild. The human is the **guildmaster**. Th
 ## The contract comes first
 
 - Every code brief needs an `Acceptance:` block before the quest starts: `check:` lines (commands that prove it, run in the worktree) and plain lines for what a person will see. `guild quest` refuses a brief without one. Write what "done" means now, from the ticket and the spec, not after the code exists. A quest with nothing to accept (a merge, a review, an investigation) passes `--no-acceptance "<why>"`.
+- A bug report starts with `--bug`: a failing repro first, the diagnosis on the plan board before the fix. An investigation starts with `--scout` (the ranger): findings with evidence, never a PR. When the guildmaster wants the fix, `guild promote <scout> [<new-slug>]` starts a normal quest from a clean base with the findings in its brief.
 - The trial judges against that sealed contract, an independent behaviour validator drives the running app through the scenarios without reading the code (`guild behaviour`), and the PR body carries a section generated from the contract for HEAD (`guild pr-body`).
 
 ## Decisions on decision pages

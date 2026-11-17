@@ -46,6 +46,7 @@ TIER_CLASS = {"plan": ("Sage", "scroll", "highelf", "thinks before anyone moves"
 ROLES = {"quartermaster": ("Quartermaster", "horn", "highelf", "sends the parties out and reads their reports"),
          "guildmaster": ("Guildmaster", "crown", "human", "you: the one who rules"),
          "helper": ("Squire", "sword", "human", "carries one part of a bigger quest"),
+         "scout": ("Ranger", "bow", "nightelf", "a scout quest: investigates and brings back findings, never a PR"),
          "validator": ("Inquisitor", "shield", "human", "checks the work without reading the diff"),
          "reviewer": ("Elf", "elf", "nightelf", "reads every diff before the gate; nothing gets past those ears")}
 

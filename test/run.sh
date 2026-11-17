@@ -1926,6 +1926,11 @@ while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "questions test said: $line" ;; esac
 done < <(mkdir -p "$TMP/qs/local" && GUILD_HOME="$TMP/qs" python3 "$REPO/test/questions.py" "$REPO" 2>&1)
 
+section "bug quests and scouts"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "quest_kinds test said: $line" ;; esac
+done < <(mkdir -p "$TMP/kinds/local" && GUILD_HOME="$TMP/kinds" python3 "$REPO/test/quest_kinds.py" "$REPO" 2>&1)
+
 # ── quest emails ──────────────────────────────────────────────────────────────
 run_notify_email
 

@@ -83,6 +83,10 @@ guild up ~/Workspace
 | `guild up [dir]` | Start or attach the `guild` tmux session, with the quartermaster in window `qm` |
 | `guild quest <slug> --repo PATH [--ticket KEY] [--harness NAME] [--tier T \| --model M] [--plan] < brief` | Worktree + branch + adventurer window. With `--ticket`, the branch is `KEY/<slug>`. See [Routing](#routing-which-model-does-which-work) |
 | `guild quest ... --quick ["<why>"]` / `--epic-dagger ["<why>"]` | Quick: no plan, no acceptance contract, no Why card, no validation checklist, trial skipped; a wrap-up is still owed. Epic dagger: all of that and no interaction at all. The adventurer never asks or opens a board, decides alone (choices listed in the PR body under "Decisions taken alone"), opens the PR and reports done. Only the guildmaster's own `--epic-dagger` (or the Jira label `epic-dagger`) means this flag; the quartermaster never skips a step on its own, and a PR review-fix quest keeps every step |
+| `guild quest ... --bug` | A [bug quest](#bug-quests-and-scouts): a failing repro before any fix, the diagnosis on the plan board, and a trial that checks the repro failed before and passes on HEAD |
+| `guild quest ... --scout` | A [scout](#bug-quests-and-scouts) (the ranger): an investigation in its own worktree that ends in findings with evidence and a recommendation, never a trial or a PR |
+| `guild promote <scout> [<new-slug>] [--brief FILE]` | Start a normal quest from a clean base with the scout's findings in its brief; the scout's code stays on its branch |
+| `guild repro new\|facts\|compare\|bisect\|theory\|verify\|report` | Inside a bug quest: record the repro, compare paths, bisect, test theories, verify the fix (state in the quest's `repro.json`) |
 | `guild roster` | All quests and their state |
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
@@ -293,6 +297,12 @@ Acceptance:
 - `guild check --baseline` runs before any work. A check that already passes is reported as **weak**: it proves nothing about the change.
 - `guild check` runs them in the worktree; `guild trial pass` is refused until the last run was green on the current commit.
 - The retro reports **first-pass rate per model**: how often a quest met its own acceptance on its first real run. That is how you find out, with numbers, whether a cheaper model is enough for a kind of ticket.
+
+## Bug quests and scouts
+
+**A bug quest** (`guild quest ... --bug`) proves the bug before anyone fixes it. Before changing code, the adventurer records a command that fails today (`guild repro new --cmd "..."`; guild refuses one that passes), the trigger, the condition (why it happens only sometimes) and the symptom (`guild repro facts`). It runs the repro on an older commit or with another input to get a failing path and a working one (`guild repro compare`), can let `git bisect` name the first bad commit (`guild repro bisect --good <ref>`), and writes each theory with a command that could prove it wrong (`guild repro theory`). Older commits run in a temporary worktree that is removed after every run, bisect state included; the quest's pool slot is never moved, so its build cache stays warm. A bug quest always plans first: `guild plan ready` refuses until the diagnosis is complete, then shows it above the plan, and your approval is the yes to the fix. After the fix, `guild repro verify` runs the repro on the last commit. `guild trial pass` refuses until it failed before and passes on HEAD, and `guild pr-body` puts the diagnosis block in the PR. This is the [root-cause-proof](#just-want-one-piece) idea, inside guild.
+
+**A scout** (`guild quest ... --scout`, drawn as a Ranger on the campaign board and marked `scout` in the sidebar) investigates in its own worktree on a `scout/<slug>` branch. It has no plan, no contract and no trial. It ends in `findings.md` in the quest folder: `## Findings`, each with its evidence, and `## Recommendation`, plus an `Acceptance:` block when it can say how a fix would be proven. Guild refuses `guild trial` and `gh pr create` on a scout, and refuses `done` until both sections exist. When you want the fix, `guild promote <scout> [<new-slug>]` starts a normal quest from the scout's base, with the findings and the recommendation in its brief. The scout's code is left behind on its branch.
 
 ## A repo's vision
 
@@ -580,6 +590,8 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 **The contract comes first.** `guild quest` refuses a brief with no `Acceptance:` block, before any worktree exists: what "done" means is written from the ticket and the spec, not described after the code. The block is sealed with a hash, the trial judges against it, and a quest with nothing to accept (a merge, a review) starts with `--no-acceptance "<why>"`, recorded.
 
 **An independent behaviour check.** The reviewer agent and the project checks both look at what the implementing agent wrote, so a test that passes against a mock, or a stub that hides a defect, gets past both. `guild behaviour` starts a separate Claude run that cannot read the code: it gets only the scenarios, its file tools are off and it starts in an empty folder, it starts the app from the quest's worktree and drives each scenario against the real local API, and anything that needs a mock is "blocked", never "pass". Afterwards guild reads that run's own session log; a run that looked at a diff or opened a source file is marked tainted and does not count. `guild trial pass` needs a clean run on the current commit with no fail (`--no-behaviour "<why>"` is the recorded way out).
+
+**Bug quests and scouts.** On a bug quest the trial also needs the repro to have failed before the fix and to pass on HEAD (`guild repro verify`), and the PR body must carry the diagnosis block. A scout never reaches the trial: the gate refuses it.
 
 **A PR body that cannot drift.** `gh pr create` needs the section `guild pr-body` prints: the sealed contract, each check's result on HEAD, the behaviour check and the checklist state, stamped with the contract hash and the commit. The adventurer writes the rest; the gate refuses a body without a current section.
 
