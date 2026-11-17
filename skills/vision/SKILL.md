@@ -52,6 +52,8 @@ status: sealed
 sealed: <date>, by the guildmaster, from <n> merged / <n> declined / <n> reverts
 ```
 
+End every principle line with `<!-- lore:aging <today> -->` and every ruling line with `<!-- lore:pinned <today> -->` (Markdown hides them). Aging lines come up for a re-check after 30 days in `guild lore check`; pinned rulings stay until the guildmaster archives them on the docket. A fact that changes fast gets `<!-- lore:perishable <today> check="<what to verify>" -->` instead.
+
 ## 5. What changes afterwards
 
 - Every new quest on that repo is told to read the vision, and to stop and ask on the war table when its change goes against it.
