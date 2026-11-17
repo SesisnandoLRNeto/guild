@@ -51,6 +51,10 @@ Quest type: code | investigation
 EOF
 ```
 
+Two flags follow the ticket itself:
+- an issue type **Bug** (or a ticket that reports something broken): add `--bug`. The adventurer proves it with a failing repro and shows the diagnosis before any fix.
+- a ticket that asks a question ("why does X happen", "is Y possible"), or `Quest type: investigation`: start it with `--scout`. It ends in findings, never a PR; the guildmaster runs `guild promote <scout>` when they want the fix.
+
 Use a slug a human can read: `work-api-null-fix`, not `PMC2-1023`. The key lives in `--ticket`, so `guild log` and `guild retro` can show it.
 
 ## 4. Close the loop back to the tracker

@@ -1907,6 +1907,11 @@ has "the docket carries the PR watch note" "$(curl -s http://127.0.0.1:4899/dock
 has "and draws it with an Adopt button" "$(curl -s http://127.0.0.1:4899/docket)" 'data-adopt='
 is "adopt refuses a PR it does not list" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4899/shepherd/adopt -d '{"url":"https://github.com/o/r/pull/1"}')" "400"
 
+section "bug quests and scouts"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "quest_kinds test said: $line" ;; esac
+done < <(mkdir -p "$TMP/kinds/local" && GUILD_HOME="$TMP/kinds" python3 "$REPO/test/quest_kinds.py" "$REPO" 2>&1)
+
 # ── quest emails ──────────────────────────────────────────────────────────────
 run_notify_email
 

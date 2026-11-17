@@ -606,7 +606,7 @@ def board():
             agents=(main or {}).get("agents", []), links=links,
             tab=q["slug"] if q["slug"] in live else "", pinned=key in pinned, closable=True,
             branch=q.get("branch", ""), base=q.get("base", ""), repo_path=q.get("repo", ""),
-            grade=grade, parent=q.get("parent", ""), machine=q.get("machine", ""),
+            grade=grade, parent=q.get("parent", ""), machine=q.get("machine", ""), quest_kind=q.get("kind", ""),
             pr=pr_info if pr_info and not pr_info.get("error") else None,
             ticket_status=ticket_status.get(q.get("ticket", ""), "")))
 

@@ -1548,8 +1548,13 @@ def cmd_plan(args):
     except (OSError, ValueError):
         pass
     review = bool(planpage.review_groups(planpage.split(md), kind))
+    diagnosis = ""
+    if meta.get("kind") == "bug":                       # a bug quest: the diagnosis comes before the fix
+        import rootcause
+        diagnosis = rootcause.report(quest)
+        go.insert(0, "You agree the diagnosis above is the bug, and the fix may start.")
     page = planpage.render(quest, args.get("summary") or "", md, meta, why_card, contract, go,
-                           md_to_html, md_inline, path, kind=kind, video=has_video)
+                           md_to_html, md_inline, path, kind=kind, video=has_video, diagnosis=diagnosis)
     decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
                                 "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},

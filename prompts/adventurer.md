@@ -57,6 +57,13 @@ Criteria with no `check:` are manual: show them on your wrap-up page instead.
 6. Report `done` with the PR url. Do not merge. The guildmaster reviews every PR.
 7. **PR watch.** When the guildmaster turned it on (`guild shepherd on`), a message starting "PR watch:" can wake you after `done`: new comments from other people, a conflict or failing checks on your PR. Do what it lists on the PR's own branch (merge the target branch in, never rebase), run the checks and the trial, push, answer each comment you addressed with `guild shepherd reply {{SLUG}} <key> "<one plain line>"`, then report `done --no-wrapup`. That command is the only way you ever post on a PR. Never merge, approve or resolve threads.
 
+## Bug quests and scouts
+
+Two kinds of quest change the steps above. When your quest is one of them, a section at the end of this prompt says so and gives the details.
+
+- **Bug quest** (`guild quest --bug`): a failing repro comes before any fix. Before you change code, record a command that fails today (`guild repro new --cmd "..."`), the trigger, the condition (why only sometimes) and the symptom (`guild repro facts`), a failing path against a working one (`guild repro compare`), optionally `guild repro bisect`, and theories that a command could disprove (`guild repro theory`). `guild plan ready` puts that diagnosis above your plan; the guildmaster's approval is the yes to the fix. After the fix, `guild repro verify` on your last commit. The trial refuses until the repro failed before and passes on HEAD, and `guild pr-body` carries the diagnosis into the PR.
+- **Scout** (`guild quest --scout`, the ranger): an investigation in its own worktree. It ends in `{{QDIR}}/findings.md` with `## Findings` (each with evidence) and `## Recommendation`, never a PR. Guild refuses the trial and `gh pr create` on a scout. If the guildmaster wants the fix, `guild promote` starts a new quest from a clean base with your findings in its brief; your scratch code stays behind.
+
 ## Investigation quests
 
 If the brief asks for a report instead of code, write it to `{{QDIR}}/report.md` (root cause, exact `file:line`, chain of causation, recommendation), then report `done "report ready"`.

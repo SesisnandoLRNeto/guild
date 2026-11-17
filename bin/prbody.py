@@ -73,6 +73,9 @@ def build(slug):
         out.append("\n## Validation checklist")
         out.append(f"{s['total']} scenarios; the guildmaster's run: {s['pass']} passed, {s['fail']} failed, "
                    f"{s['skip']} skipped, {s['open']} not run yet" + (" (certified for this commit)." if s.get("certified") else "."))
+    if meta.get("kind") == "bug":                       # a bug quest: the repro, before and after
+        import rootcause
+        out.append("\n" + (rootcause.report(slug) or "## Diagnosis\nNo repro recorded."))
     trial = load(os.path.join(q, "trial.json"))
     if trial and trial.get("result") == "skip":
         out.append(f"\nTrial: skipped - {trial.get('note', '')}")
@@ -91,6 +94,8 @@ def verify(slug, body):
     sha = head(meta.get("worktree", ""))
     if m.group(2) != sha:
         return f"the PR body's contract section was made on {m.group(2)[:8]} but HEAD is {sha[:8]}: run `guild pr-body` again"
+    if meta.get("kind") == "bug" and "<!-- guild:diagnosis -->" not in body:
+        return "a bug quest's PR body carries the diagnosis: run `guild pr-body` again and paste all of it"
     return ""
 
 
