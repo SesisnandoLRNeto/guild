@@ -3,7 +3,7 @@
 
 Two words, two ways:
 
-- `@guild` in your comment starts a **guarded** quest at once: no plan, and the PR stays shut
+- `!guild` in your comment starts a **guarded** quest at once: no plan, and the PR stays shut
   until you validated the branch end to end (`guild quest --guarded`). The comment is your word.
 - `@quartermaster` asks first: "start a quest for SARA-812?" on the war table, unless autostart.
 
@@ -14,10 +14,10 @@ around what it must never do:
 - Ticket text never becomes a command. `check:` lines are taken from your comment only;
   the ticket description is context, with any `check:` lines stripped out.
 - `@quartermaster` does not start anything by default: it puts "start a quest for SARA-812?" on
-  the war table with the brief it would use, and starts only when you say so there. `@guild`
+  the war table with the brief it would use, and starts only when you say so there. `!guild`
   starts at once, because the comment itself is your word, and the guarded quest still waits for
   your validation before any PR.
-- Its only write to Jira: once a quest has started from your `@guild` comment, it deletes that
+- Its only write to Jira: once a quest has started from your `!guild` comment, it deletes that
   comment, so the ticket keeps no trace of the trigger (`delete_trigger: false` keeps it).
   Drafting the ticket comment stays with you.
 - It stays inside the projects you list, and never runs more than `max_active` quests
@@ -66,7 +66,7 @@ def load_config():
         raise SystemExit("jira: no JIRA_API_TOKEN (put it in ~/.guild/local/env)")
     cfg["_auth"] = base64.b64encode(f"{cfg['email']}:{token}".encode()).decode()
     cfg.setdefault("trigger", "@quartermaster")
-    cfg.setdefault("go_trigger", "@guild")
+    cfg.setdefault("go_trigger", "!guild")
     cfg.setdefault("projects", [])
     cfg.setdefault("repos", {})
     cfg.setdefault("default_repo", {})
@@ -177,7 +177,7 @@ def build_brief(issue_key, fields, instruction, site, others=()):
 
 
 def said(word, text):
-    """Is this trigger in the text as a word of its own? @guild must not fire on @guildmaster."""
+    """Is this trigger in the text as a word of its own? !guild must not fire on !guildmaster."""
     return bool(word) and re.search(r"(?<![\w@])" + re.escape(word) + r"(?![\w-])", text, re.I) is not None
 
 
@@ -244,10 +244,10 @@ def start_quest(cfg, state, item):
         f.write(f"{at}\t{item['slug']}\tjira\tstarted from your comment on {item['key']} ({how})\n")
     log(f"started quest {item['slug']} for {item['key']} ({how})")
     if item.get("guarded") and item.get("comment_id") and cfg.get("delete_trigger", True):
-        try:                                     # your @guild comment did its job: the ticket keeps no trace of it
+        try:                                     # your !guild comment did its job: the ticket keeps no trace of it
             api(cfg, "DELETE", f"/rest/api/3/issue/{item['key']}/comment/{item['comment_id']}")
         except (urllib.error.URLError, OSError, ValueError) as e:
-            log(f"{item['key']}: could not delete your @guild comment: {e}")
+            log(f"{item['key']}: could not delete your !guild comment: {e}")
     notify("guild", f"Quest started for {item['key']}")
     return True
 
@@ -333,7 +333,7 @@ def once(cfg):
     report_finished(state)
 
     projects = ", ".join(json.dumps(p) for p in cfg["projects"])
-    words = " OR ".join(f'comment ~ "{t.lstrip("@")}"' for t in (cfg["go_trigger"], cfg["trigger"]) if t)
+    words = " OR ".join(f'comment ~ "{t.lstrip("@!")}"' for t in (cfg["go_trigger"], cfg["trigger"]) if t)
     jql = f'project in ({projects}) AND updated >= "-{int(cfg["poll_minutes"]) * 3}m" AND ({words})'
     found = api(cfg, "POST", "/rest/api/3/search/jql",
                 {"jql": jql, "fields": ["summary", "description", "project", "assignee", "status"], "maxResults": 25}).get("issues", [])

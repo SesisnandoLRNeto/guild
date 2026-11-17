@@ -1281,7 +1281,7 @@ def refresh_prs_forever():
             alerts.check(docket_items()["open"])
         except Exception:
             pass
-        try:                                   # an @guild comment on a PR: a review quest, then the review posted
+        try:                                   # an !guild comment on a PR: a review quest, then the review posted
             import gh_watch
             gh_watch.once()
         except Exception:

@@ -3,7 +3,7 @@
   "site": "https://your-company.atlassian.net",
   "email": "you@company.example",
   "trigger": "@quartermaster",
-  "go_trigger": "@guild",
+  "go_trigger": "!guild",
   "projects": ["PROJ"],
   "repos": {
     "api": "~/code/api",
