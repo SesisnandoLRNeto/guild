@@ -34,6 +34,7 @@ import html
 import json
 import mimetypes
 import os
+import re
 import sys
 import time
 
@@ -240,6 +241,32 @@ def esc(t):
     return html.escape(str(t or ""))
 
 
+# The State column: a short state stays a chip; a long one becomes its clauses, one per line,
+# each with a dot that says how it stands (ok / waiting / risk). A sentence never sits in a pill.
+TONE_RISK = re.compile(r"known risk|\brisk\b|fail|broken|blocked|not on staging|missing|reverted|not merged", re.I)
+TONE_WAIT = re.compile(r"needs|pending|waiting|not yet|or later|to do|todo|open\b", re.I)
+TONE_OK = re.compile(r"\byes\b|merged|deployed|on staging|on main|\bdone\b|released|passed", re.I)
+
+
+def tone(t):
+    return "risk" if TONE_RISK.search(t) else "wait" if TONE_WAIT.search(t) else "ok" if TONE_OK.search(t) else ""
+
+
+def state_cell(t):
+    t = (t or "").strip()
+    if not t:
+        return ""
+    parts = [p.strip() for p in re.split(r"(?<=[.;])\s+(?=[A-Za-z])", t) if p.strip()]
+    if len(t) <= 20 and len(parts) == 1:
+        return f'<span class="pill st-{tone(t) or "plain"}">{esc(t.rstrip(".;"))}</span>'
+    lines = []
+    for part in parts:
+        body = esc(part.rstrip(".;"))
+        body = re.sub(r"^([A-Z][A-Z ]{2,}[A-Z])(:?)", r"<b>\1\2</b>", body)   # MERGED, KNOWN RISK: ...
+        lines.append(f'<li class="st-{tone(part) or "plain"}">{body}</li>')
+    return f'<ul class="state">{"".join(lines)}</ul>'
+
+
 def rich(t):
     """Plain text with `code` spans, escaped."""
     parts = esc(t).split("`")
@@ -361,7 +388,7 @@ def page(slug, meta=None, export=False, image=None, prs=None):
                                       "pr": f"#{prs['number']}" if prs else "", "state": (prs or {}).get("state", "")}] if meta else [])
     if tested:
         rows = "".join(f'<tr><td class="mono">{esc(t.get("pr", ""))}</td><td class="mono">{esc(t.get("ticket", ""))}</td>'
-                       f'<td>{rich(t.get("what", ""))}</td><td><span class="pill">{esc(t.get("state", ""))}</span></td></tr>' for t in tested)
+                       f'<td>{rich(t.get("what", ""))}</td><td>{state_cell(t.get("state", ""))}</td></tr>' for t in tested)
         h.append(f'<section><h2>What is being tested</h2><div class="tbl"><table><thead><tr><th>PR</th><th>Ticket</th>'
                  f'<th>What it adds</th><th>State</th></tr></thead><tbody>{rows}</tbody></table></div></section>')
 
@@ -482,6 +509,12 @@ code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1
 .btn{font:600 12.5px/1 inherit;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:7px 11px;cursor:pointer;text-decoration:none}
 .btn.warn{background:var(--bad);color:#fff5dc;border-color:var(--bad)}.btn.back{justify-self:start}.btn:hover{background:#d9a441;border-color:#a87a25}
 .pill{display:inline-block;font:600 11px/1 inherit;padding:4px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.pill.st-ok{background:var(--ok-soft);color:var(--ok)}.pill.st-wait{background:var(--warn-soft);color:var(--warn)}.pill.st-risk{background:var(--bad-soft);color:var(--bad)}
+ul.state{list-style:none;margin:0;padding:0;display:grid;gap:5px;font-size:13.5px;line-height:1.4;min-width:15ch}
+.pill[class*=st-]{white-space:nowrap}td:has(> ul.state){min-width:24ch}
+ul.state li{position:relative;padding-left:15px;margin:0}ul.state li::before{content:""!important;position:absolute;left:0;top:.5em;width:7px;height:7px;border-radius:50%;background:var(--muted);background-image:none!important;-webkit-mask:none!important;mask:none!important;transform:none!important}
+ul.state li.st-ok::before{background:var(--ok)}ul.state li.st-wait::before{background:var(--warn)}ul.state li.st-risk::before{background:var(--bad)}
+ul.state li.st-risk b{color:var(--bad)}ul.state li b{font-weight:700;letter-spacing:.02em}
 .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
 table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}th,td{text-align:left;vertical-align:top;padding:8px 12px;border-top:1px solid var(--line)}
 thead th{border-top:0;font:600 11px/1.2 inherit;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:var(--code-bg)}td.mono{font-family:var(--mono);font-size:12.5px}

@@ -8,6 +8,11 @@ slug="${GUILD_QUEST:-}"
 [ -n "$slug" ] || exit 0
 qdir="${GUILD_HOME:-$HOME/.guild}/quests/$slug"
 trial="$qdir/trial.json"
+# A scout (guild quest --scout) ends in findings, never a PR.
+if [ "$(python3 -c "import json;print(json.load(open('$qdir/meta.json')).get('kind',''))" 2>/dev/null)" = scout ]; then
+  echo "Blocked: $slug is a scout. It ends in findings, never a PR. The guildmaster can start the fix with guild promote $slug." >&2
+  exit 2
+fi
 head=$(git rev-parse HEAD 2>/dev/null)
 # An epic dagger (guild quest --epic-dagger) has no trial by design: it passes as a skipped trial,
 # and the PR body still has to say so.
