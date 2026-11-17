@@ -87,6 +87,7 @@ guild up ~/Workspace
 | `guild wait [secs]` | Block until the next event |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
+| `guild scope sort <findings.json>` / `report` / `answer <id> no` | Inside a quest, during the trial: sort the review's findings against the agreed plan. In-scope ones get fixed; each expansion becomes a yes/no card for you and is not fixed. See [The trial](#the-trial) |
 | `guild close <slug> [--force]` | Kill the window, remove the worktree, archive the quest |
 | `guild revive [slug]` | Bring an active quest's window back after a restart |
 | `guild pool list\|drop [repo]` | The warm worktree slots quests start from |
@@ -574,6 +575,8 @@ A `PreToolUse` hook blocks `gh pr create` in adventurer sessions unless `guild t
 **An independent behaviour check.** The reviewer agent and the project checks both look at what the implementing agent wrote, so a test that passes against a mock, or a stub that hides a defect, gets past both. `guild behaviour` starts a separate Claude run that cannot read the code: it gets only the scenarios, its file tools are off and it starts in an empty folder, it starts the app from the quest's worktree and drives each scenario against the real local API, and anything that needs a mock is "blocked", never "pass". Afterwards guild reads that run's own session log; a run that looked at a diff or opened a source file is marked tainted and does not count. `guild trial pass` needs a clean run on the current commit with no fail (`--no-behaviour "<why>"` is the recorded way out).
 
 **A PR body that cannot drift.** `gh pr create` needs the section `guild pr-body` prints: the sealed contract, each check's result on HEAD, the behaviour check and the checklist state, stamped with the contract hash and the commit. The adventurer writes the rest; the gate refuses a body without a current section.
+
+**A review that cannot grow the PR.** Each round of review finds more, and fixing all of it slowly adds options, guarantees, abstractions and refactors you never approved. So the trial sorts every finding against the plan, the brief and the sealed acceptance list (`guild scope sort`). In scope (a bug in the new code, a missing test for agreed behaviour, a security hole in the new code) is fixed as before. An expansion (something not agreed, something destructive, or a theme already fixed that comes back with more machinery) is not fixed: it becomes one short card on the war table with what was agreed, what the review wants, the smallest option, what yes and no each mean, and a recommendation. Labels like "security" or "required" are evidence on the card, not a reason to widen scope. Yes adds it to `plan.md`; no records it as a follow-up on the campaign board (`guild todo`). `guild trial pass` waits for every card, and `trial.md` shows the counts: fixed in scope, sent to you, follow-ups.
 
 **CI that did not run is red.** An open PR with no checks at all (a conflict, a skipped workflow) shows "no CI run" on the campaign board and the wrap-up, says NO CI RUN in `guild prs`, and sends one notification, instead of looking quiet.
 

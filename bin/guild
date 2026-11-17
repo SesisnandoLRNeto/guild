@@ -62,6 +62,9 @@ guild vision status <repo>         is there a sealed vision for this repo
 guild jira on|once|watch|status    start quests from your comments on tickets: @guild starts a guarded
                                     quest at once, @quartermaster asks on the war table first
 guild trial pass [note] | skip <reason>   record the trial result for HEAD (inside a quest)
+guild scope sort <findings.json>    inside a quest: sort review findings against the agreed plan; in scope
+                                    gets fixed, each expansion becomes a yes/no card for the guildmaster
+guild scope report | answer <id> no the counts for trial.md, or turn a waiting expansion into a follow-up
 guild board open --html FILE [--decisions FILE] [--title T] [--subtitle S] [--assets] [--wrapup] [--quest NAME]
                                     put a war table up for the guildmaster and open it in the browser
                                     (--wrapup marks it as the quest's end-of-work report)
@@ -1605,6 +1608,7 @@ cmd_trial() {
   if [ "$result" = pass ]; then
     local why
     why=$(python3 "$GUILD_REPO/bin/checks.py" status "$(qdir "$slug")" "$sha") || die "trial refused: $why"
+    why=$(python3 "$GUILD_REPO/bin/scope.py" status "$(qdir "$slug")") || die "trial refused: $why"
     if [ -z "$nobehaviour" ]; then
       why=$(python3 "$GUILD_REPO/bin/behaviour.py" status "$slug" "$sha") || die "trial refused: $why
      Nothing a validator can run (docs, config)? guild trial pass --no-behaviour \"<why>\""
@@ -1616,6 +1620,23 @@ cmd_trial() {
     "$sha" "$result" "$note" "$(now)" "$(qdir "$slug")/trial.json"
   event "$slug" "trial-$result" "${note:-$sha}"
   echo "trial $result recorded for $sha"
+}
+
+# The trial's scope check: review findings sorted against the agreed plan (bin/scope.py).
+cmd_scope() {
+  local slug; slug=$(current_quest)
+  [ -n "$slug" ] || die "guild scope runs inside a quest (GUILD_QUEST not set)"
+  need_quest "$slug"
+  local sub="${1:-report}"; shift || true
+  case "$sub" in
+    sort) [ -f "${1:-}" ] || die "usage: guild scope sort <findings.json>  (the trial skill shows the format)"
+          python3 "$GUILD_REPO/bin/scope.py" sort "$(qdir "$slug")" "$1" ;;
+    answer) [ $# -ge 2 ] || die "usage: guild scope answer <id> yes|no"
+          python3 "$GUILD_REPO/bin/scope.py" answer "$(qdir "$slug")" "$1" "$2"
+          event "$slug" scope "$1: $2" ;;
+    report|status) python3 "$GUILD_REPO/bin/scope.py" "$sub" "$(qdir "$slug")" ;;
+    *) die "usage: guild scope sort <findings.json> | report | status | answer <id> yes|no" ;;
+  esac
 }
 
 # War table. Inside a quest the slug is implicit, so `guild board open --html page.html` is enough.
@@ -1711,6 +1732,7 @@ case "${1:-}" in
   peek) shift; [ $# -ge 1 ] || die "usage: guild peek <slug> [lines]"; cmd_peek "$@" ;;
   send) shift; [ $# -ge 2 ] || die "usage: guild send <slug> <message>"; cmd_send "$@" ;;
   trial) shift; cmd_trial "$@" ;;
+  scope) shift; cmd_scope "$@" ;;
   board) shift; cmd_board "$@" ;;
   ask) shift; cmd_ask "$@" ;;
   findings) shift; [ -f "${1:-}" ] || die "usage: guild findings <findings.json> [--quest <slug>]  (a code review's findings, marked point by point)"
