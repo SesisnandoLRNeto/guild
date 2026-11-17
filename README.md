@@ -558,7 +558,7 @@ Claude Code asks you to trust every new git checkout. Worktrees go to `~/Workspa
 
 ## Just want one piece?
 
-Guild needs tmux, a local server and some setup. If you only want one habit inside your own agent, the core ideas also ship as single-file skills (one Python script plus instructions, no server) on Agensi, as **The Guild** line: The Quartermaster (quests, decisions and wrap-ups), The Oathkeeper (sealed acceptance checks), The Tracker (root-cause proof), The Archivist (memory hygiene), The Lorekeeper (a repo's vision from its history) and The Inspector (QA validation pages). See [agensi.io/creators/sesisnando-neto](https://www.agensi.io/creators/sesisnando-neto).
+Guild needs tmux, a local server and some setup. If you only want one habit inside your own agent, the core ideas also ship as single-file skills (one Python script plus instructions, no server) on Agensi, as **The Guild** line: The Quartermaster (quests, decisions and wrap-ups), The Oathkeeper (sealed acceptance checks), The Tracker (root-cause proof), The Archivist (memory hygiene), The Lorekeeper (a repo's vision from its history) and The Inspector (QA validation pages). See [agensi.io/creators/sesisnando-neto](https://www.agensi.io/r/SESISNANDONETO?to=/creators/sesisnando-neto&utm_source=github).
 
 ## License
 
