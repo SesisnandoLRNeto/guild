@@ -102,6 +102,12 @@ guild reap [--dry-run]              stop what finished quests left running: wind
 guild tidy [--dry-run]              move old events to monthly files, delete the dead pages and pictures of
                                     closed quests (runs monthly on its own, and at every guild close)
 guild lore                          the bestiary: which class each model is, what each state looks like
+guild lore check                    lessons and vision lines past their date (file:line), duplicates, and
+                                    the tokens a quest loads per repo (weekly; guild tidy prints a summary)
+guild lore refresh <file:line> "<evidence>"   re-date a stale line; refused without what you checked
+guild lore archive <file:line> "<reason>"     move a line to <name>.archive.md (a pinned one asks you first)
+guild lore mark <file:line> pinned|aging|perishable [--check "<what>"]   set a line's tier
+guild lore read [repo]              lessons.md and the repo's vision as quests read them (stale lines flagged)
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|qr|restart   the war table on your Tailscale address, behind a key (qr: scan it)
@@ -978,11 +984,13 @@ PY
     -e "s#{{BRANCH}}#$branch#g" -e "s#{{TICKET}}#${ticket:-none}#g" \
     "$GUILD_REPO/prompts/adventurer.md" > "$q/prompt.md"
   if [ -f "$vision_file" ]; then
+    # the quest reads a copy: archived lines are gone, markers out, stale lines flagged
+    GUILD_HOME="$GUILD_HOME" python3 "$GUILD_REPO/bin/decay.py" render "$vision_file" > "$q/vision.md" 2>/dev/null || cp "$vision_file" "$q/vision.md"
     cat >> "$q/prompt.md" <<VISION
 
 ## This repo's vision
 
-The guildmaster wrote down what this repo accepts and what it resists: \`$vision_file\`. Read it before you start.
+The guildmaster wrote down what this repo accepts and what it resists: \`$q/vision.md\`. Read it before you start. A line marked stale is still the guildmaster's word, but check it before you rely on it.
 When your change goes against it, or it does not say, stop and put the question on the war table. The vision is the guildmaster's, not yours to reinterpret.
 VISION
   fi
@@ -1779,7 +1787,10 @@ case "${1:-}" in
     echo "http://127.0.0.1:$port/q/$1/files"; [ "${2:-}" = --url ] || open_url "http://127.0.0.1:$port/q/$1/files" ;;
   reap) shift; python3 "$GUILD_REPO/bin/reaper.py" run "$@" ;;
   tidy) shift; python3 "$GUILD_REPO/bin/tidy.py" run "$@" ;;
-  lore) python3 "$GUILD_REPO/bin/lore.py" show ;;
+  lore) shift; case "${1:-show}" in
+          show) python3 "$GUILD_REPO/bin/lore.py" show ;;
+          *) GUILD_HOME="$GUILD_HOME" python3 "$GUILD_REPO/bin/decay.py" "$@" ;;
+        esac ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
   behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")

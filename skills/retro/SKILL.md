@@ -14,6 +14,7 @@ guild retro --since 14d          # readable
 guild retro --since 14d --json   # every field, for your own counting
 guild log --since 14d
 cat ~/.guild/lessons.md 2>/dev/null
+guild lore check          # lessons past their date and duplicates: re-check those before proposing new ones
 ```
 
 Read a few real briefs and decisions behind the numbers (`guild log <slug>`). Counts alone lie.

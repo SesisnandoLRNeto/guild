@@ -14,6 +14,8 @@
   quest closes (and on every run, for the ones closed before this rule). The small files history
   reads stay: meta, ledger, grade, status, brief, rules, the certificate, and each board's json
   (title, questions, your answer), so costs, grades and decisions keep working.
+- lore: prints how many lessons and vision lines are stale, the duplicates, and the tokens a quest
+  loads per repo (bin/decay.py). It changes nothing; guild lore check lists the lines.
 """
 import glob
 import json
@@ -150,6 +152,12 @@ def run(dry=False):
           + (f" ({', '.join(quests[:5])}{'...' if len(quests) > 5 else ''})" if quests else ""))
     if not dry:
         print(f"guild home: {before // 1024 // 1024} MB -> {after // 1024 // 1024} MB")
+    try:                                          # lore only reports here; refresh and archive are guild lore
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import decay
+        print(decay.summary())
+    except Exception as e:                        # a bad lore file never stops the housekeeping
+        print(f"lore: could not check ({e})")
 
 
 def maybe():
