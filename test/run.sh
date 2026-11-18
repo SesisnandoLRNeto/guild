@@ -1921,6 +1921,11 @@ while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "lore test said: $line" ;; esac
 done < <(mkdir -p "$TMP/lore" && GUILD_HOME="$TMP/lore" python3 "$REPO/test/lore_decay.py" "$REPO" 2>&1)   # its own home: the docket stays clean
 
+section "the library and the keeper"
+while IFS= read -r line; do
+  case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "library test said: $line" ;; esac
+done < <(mkdir -p "$TMP/lib" && GUILD_HOME="$TMP/lib" python3 "$REPO/test/library_test.py" "$REPO" 2>&1)
+
 section "open questions and the status shape"
 while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "questions test said: $line" ;; esac

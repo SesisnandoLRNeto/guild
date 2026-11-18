@@ -122,6 +122,11 @@ guild lore refresh <file:line> "<evidence>"   re-date a stale line; refused with
 guild lore archive <file:line> "<reason>"     move a line to <name>.archive.md (a pinned one asks you first)
 guild lore mark <file:line> pinned|aging|perishable [--check "<what>"]   set a line's tier
 guild lore read [repo]              lessons.md and the repo's vision as quests read them (stale lines flagged)
+guild library [open]                the library: your notes as a graph page on the war table (/library)
+guild library status                notes, graph size, last refresh, notes changed since, notes with no links
+guild library refresh               export Notion Memory (when source is notion, read only), run graphify,
+                                    rebuild the page; manual, never on a timer (config: local/library.json)
+guild keeper "<question>" [--hops N]   the Keeper of the Library Keys: matching notes, links and files to read
 guild validate export <slug> [--out F]  a standalone copy for the team (images inside)
 guild budget <slug> [N | +N]        a quest's dollar cap: show, set, or raise it
 guild remote on|off|status|url|qr|restart   the war table on your Tailscale address, behind a key (qr: scan it)
@@ -1981,6 +1986,15 @@ $(printf '%s\n' "$gaps" | sed 's/^/     - /')"
           show) python3 "$GUILD_REPO/bin/lore.py" show ;;
           *) GUILD_HOME="$GUILD_HOME" python3 "$GUILD_REPO/bin/decay.py" "$@" ;;
         esac ;;
+  library) shift; case "${1:-open}" in
+            open) python3 "$GUILD_REPO/bin/library.py" ensure
+                  port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
+                  echo "http://127.0.0.1:$port/library"; open_url "http://127.0.0.1:$port/library" ;;
+            status|refresh) python3 "$GUILD_REPO/bin/library.py" "$1" ;;
+            *) die "usage: guild library [open|status|refresh]" ;;
+          esac ;;
+  keeper) shift; [ -n "${1:-}" ] || die 'usage: guild keeper "<question>" [--hops N]'
+          python3 "$GUILD_REPO/bin/library.py" ask "$@" ;;
   pr-body) shift; python3 "$GUILD_REPO/bin/prbody.py" build "$(current_quest "${1:-}")" ;;
   behaviour|behavior) shift; python3 "$GUILD_REPO/bin/behaviour.py" run "$(current_quest "${1:-}")" ;;
   rules|drill) page="$1"; shift; port=$(python3 -c "import sys;sys.path.insert(0,'$GUILD_REPO/bin');import wartable;print(wartable.ensure_server())")
