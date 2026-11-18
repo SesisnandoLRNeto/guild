@@ -137,6 +137,9 @@ guild up ~/Workspace
 | `guild lore archive <file:line> "<reason>"` | Move a line to `<name>.archive.md` next to it; a pinned line asks you on the docket first |
 | `guild lore mark <file:line> pinned\|aging\|perishable [--check "<what>"]` | Set a line's tier |
 | `guild lore read [repo]` | `lessons.md` and the repo's vision as quests read them: archived lines gone, stale ones flagged |
+| `guild library [open]` / `guild library status` | The [library](#the-library): your notes as a graph page on the war table (`/library`); status shows notes, graph size, last refresh, notes changed since and notes with no links |
+| `guild library refresh` | Export Notion Memory (when the source is `notion`, read only), run graphify, rebuild the page. Manual only |
+| `guild keeper "<question>" [--hops N]` | Ask the Keeper of the Library Keys: matching notes and concepts, the strongest links (in the text or guessed), and the note files to read next |
 | `guild behaviour [slug]` | An independent validator drives the running app through the scenarios; it never reads the code |
 | `guild pr-body [slug]` | The PR's contract section for HEAD; `gh pr create` needs it |
 | `guild decide <spec.json>` | A decision page: options as cards, case table, flows, screens, numbers |
@@ -359,6 +362,16 @@ Set it up with `config/jira.example.json` copied to `~/.guild/local/jira.json` a
 Once a week the quartermaster runs `guild lore check`: stale lines with file:line, near-duplicate lines across lessons and visions (word overlap), and the tokens a quest loads per repo. Each stale line is either refreshed with named evidence (`guild lore refresh`, logged in `lore-log.jsonl`) or moved with its reason to `lessons.archive.md` or `visions/<repo>.archive.md` (`guild lore archive`). Nothing is deleted. A pinned line is only archived with your yes: the archive puts a board on the docket, and the line moves when you pick Archive.
 
 A quest reads a copy of the vision made at its start (`<quest>/vision.md`): archived lines are not in it, markers are stripped, and stale lines still load with a flag, so the quest checks them before it relies on them. `guild lore read <repo>` shows the quartermaster the same view of lessons and vision.
+
+## The Library
+
+The Library is your second brain inside guild: a folder of markdown notes, and a graph of them built by the `graphify` CLI and its Claude Code skill. The **Keeper of the Library Keys** is the plain search over it: give it a question and it lists the notes to read.
+
+- `guild library` opens the map on the war table (`/library`): a Notes view and a Concepts view, and a side panel with each note's text and its links. Each link says if it was found in the text or guessed by the model.
+- `guild keeper "<question>"` uses no model. It matches the question's words to note titles and concept labels, walks the links two steps, and prints the matches, the strongest links (links found in the text first) and the note files to read next. The `keeper` skill tells an agent to read those notes before it answers, and the quartermaster asks the Keeper before it briefs a topic you have history with.
+- `guild library refresh` is the only way the library changes, and you run it by hand. With `"source": "notion"` a headless Claude run first copies your Notion Memory pages into the notes folder (read only on Notion, one file per page, `[[slug]]` links, secrets redacted; `prompts/library-export.md`). With `"source": "folder"` you keep the markdown yourself. Then a headless `/graphify --update` builds the graph, and the page is rebuilt.
+
+Privacy: the notes, the graph and the page live in the library home (`~/.guild/library` by default, set in `~/.guild/local/library.json`, see `config/library.example.json`). They never go into this repo, and `/library` is not served on the remote war table.
 
 ## Housekeeping
 
