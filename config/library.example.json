@@ -1,0 +1,6 @@
+{
+  "_note": "Optional. Copy to ~/.guild/local/library.json. home holds the notes, graphify-out/graph.json and library.html; it stays outside any repo. notes is a folder under home (or an absolute path). source: folder (you keep the markdown yourself) or notion (guild library refresh exports Notion Memory, read only).",
+  "home": "~/.guild/library",
+  "notes": "notes",
+  "source": "folder"
+}

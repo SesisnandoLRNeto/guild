@@ -915,6 +915,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send(200, json.dumps({"screen": text}), "application/json")
                 except ValueError as e:
                     return self.send(200, json.dumps({"error": str(e)}), "application/json")
+            if path == "/library":         # the library: your notes as a graph; private, so never on the remote copy
+                if isinstance(self, RemoteHandler):
+                    return self.send(404, "not here")
+                sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+                import library
+                page = library.paths()["page"]
+                if not os.path.isfile(page):
+                    return self.send(404, "<!doctype html><title>The Library</title><p style='font:16px sans-serif;padding:24px'>"
+                                          "No library page yet. Run <code>guild library refresh</code>.</p>")
+                with open(page, encoding="utf-8") as f:
+                    return self.send(200, f.read())
             if path == "/campaign":        # the campaign board: every agent and ticket, as a kanban
                 return self.send(200, open(os.path.join(WEB, "campaign.html")).read())
             if path in ("/rules", "/drill"):   # the rule book, and the weekly drill
