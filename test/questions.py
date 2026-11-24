@@ -68,6 +68,9 @@ check("an empty guild still shows all four sections, in order", order(empty, FOU
 check("each with a plain empty sentence", "Nothing needs you right now." in empty and "Nothing is being worked on." in empty
       and "Nothing is snoozed or queued." in empty and "Nothing landed in the last" in empty, empty)
 
+code, out = guild("next")
+check("guild next with nothing open says so", code == 0 and "Nothing needs you right now." in out, out)
+
 # ── close is refused while a question is open ─────────────────────────────────
 quest("qa")
 d = board("qa", "100001", "Keep the old export?")
@@ -85,6 +88,15 @@ code, out = guild("sweep")
 check("guild sweep shows the four sections in order", order(out, FOUR), out)
 check("and lists every open question, most urgent first",
       out.find("qz #200001") >= 0 and out.find("qa #100001") > out.find("qz #200001"), out)
+
+code, out = guild("next")
+check("guild next shows only the most urgent question", code == 0 and "1 of 3: qz" in out and "Which region?" in out
+      and "Keep the old export?" not in out, out)
+check("with the exact commands to answer or snooze it", "guild ask answer qz 200001" in out
+      and "guild ask snooze qz 200001" in out, out)
+check("and how many wait behind it", "2 more waiting after this one." in out, out)
+code, out2 = guild("ahoy")
+check("guild ahoy is the same", out2 == out, out2)
 
 # ── a snooze lets the quest close, and comes back on its date ─────────────────
 code, out = guild("ask", "snooze", "qa", "100001", "--until", "yesterday")

@@ -85,6 +85,7 @@ guild ask "<question>" [--detail T] [--option "id=Label: why"]... [--recommend i
                                     put the question on the war table as a page and open it (inside a quest)
 guild ask answer <slug> <id> "<your words>" [--pick OPTION]   answer a question; kept as a decision in your words
 guild ask snooze <slug> <id> --until 7d|YYYY-MM-DD [--note T]  park a question; it comes back on the docket that day
+guild next                          only the most urgent thing that needs you, in full, and how to answer it (also: guild ahoy)
 guild sweep [slug]                  where everything (or one quest) stands: Needs you (every open question, most urgent first),
                                     Underway, Next, Landed
 guild pool list|drop [repo]          the warm worktree pool quests are started from
@@ -2008,6 +2009,7 @@ $(printf '%s\n' "$gaps" | sed 's/^/     - /')"
   why) shift; if [ "${1:-}" = open ]; then python3 "$GUILD_REPO/bin/why.py" open "${2:-}"; else python3 "$GUILD_REPO/bin/why.py" show "${1:-}"; fi ;;
   docket) shift; cmd_docket "$@" ;;
   sweep) shift; python3 "$GUILD_REPO/bin/wartable.py" standing "$@" ;;
+  next|ahoy) shift; python3 "$GUILD_REPO/bin/wartable.py" next ;;
   opener) shift; cmd_opener "$@" ;;
   impact) shift; cmd_impact "$@" ;;
   draw) shift; python3 "$GUILD_REPO/bin/draw.py" "$@" ;;
