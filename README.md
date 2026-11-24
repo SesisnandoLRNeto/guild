@@ -88,7 +88,7 @@ guild up ~/Workspace
 | `guild promote <scout> [<new-slug>] [--brief FILE]` | Start a normal quest from a clean base with the scout's findings in its brief; the scout's code stays on its branch |
 | `guild repro new\|facts\|compare\|bisect\|theory\|verify\|report` | Inside a bug quest: record the repro, compare paths, bisect, test theories, verify the fix (state in the quest's `repro.json`) |
 | `guild roster` | All quests and their state |
-| `guild wait [secs]` | Block until the next event |
+| `guild wait [secs]` | Block until the next event. No timeout by default: after 30 quiet minutes it checks less often and still never wakes the quartermaster empty |
 | `guild peek <slug>` / `guild send <slug> "<msg>"` | Look at or talk to an adventurer |
 | `guild trial pass [note]` / `guild trial skip "<reason>"` | Record the trial for HEAD (inside a quest) |
 | `guild scope sort <findings.json>` / `report` / `answer <id> no` | Inside a quest, during the trial: sort the review's findings against the agreed plan. In-scope ones get fixed; each expansion becomes a yes/no card for you and is not fixed. See [The trial](#the-trial) |
