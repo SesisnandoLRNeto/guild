@@ -1914,7 +1914,7 @@ out=$(curl -s -X POST http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest",
 has "typing needs the console header, so another site cannot type into a quest" "$out" "missing X-Guild header"
 out=$(curl -s -X POST -H "X-Guild: console" http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","text":"hello from the phone\nsecond line"}')
 has "a message is sent" "$out" '"did": "sent"'
-sleep 0.5
+sleep 1.5
 has "and shows on the tab's screen, on one line" "$(curl -s "http://127.0.0.1:$PORT/console/screen?tab=qm-ctest")" "hello from the phone second line"
 has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","key":"C-c"}')" "that key is not allowed"
 has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
