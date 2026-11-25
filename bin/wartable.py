@@ -1580,6 +1580,10 @@ def cmd_open(args):
         return reopen(args)
     quest = args["quest"]
     board = args.get("id") or time.strftime("%H%M%S")
+    if not args.get("id"):                  # two pages in the same second must not share a folder
+        base, n = board, 2
+        while os.path.exists(board_dir(quest, board)):
+            board, n = f"{base}-{n}", n + 1
     d = board_dir(quest, board)
     fresh = not os.path.exists(d)
     if args.get("id") and not fresh:
@@ -1606,6 +1610,7 @@ def write_board(d, quest, board, args):
         else:
             subprocess.run(["cp", s, t], check=True)
     os.replace(os.path.join(d, os.path.basename(src)), os.path.join(d, "content.html"))
+    pull_outside_files(d, srcdir)
     if args.get("decisions"):
         subprocess.run(["cp", os.path.abspath(args["decisions"]), os.path.join(d, "decisions.json")], check=True)
     json.dump({"id": board, "quest": quest, "title": args.get("title") or board,
@@ -1613,10 +1618,62 @@ def write_board(d, quest, board, args):
               open(os.path.join(d, "board.json"), "w"), indent=2)
 
 
+LOCAL_REF = re.compile(r"""(\b(?:src|href)\s*=\s*)(["'])([^"'#?]+)([^"']*)\2""", re.I)
+
+
+def pull_outside_files(d, srcdir):
+    """A page often points at files outside its own folder (../shots/after.png). The board only
+    holds what was copied into it, so those links broke. Copy each such file into _files/ and point
+    the page there. Web urls, data:, anchors and war table paths (/q/..., /b/...) are left alone."""
+    page = os.path.join(d, "content.html")
+    try:
+        text = open(page, encoding="utf-8").read()
+    except (OSError, UnicodeDecodeError):
+        return
+    home = os.path.expanduser("~")
+
+    def fix(m):
+        url = m.group(3)
+        if re.match(r"^[a-z][a-z0-9+.-]*:", url, re.I):      # http:, data:, mailto:, file: stays
+            return m.group(0)
+        if url.startswith("/") and not url.startswith(home + "/"):
+            return m.group(0)                                 # a war table path
+        path = os.path.normpath(url if url.startswith("/") else os.path.join(srcdir, url))
+        if not os.path.isfile(path) or os.path.commonpath([path, srcdir]) == srcdir and os.path.exists(os.path.join(d, os.path.relpath(path, srcdir))):
+            return m.group(0)                                 # missing, or already beside the page
+        name = f"{os.path.basename(os.path.dirname(path))}-{os.path.basename(path)}"
+        os.makedirs(os.path.join(d, "_files"), exist_ok=True)
+        subprocess.run(["cp", path, os.path.join(d, "_files", name)], check=True)
+        return f"{m.group(1)}{m.group(2)}_files/{name}{m.group(4)}{m.group(2)}"
+
+    new = LOCAL_REF.sub(fix, text)
+    if new != text:
+        open(page, "w", encoding="utf-8").write(new)
+
+
+def supersede_wrapups(quest, keep):
+    """A quest that posts its wrap-up again (a fix, a missing picture) replaces the old page, so the
+    guildmaster never sees two. Only an ungraded one goes: a graded page is history. It moves to
+    boards-superseded/, out of every list, and can be moved back."""
+    bdir = os.path.join(QUESTS, quest, "boards")
+    gone = []
+    for b in sorted(os.listdir(bdir)):
+        bd = os.path.join(bdir, b)
+        if b == keep or os.path.exists(os.path.join(bd, "decision.json")):
+            continue
+        if (load_json_safe(os.path.join(bd, "board.json")) or {}).get("wrapup"):
+            os.makedirs(os.path.join(QUESTS, quest, "boards-superseded"), exist_ok=True)
+            os.replace(bd, os.path.join(QUESTS, quest, "boards-superseded", b))
+            gone.append(b)
+    return gone
+
+
 def finish_open(quest, board, args):
     port = ensure_server()
     url = f"http://127.0.0.1:{port}/b/{quest}/{board}/"
     if args.get("wrapup"):
+        for old in supersede_wrapups(quest, board):
+            print(f"replaced the earlier wrap-up {old} (moved to boards-superseded/)")
         # The wrap-up is the end of the road: it stays hidden (no grading, not on the docket, no
         # browser tab) until the quest reports done, so it never shows beside an open question.
         record(quest, "working", f"wrap-up posted, shown when the quest reports done: {args.get('title') or board} -> {url}")
