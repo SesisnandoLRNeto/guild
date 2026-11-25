@@ -288,6 +288,15 @@ has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:4899/b/alph
 out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}')
 has "ready to merge waits for the validation" "$out" "Not ready to merge yet"
 [ -f "$GUILD_HOME/quests/alpha/grade.json" ] && bad "and nothing is recorded" "graded anyway" || ok "and nothing is recorded"
+has "the refusal links to the checklist" "$out" "http://127.0.0.1:4899/q/alpha/validate"
+has "and the page offers to merge without it" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" "Merge without the checklist"
+out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge","waive":["waive"],"waiver":"  "},"message":""}')
+has "a waiver without a reason is refused" "$out" "needs a one-line reason"
+[ -f "$GUILD_HOME/quests/alpha/scenarios.waived" ] && bad "and nothing is waived" "waived anyway" || ok "and nothing is waived"
+out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge","waive":["waive"],"waiver":"no docker on this Mac, CI is green"},"message":""}')
+is "merge with a waiver reason is accepted and recorded" "$(echo "$out" | grep -c error)$(grep -c 'no docker on this Mac' "$GUILD_HOME/quests/alpha/scenarios.waived")$(grep -c 'waived by the guildmaster' "$GUILD_HOME/quests/alpha/grade.json")" "011"
+has "and the graded event carries the waiver" "$(grep 'alpha	graded' "$GUILD_HOME/events.log" | tail -1)" "no docker on this Mac"
+rm -f "$GUILD_HOME/quests/alpha/scenarios.waived" "$GUILD_HOME/quests/alpha/grade.json" "$GUILD_HOME/quests/alpha/boards/$wb/decision.json"   # the checklist is run for real below
 curl -s -X POST "$vurl/mark" -d '{"id":"A2","status":"skip","note":"no auth locally"}' >/dev/null
 has "the last pass writes a certificate for the commit" "$(cat "$GUILD_HOME/quests/alpha/certificate.json")" '"passed": 1'
 has "the page says it is validated" "$(curl -s "$vurl")" "Validated.</b> 1 of 2 passed, 1 skipped with a reason"
