@@ -989,7 +989,7 @@ has "the page opens with the pain, the cause and the expectation in one minute" 
 has "today and after this plan sit side by side" "$page" '<div class="after"><h3>After this plan</h3>'
 has "a mermaid block draws a diagram" "$page" '<pre class="mermaid">flowchart LR'
 has "the plan opens with what it will change" "$page" '<h2>What this will change</h2>'
-has "with each area's level, high first" "$page" '<div class="lv high">HIGH</div><div><div class="area">Saving a rate equation'
+has "with each area's level, high first" "$page" '<div class="gim-row high"><div class="lv">high</div><div><div class="area">Saving a rate equation'
 has "an untouched area that uses the change is marked" "$page" 'not touched, uses what changed'
 [ -f "$GUILD_HOME/quests/pl/impact.planned.json" ] && ok "plan ready keeps the expected impact for the wrap-up" || bad "plan ready keeps the expected impact for the wrap-up"
 mv "$GUILD_HOME/quests/pl/impact.json" "$TMP/impact.keep"
