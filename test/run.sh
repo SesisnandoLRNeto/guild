@@ -1915,11 +1915,11 @@ has "typing needs the console header, so another site cannot type into a quest" 
 out=$(curl -s -X POST -H "X-Guild: console" http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","text":"hello from the phone\nsecond line"}')
 has "a message is sent" "$out" '"did": "sent"'
 sleep 0.5
-has "and shows on the tab's screen, on one line" "$(curl -s 'http://127.0.0.1:$PORT/console/screen?tab=qm-ctest')" "hello from the phone second line"
+has "and shows on the tab's screen, on one line" "$(curl -s "http://127.0.0.1:$PORT/console/screen?tab=qm-ctest")" "hello from the phone second line"
 has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","key":"C-c"}')" "that key is not allowed"
 has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
 has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
-has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:$PORT/console/screen?tab=..%2Fetc')" "no such tab"
+has "a name with odd characters is refused" "$(curl -s "http://127.0.0.1:$PORT/console/screen?tab=..%2Fetc")" "no such tab"
 calm=$(python3 - "$REPO" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1] + "/bin")
