@@ -279,7 +279,9 @@ async function send(ended) {
   if (!r.ok || out.error) {                  // e.g. "ready to merge" before the validation checklist is green
     document.getElementById("send").disabled = document.getElementById("sendEnd").disabled = false;
     const st = document.getElementById("state");
-    st.textContent = out.error || "Could not send.";
+    // the refusal names the checklist by its URL: make it a real link (escape first, then link)
+    const esc = (out.error || "Could not send.").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    st.innerHTML = esc.replace(/(https?:\/\/[^\s"]+\/q\/[^\s"\/]+\/validate|\/q\/[^\s"\/]+\/validate)/g, '<a href="$1" target="_blank">$1</a>');
     st.style.color = "#a8322a";
     return;
   }
