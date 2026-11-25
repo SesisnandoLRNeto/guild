@@ -1664,6 +1664,15 @@ qm_cursor=$(cat "$GUILD_HOME/.wait-cursor" 2>/dev/null || echo none)
 out=$("$GUILD" wait 6 --for pa-tests)
 has "the parent waits for its helper's report" "$out" "tests written"
 is "without moving the quartermaster's cursor" "$(cat "$GUILD_HOME/.wait-cursor" 2>/dev/null || echo none)" "$qm_cursor"
+# no timeout: the wait does not give up empty; it stays quiet until the next event lands
+out=$("$GUILD" wait 1 --for nobody-here)
+has "a timeout still returns empty" "$out" "no events in 1s"
+( sleep 4; "$GUILD" status pa-tests working "quiet wake" >/dev/null 2>&1 ) &
+( sleep 40; pkill -f "wait --for pa-tests" ) & guard=$!
+out=$(GUILD_QUIET_AFTER=1 "$GUILD" wait --for pa-tests)
+kill $guard 2>/dev/null
+has "without a timeout it waits past the quiet point and wakes on the event" "$out" "quiet wake"
+has "a bad timeout is refused" "$("$GUILD" wait soon 2>&1)" "timeout must be seconds"
 has "the board joins them in one thread" "$(python3 "$REPO/bin/fleet.py" json)" "helper of pa"
 for s in pa-docs pa-tests pa; do "$GUILD" close $s --force >/dev/null 2>&1; done
 

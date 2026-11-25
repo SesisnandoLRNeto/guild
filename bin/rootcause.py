@@ -285,7 +285,7 @@ def cmd_bisect(a):
         r = subprocess.run(["git", "bisect", "run", sys.executable, os.path.abspath(__file__), PROBE,
                             state_path(slug), top], cwd=wt, capture_output=True, text=True)
         out = r.stdout + r.stderr
-        m = re.search(r"^([0-9a-f]{40}) is the first bad commit", out, re.M)
+        m = re.search(r"^([0-9a-f]{40}) is the first '?bad'? commit", out, re.M)
     if not m:
         print("bisect did not name a commit (some commits may not build). Last lines:")
         show_tail(out, 10)

@@ -99,6 +99,8 @@ check("a theory with a check that could disprove it is recorded", code == 0 and 
 
 code, out = sh(GUILD, "repro", "bisect", "--good", GOOD, cwd=WT, quest="sum")
 check("bisect names the commit that broke it", code == 0 and BAD[:8] in out)
+if not (code == 0 and BAD[:8] in out):
+    print("     bisect said (exit %s):\n" % code + "\n".join("     | " + l for l in out.splitlines()[-15:]))
 wts = git("worktree", "list", "--porcelain", cwd=R)
 check("bisect leaves no temporary worktree behind", "guild-repro-" not in wts)
 check("bisect leaves no bisect refs behind", git("for-each-ref", "refs/bisect", cwd=R) == ""

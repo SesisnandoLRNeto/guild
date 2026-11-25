@@ -54,7 +54,7 @@ guild repro new --cmd "<cmd>" [--with PATH] | facts | compare | bisect | theory 
 guild status <slug> <state> [note] [--no-wrapup] [--no-scenarios]
                                     set state: working|blocked|needs-decision|done|failed|stopped|planned
                                     (a code quest needs a wrap-up board before done; --no-wrapup opts out)
-guild wait [timeout-seconds] [--for slug,slug]
+guild wait [timeout-seconds] [--for slug,slug]   (no timeout: until the next event; quiet after 30 min)
                                     block until a new event arrives, then print it (default 1800s);
                                     --for waits only for those quests, with its own cursor
 guild helper <name> [--tier T] < brief   inside a quest: a helper quest on a branch from yours
@@ -1653,13 +1653,18 @@ cmd_ask() {
 }
 
 cmd_wait() { # [timeout] [--for slug,slug]
-  local timeout=1800 only="" key=""
+  # No timeout: wait for the next event, however long. After GUILD_QUIET_AFTER seconds
+  # with nothing (default 30 min) it goes quiet: checks every 10s instead of 2s and never
+  # returns empty, so the quartermaster is not woken just to start a new wait.
+  local timeout=0 only="" key="" quiet_after="${GUILD_QUIET_AFTER:-1800}" step=2
   while [ $# -gt 0 ]; do
     case "$1" in
       --for) only="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
       *) timeout="$1"; shift ;;
     esac
   done
+  case "$timeout" in ''|*[!0-9]*) die "guild wait: timeout must be seconds, got '$timeout'" ;; esac
   # A parent waiting for its helpers keeps its own cursor, so it never eats the
   # quartermaster's events (and the quartermaster still sees everything).
   [ -n "$only" ] && key="-$(echo "$only" | tr -c 'a-z0-9\n' '_')"
@@ -1682,8 +1687,9 @@ cmd_wait() { # [timeout] [--for slug,slug]
       fi
       [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
     fi
-    [ "$waited" -ge "$timeout" ] && { echo "wait: no events in ${timeout}s"; return 0; }
-    sleep 2; waited=$((waited + 2))
+    [ "$timeout" -gt 0 ] && [ "$waited" -ge "$timeout" ] && { echo "wait: no events in ${timeout}s"; return 0; }
+    [ "$timeout" = 0 ] && [ "$waited" -ge "$quiet_after" ] && step=10
+    sleep "$step"; waited=$((waited + step))
   done
 }
 

@@ -30,7 +30,7 @@ Before you brief a topic the guildmaster has history with (a past ticket, a pers
    EOF
    ```
    Slugs are short and clear, like `work-api-null-fix`.
-5. Keep exactly one `guild wait` running in the background (Bash with run_in_background) while any quest is active. When it returns, handle the events and start a new one. Never start it with output discarded.
+5. Keep exactly one `guild wait` running in the background (Bash with run_in_background) while any quest is active. When it returns, handle the events and start a new one. Never start it with output discarded. Start it with no timeout: it returns only when an event lands, and after 30 quiet minutes it goes quiet on its own, so you are never woken just to start a new wait. Do not add a timeout to keep a heartbeat.
 
 ## When an event arrives
 
