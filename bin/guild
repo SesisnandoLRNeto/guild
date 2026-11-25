@@ -58,7 +58,7 @@ guild wait [timeout-seconds] [--for slug,slug]   (no timeout: until the next eve
                                     block until a new event arrives, then print it (default 1800s);
                                     --for waits only for those quests, with its own cursor
 guild helper <name> [--tier T] < brief   inside a quest: a helper quest on a branch from yours
-guild qm new <name> [dir] | list | reset [name] | close <name>
+guild qm new <name> [dir] | list | reset [name] | heal | close <name>
                                     another quartermaster in its own tab; it sees only its own quests' events
 guild quest ... --machine NAME      run the quest on another machine over ssh (see guild machines)
 guild machines [list|check|sync]    the machines in local/machines.json, whether guild answers there
@@ -310,6 +310,43 @@ qm_open() { # name [dir]
 
 # A fresh conversation for a quartermaster. Everything on disk stays (quests, boards,
 # history); only its chat context starts over, and the new id is kept for guild up.
+# The first quartermaster's tab: the menu (guild watch) on the left, the quartermaster on the right,
+# resuming its conversation. Creates the session when there is none. With a message, it starts a
+# fresh conversation under the id in qm-session and says that message first.
+qm_main_open() { # dir [first message]
+  local dir="${1:-$HOME}" first="${2:-}" sid resume qm
+  if [ -n "$first" ]; then
+    resume="--session-id '$(cat "$GUILD_HOME/qm-session")' '$first'"
+  elif [ -s "$GUILD_HOME/qm-session" ]; then
+    resume="--resume '$(cat "$GUILD_HOME/qm-session")'"     # same conversation as before
+  else
+    # First reign: claude must be told the id, or there is nothing to resume later.
+    sid=$(uuidgen | tr 'A-Z' 'a-z'); echo "$sid" > "$GUILD_HOME/qm-session"
+    resume="--session-id '$sid'"
+  fi
+  qm="$(calm_env || true)GUILD_ROLE=qm GUILD_QM=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
+  local menu                                   # the menu pane's id: pane numbers start at 0 or 1 by config
+  if tm has-session -t "$SESSION" 2>/dev/null; then
+    menu=$(tm new-window -d -b -t "$SESSION:^" -n qm -c "$dir" -P -F '#{pane_id}' "guild watch; exec \$SHELL")
+  else
+    menu=$(tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" -P -F '#{pane_id}' "guild watch; exec \$SHELL")
+  fi
+  # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
+  tm split-window -d -h -l 76% -t "$SESSION:qm" -c "$dir" \
+    "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
+  tm set-option -p -t "$menu" @guild_sidebar 1
+}
+
+# The guild session is up but the quartermaster's tab is gone (closed by hand, a crash): bring it
+# back in the same conversation. guild up and the war table (once a minute) call this.
+qm_heal() { # [dir]
+  tm has-session -t "$SESSION" 2>/dev/null || return 0
+  [ -n "$(window_by_name qm)" ] && return 0
+  qm_main_open "${1:-$HOME}"
+  event quartermaster working "its tab was gone: reopened in the same conversation"
+  echo "quartermaster tab reopened"
+}
+
 qm_reset() { # name
   local name="$1" win sid pane first
   tm has-session -t "$SESSION" 2>/dev/null || die "no guild session; run 'guild up' first"
@@ -321,9 +358,18 @@ qm_reset() { # name
     [ -f "$GUILD_HOME/qms/$name.json" ] || die "no quartermaster $name (guild qm list)"
     python3 -c "import json,sys;p=sys.argv[1];d=json.load(open(p));d['session']=sys.argv[2];json.dump(d,open(p,'w'),indent=2)" "$GUILD_HOME/qms/$name.json" "$sid"
   fi
-  pane=$(content_pane "$(window_by_name "$win")")
-  [ -n "$pane" ] || die "no tab $win"
   first="You were just reset to a fresh context. Run guild roster and guild board list to see where things stand, read ~/.guild/lessons.md, then keep one guild wait running in the background while any quest is active."
+  # Look the pane up only when the tab exists: tmux reads an empty target as "the current pane",
+  # which would restart some other tab as the quartermaster.
+  local wid; wid=$(window_by_name "$win"); pane=""
+  [ -n "$wid" ] && pane=$(content_pane "$wid")
+  if [ -z "$pane" ] && [ "$name" = qm ]; then   # its tab is gone: open a new one, fresh
+    qm_main_open "$HOME" "$first"
+    event quartermaster working "context reset: a fresh conversation ($sid), in a new tab"
+    echo "quartermaster qm reset: fresh conversation in a new tab, quests untouched"
+    return
+  fi
+  [ -n "$pane" ] || die "no tab $win"
   tm respawn-pane -k -t "$pane" "$(calm_env | sed 's/^\(.\)/export \1/;s/ $/;/')GUILD_ROLE=qm GUILD_QM='$name' claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n '$( [ "$name" = qm ] && echo quartermaster || echo "quartermaster-$name")' --session-id '$sid' '$first'; exec \$SHELL"
   event "${name/#qm/quartermaster}" working "context reset: a fresh conversation ($sid)"
   echo "quartermaster $name reset: fresh conversation, quests untouched"
@@ -338,10 +384,11 @@ cmd_qm() {
          qm_open "$2" "${3:-}" ;;
     list) echo "qm (the first one)"; for f in "$GUILD_HOME"/qms/*.json; do [ -f "$f" ] && echo "$(basename "$f" .json)"; done ;;
     reset) qm_reset "${2:-qm}" ;;
+    heal) qm_heal ;;
     close) [ -n "${2:-}" ] || die "usage: guild qm close <name>"
            local w; w=$(window_by_name "qm-$2"); [ -n "$w" ] && tm kill-window -t "$w"
            rm -f "$GUILD_HOME/qms/$2.json"; echo "quartermaster $2 closed (its quests keep running; they report to the first qm now)" ;;
-    *) die "usage: guild qm new <name> [dir] | list | reset [name] | close <name>" ;;
+    *) die "usage: guild qm new <name> [dir] | list | reset [name] | heal | close <name>" ;;
   esac
 }
 
@@ -354,25 +401,10 @@ cmd_term() { # a plain terminal tab, in a folder
 cmd_up() {
   local dir="${1:-$HOME}"
   if ! tm has-session -t "$SESSION" 2>/dev/null; then
-    local sid resume=""
-    if [ -s "$GUILD_HOME/qm-session" ]; then
-      sid=$(cat "$GUILD_HOME/qm-session")
-      resume="--resume '$sid'"          # same conversation as before the restart
-    else
-      # First reign: claude must be told the id, or there is nothing to resume later.
-      sid=$(uuidgen | tr 'A-Z' 'a-z')
-      echo "$sid" > "$GUILD_HOME/qm-session"
-      resume="--session-id '$sid'"
-    fi
-    local qm="$(calm_env)GUILD_ROLE=qm GUILD_QM=qm claude --agent quartermaster --settings '$GUILD_HOME/qm-settings.json' -n quartermaster"
     calm_warn "$dir"
-    tm -f "$GUILD_REPO/config/guild.tmux.conf" new-session -d -s "$SESSION" -n qm -c "$dir" "guild watch; exec \$SHELL"
-    # If the stored session cannot be resumed (log gone), start a fresh one under a new id.
-    tm split-window -h -l 76% -t "$SESSION:qm" -c "$dir" \
-      "$qm $resume || { uuidgen | tr 'A-Z' 'a-z' > '$GUILD_HOME/qm-session'; $qm --session-id \"\$(cat '$GUILD_HOME/qm-session')\"; }; exec \$SHELL"
+    qm_main_open "$dir"
     cmd_layout
     [ -n "${GUILD_BOARD_NO_OPEN:-}" ] || cmd_opener install >/dev/null 2>&1 || true
-    tm set-option -p -t "$SESSION:qm.0" @guild_sidebar 1
     # The side menu and the campaign board cover what the deck showed; it stays one flag away.
     [ -n "${GUILD_DECK:-}" ] && command -v claude-deck >/dev/null && open_tab deck "$dir" "claude-deck; exec \$SHELL" --bg >/dev/null
     # The Jira watcher gets its own tab when jira.json says "watch": true, so you can see what it does.
@@ -384,6 +416,8 @@ cmd_up() {
     for f in "$GUILD_HOME"/qms/*.json; do   # the other quartermasters come back too, same conversations
       [ -f "$f" ] && qm_open "$(basename "$f" .json)" >/dev/null 2>&1
     done
+  else
+    qm_heal "$dir" >/dev/null               # the session is up but the quartermaster's tab is gone
   fi
   if [ -n "${TMUX:-}" ]; then tm switch-client -t "$SESSION"; else tm attach -t "$SESSION"; fi
 }
