@@ -352,17 +352,33 @@ GRADE_QUESTIONS = [
 ]
 
 
+def waive_questions(quest):
+    """The third path, shown only while the checklist is open: merge anyway, with a reason."""
+    if not checklist_open(quest):
+        return []
+    return [{"id": "waive", "title": "Merge without the checklist", "type": "multi", "required": False,
+             "options": [{"id": "waive", "label": "Merge without the checklist",
+                          "why": "you skip the validation checklist; your reason is kept with the grade"}]},
+            {"id": "waiver", "title": "Why can the checklist be skipped?", "type": "text", "required": False,
+             "placeholder": "One line, needed if you tick the box above"}]
+
+
 def grade_wrapup(quest, board, meta, decision):
     """Keep the grade beside the quest (it moves to the archive with it), log it, and when
     you ask for changes, hand your notes back to the adventurer."""
     ans = decision.get("answers", {})
     grade, verdict, msg = str(ans.get("grade", "")), ans.get("verdict", ""), decision.get("message", "")
     qdir = os.path.join(QUESTS, quest)
+    waived = decision.get("waived", "")
     if os.path.isdir(qdir):
+        g = {"grade": int(grade) if grade.isdigit() else None, "verdict": verdict, "message": msg,
+             "board": board, "title": meta.get("title", ""), "at": now()}
+        if waived:
+            g["waived"] = waived
         with open(os.path.join(qdir, "grade.json"), "w") as f:
-            json.dump({"grade": int(grade) if grade.isdigit() else None, "verdict": verdict, "message": msg,
-                       "board": board, "title": meta.get("title", ""), "at": now()}, f, indent=2)
-    note = f"{grade or '?'}/5" + (f", {verdict}" if verdict else "") + (f": {msg[:80]}" if msg else "")
+            json.dump(g, f, indent=2)
+    note = (f"{grade or '?'}/5" + (f", {verdict}" if verdict else "") + (f": {msg[:80]}" if msg else "")
+            + (f" [checklist {waived}]" if waived else ""))
     with open(EVENTS, "a") as f:
         f.write(f"{now()}\t{quest}\tgraded\t{note}\n")
     if verdict in ("merge", "split"):
@@ -389,6 +405,28 @@ def scenarios_mod():
     return scenarios
 
 
+def checklist_url(quest):
+    """The full link to a quest's checklist, so the refusal can be clicked."""
+    try:
+        port = int(open(PORT_FILE).read().strip() or 0)
+    except (OSError, ValueError):
+        port = 0
+    return f"http://127.0.0.1:{port}/q/{quest}/validate" if port else f"/q/{quest}/validate"
+
+
+def checklist_open(quest):
+    """True when the quest has a checklist that is not certified, so a merge is held back."""
+    s = scenarios_mod().summary(quest)
+    return bool(s["exists"] and not s["certified"])
+
+
+def waive_reason(answers):
+    """The one-line reason for merging without the checklist, "" when the guildmaster did not ask to waive it."""
+    if "waive" not in (answers.get("waive") or []):
+        return ""
+    return str(answers.get("waiver", "")).strip()
+
+
 def merge_blocked(quest, answers):
     """Why a "ready to merge" verdict cannot be accepted yet, or "" when it can."""
     if answers.get("verdict") != "merge":
@@ -397,20 +435,36 @@ def merge_blocked(quest, answers):
     s = sc.summary(quest)
     if not s["exists"] or s["certified"]:
         return ""
+    if "waive" in (answers.get("waive") or []):
+        return "" if waive_reason(answers) else "Merging without the checklist needs a one-line reason. Write it, or run the checklist."
+    link = checklist_url(quest)
     if s["stale"]:
         return (f"Not ready to merge yet: the validation certificate is for an older commit and the branch changed "
-                f"since. Run the checklist again at /q/{quest}/validate.")
+                f"since. Run the checklist again at {link} or tick \"Merge without the checklist\" and say why.")
     return (f"Not ready to merge yet: the validation checklist has {s['fail']} failed and {s['open']} not run "
-            f"(of {s['total']}). Run it at /q/{quest}/validate, or pick \"needs changes\".")
+            f"(of {s['total']}). Run it at {link}, tick \"Merge without the checklist\" and say why, or pick \"needs changes\".")
+
+
+def waive_checklist(quest, answers):
+    """Write scenarios.waived for a merge the guildmaster approved without the checklist. Returns the note."""
+    reason = waive_reason(answers)
+    if not reason or answers.get("verdict") != "merge" or not checklist_open(quest):
+        return ""
+    note = f"waived by the guildmaster {datetime.date.today().isoformat()}: {reason}"
+    with open(os.path.join(QUESTS, quest, "scenarios.waived"), "w") as f:
+        f.write(note + "\n")
+    return note
 
 
 def answer_board(quest, board, payload):
     """Write the guildmaster's answer; the waiting adventurer picks it up with `guild board wait`."""
     d = board_dir(quest, board)
+    waived = ""
     if json.load(open(os.path.join(d, "board.json"))).get("wrapup"):
         why = merge_blocked(quest, payload.get("answers", {}))
         if why:
             raise ValueError(why)
+        waived = waive_checklist(quest, payload.get("answers", {}))
     decision = {
         "answers": payload.get("answers", {}),
         "message": payload.get("message", ""),
@@ -418,6 +472,8 @@ def answer_board(quest, board, payload):
         "ended": bool(payload.get("ended")),
         "at": now(),
     }
+    if waived:
+        decision["waived"] = waived
     with open(os.path.join(d, "decision.json"), "w") as f:
         json.dump(decision, f, indent=2)
     meta = json.load(open(os.path.join(d, "board.json")))
@@ -1254,7 +1310,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             questions = json.load(open(qpath)).get("questions", [])
         waiting = ""
         if meta.get("wrapup"):                  # a finished piece of work: you grade it first
-            questions = GRADE_QUESTIONS + questions
+            questions = GRADE_QUESTIONS + waive_questions(quest) + questions
             if quest_state(quest) not in ("done", "failed"):
                 questions, waiting = [], ("The adventurer has not reported done yet. Grading and the next "
                                           "step open here when the quest ends.")

@@ -105,22 +105,35 @@ def check(data, stage, plan=None):
 
 
 CSS = """<style>
-.gim{margin:18px 0;padding:16px 18px;border:1px solid #c9b78f;border-radius:6px;background:#fffaf0;color:#2b2418;font:15px/1.45 system-ui,sans-serif}
-.gim h2{margin:0 0 4px;font-size:18px}
-.gim .gim-sum{margin:0 0 12px;color:#5b4f3a}
-.gim .gim-sum b{padding:1px 7px;border-radius:9px;font-size:12px;margin-right:4px}
-.gim .gim-row{display:grid;grid-template-columns:78px 1fr;gap:4px 12px;padding:10px 0;border-top:1px solid #e6dcc3}
-.gim .lv{align-self:start;text-align:center;font-weight:700;font-size:12px;padding:3px 0;border-radius:4px;letter-spacing:.04em}
-.gim .high{background:#b3261e;color:#fff}.gim .medium{background:#e0a100;color:#241a00}.gim .low{background:#d9d2c0;color:#3d3627}
+/* Uses the page's own font, headings and colors: parchment cards in light, dark stone in the realm. */
+.gim{margin:6px 0 18px}
+.gim .gim-sum{color:var(--dim);font-size:14px;margin:0 0 10px}
+.gim .n{font-variant:small-caps;letter-spacing:.04em;font-weight:600;margin-right:8px;white-space:nowrap}
+.gim .n::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px;background:currentColor}
+.gim .n.high{color:#a3361f}.gim .n.medium{color:#9a6a0c}.gim .n.low{color:#7a6c52}.gim .n.surprise{color:#a3361f}
+.gim .gim-row{display:grid;grid-template-columns:84px 1fr;gap:4px 14px;margin:0 0 8px;padding:10px 14px;
+  background:rgba(255,250,235,.6);border:1px solid var(--line);border-left:4px solid #9a8b72;border-radius:4px}
+.gim .gim-row.high{border-left-color:#a3361f}.gim .gim-row.medium{border-left-color:#c08a1a}.gim .gim-row.dropped{opacity:.7}
+.gim .lv{font-variant:small-caps;letter-spacing:.06em;font-weight:700;font-size:14px;padding-top:1px}
+.gim .gim-row.high .lv{color:#a3361f}.gim .gim-row.medium .lv{color:#9a6a0c}.gim .gim-row.low .lv,.gim .gim-row.dropped .lv{color:#7a6c52}
 .gim .area{font-weight:600}
-.gim .tag{font-size:11px;font-weight:700;margin-left:6px;padding:1px 6px;border-radius:3px;vertical-align:2px}
-.gim .tag.surprise{background:#b3261e;color:#fff}.gim .tag.untouched{background:#efe3c4;color:#5b4f3a}.gim .tag.new{background:#2e6b3a;color:#fff}
-.gim .ba{margin:3px 0}.gim .ba span{color:#7a6c52}
-.gim .meta{color:#5b4f3a;font-size:13px}
-.gim .why{color:#8f1d16;font-size:13px}
-.gim .noproof{color:#8f1d16}
-.gim .dropped{color:#7a6c52;text-decoration:line-through}
-@media (max-width:560px){.gim .gim-row{grid-template-columns:1fr}.gim .lv{justify-self:start;padding:3px 10px}}
+.gim .tag{font-variant:small-caps;font-size:12.5px;font-weight:600;margin-left:8px;padding:0 6px;border:1px solid currentColor;border-radius:3px;white-space:nowrap}
+.gim .tag.surprise{color:#a3361f}.gim .tag.untouched{color:#7a6c52}
+.gim .ba{margin:3px 0;font-size:14.5px}.gim .ba span{font-variant:small-caps;color:var(--dim)}
+.gim .meta{color:var(--dim);font-size:13.5px}
+.gim .why,.gim .noproof{color:#a3361f;font-size:13.5px}
+.gim .area.gone{text-decoration:line-through}
+html.realm.rm-dark .gim .gim-row{background:linear-gradient(180deg,#241d2b,#17121c);border-color:#4a3f52;color:var(--rm-text);
+  box-shadow:inset 0 0 0 1px rgba(217,164,65,.10),0 6px 14px rgba(0,0,0,.45)}
+html.realm.rm-dark .gim .gim-row.high{border-left-color:#e0573f}html.realm.rm-dark .gim .gim-row.medium{border-left-color:var(--rm-gold)}
+html.realm.rm-dark .gim .gim-row.low,html.realm.rm-dark .gim .gim-row.dropped{border-left-color:#a8987a}
+html.realm.rm-dark .gim .gim-row.high .lv,html.realm.rm-dark .gim .n.high,html.realm.rm-dark .gim .n.surprise,
+html.realm.rm-dark .gim .tag.surprise,html.realm.rm-dark .gim .why,html.realm.rm-dark .gim .noproof{color:#e0573f}
+html.realm.rm-dark .gim .gim-row.medium .lv,html.realm.rm-dark .gim .n.medium{color:#f3cf6c}
+html.realm.rm-dark .gim .gim-row.low .lv,html.realm.rm-dark .gim .gim-row.dropped .lv,html.realm.rm-dark .gim .n.low,
+html.realm.rm-dark .gim .tag.untouched{color:#a8987a}
+html.realm.rm-dark .gim .ba span,html.realm.rm-dark .gim .meta,html.realm.rm-dark .gim .gim-sum{color:#a8987a}
+@media (max-width:560px){.gim .gim-row{grid-template-columns:1fr}}
 </style>"""
 
 
@@ -130,7 +143,7 @@ def _counts(rows):
 
 
 def _count_html(c):
-    return " ".join(f'<b class="{lv}">{c[lv]} {lv}</b>' for lv in LEVELS if c[lv]) or "nothing"
+    return "".join(f'<span class="n {lv}">{c[lv]} {lv}</span>' for lv in LEVELS if c[lv]) or "nothing"
 
 
 def render(data, plan=None, stage="plan"):
@@ -146,11 +159,11 @@ def render(data, plan=None, stage="plan"):
         surprises = sum(1 for r in rows if r.get("id") not in before)
         head = "What this changed"
         summary = (f'Planned: {_count_html(_counts(list(before.values())))} &nbsp;·&nbsp; Shipped: {_count_html(_counts(rows))}'
-                   + (f' &nbsp;·&nbsp; <b class="high">{surprises} not in the plan</b>' if surprises else ""))
+                   + (f' &nbsp;·&nbsp; <span class="n surprise">{surprises} not in the plan</span>' if surprises else ""))
     elif stage == "done":
         head, summary = "What this changed", f"Shipped: {_count_html(_counts(rows))} (no plan map to compare against)"
     else:
-        head, summary = "What this will change", f"Expected: {_count_html(_counts(rows))}. Approving the plan agrees with this impact."
+        head, summary = "What this will change", f"Expected: {_count_html(_counts(rows))} &nbsp;·&nbsp; approving the plan agrees with this impact."
     out = [CSS, f'<section class="gim guild-impactmap" aria-label="{head}"><h2>{head}</h2><p class="gim-sum">{summary}</p>']
     for r in rows:
         lv = r.get("level") if r.get("level") in LEVELS else "low"
@@ -168,7 +181,7 @@ def render(data, plan=None, stage="plan"):
             proof = (f'<div class="meta">Proof: {esc(r["proof"])}</div>' if r.get("proof")
                      else '<div class="meta noproof">No proof given</div>')
         why = f'<div class="why">Why it changed anyway: {esc(r["surprise"])}</div>' if r.get("surprise") and stage == "done" else ""
-        out.append(f'<div class="gim-row"><div class="lv {lv}">{lv.upper()}</div><div>'
+        out.append(f'<div class="gim-row {lv}"><div class="lv">{lv}</div><div>'
                    f'<div class="area">{esc(r.get("area"))}{tags}</div>{ba}'
                    + (f'<div class="meta">{" &nbsp;·&nbsp; ".join(m for m in meta if m)}</div>' if any(meta) else "")
                    + proof + why + "</div></div>")
@@ -176,7 +189,7 @@ def render(data, plan=None, stage="plan"):
         for d in data.get("dropped") or []:
             if isinstance(d, dict):
                 area = (before or {}).get(d.get("id"), {}).get("area") or d.get("id")
-                out.append(f'<div class="gim-row"><div class="lv low">DROPPED</div><div><div class="area dropped">{esc(area)}</div>'
+                out.append(f'<div class="gim-row dropped"><div class="lv">dropped</div><div><div class="area gone">{esc(area)}</div>'
                            f'<div class="meta">Planned but not shipped: {esc(d.get("why"))}</div></div></div>')
     out.append("</section>")
     return "".join(out)
