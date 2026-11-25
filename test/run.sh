@@ -40,6 +40,8 @@ cleanup() {
   tmux -L "$GUILD_TMUX_SOCKET" kill-server 2>/dev/null
   # only the suite's own war table: a bare pkill would take down your real one too
   [ -f "$GUILD_HOME/.wartable-pid" ] && kill "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null
+  # the port is this run's own, so whatever still listens on it is the suite's daemon
+  lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null
   rm -rf "$TMP"
 }
 trap cleanup EXIT
