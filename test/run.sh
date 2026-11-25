@@ -1593,6 +1593,21 @@ JSON
 wbc=$(ls "$GUILD_HOME/quests/cur/boards" | tail -1)
 out=$(curl -s -X POST "http://127.0.0.1:$PORT/b/cur/$wbc/reply" -d '{"answers":{"grade":"4","verdict":"merge"}}')
 case "$out" in *"Not ready to merge"*) bad "a waived checklist does not block the merge" "$out" ;; *) ok "a waived checklist does not block the merge" ;; esac
+nw=$(for b in "$GUILD_HOME/quests/cur/boards"/*/; do grep -l '"wrapup": true' "$b/board.json"; done 2>/dev/null | wc -l | tr -d ' ')
+is "posting the wrap-up again replaces the ungraded one" "$nw" "1"
+[ -d "$GUILD_HOME/quests/cur/boards-superseded" ] && ok "the old one is kept aside" || bad "the old one is kept aside"
+# a page that points outside its folder (../shots/after.png) gets those files copied in
+mkdir -p "$TMP/wq/page" "$TMP/wq/shots"; printf 'PNG' > "$TMP/wq/shots/after.png"
+printf '<html><body><img src="../shots/after.png" alt="after"><img src="https://x.test/a.png"><a href="/q/cur/validate">v</a></body></html>' > "$TMP/wq/page/index.html"
+GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wq/page/index.html" --assets --wrapup --title "pics" --no-open >/dev/null 2>&1
+pb=$(ls -t "$GUILD_HOME/quests/cur/boards" | head -1)
+pg=$(cat "$GUILD_HOME/quests/cur/boards/$pb/content.html")
+has "an image outside the page folder is pointed inside the board" "$pg" 'src="_files/shots-after.png"'
+is "and is served" "$(curl -s "http://127.0.0.1:$PORT/b/cur/$pb/_files/shots-after.png")" "PNG"
+has "a web image is left alone" "$pg" 'src="https://x.test/a.png"'
+has "a war table link is left alone" "$pg" 'href="/q/cur/validate"'
+nw=$(for b in "$GUILD_HOME/quests/cur/boards"/*/; do grep -l '"wrapup": true' "$b/board.json"; done 2>/dev/null | wc -l | tr -d ' ')
+is "a graded wrap-up is history and stays" "$nw" "2"
 "$GUILD" close cur --force >/dev/null 2>&1
 
 # the war table from a phone: a second listener that needs the key; pushes carry no details
