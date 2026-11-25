@@ -314,6 +314,8 @@ def with_glance(body, quest, board=None):
             sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
             import impactmap                        # what shipped, by business area, against the plan
             strip += impactmap.render(impactmap.load(quest), impactmap.planned(quest), "done").encode()
+            import followups                        # review fixes, conflicts, CI: no wrap-up of their own
+            strip += followups.render(quest).encode()
             strip += standing_html(quest).encode()
     except Exception:
         return body

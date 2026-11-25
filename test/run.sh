@@ -1435,6 +1435,39 @@ out=$(echo "Bring the branch up to date with main; resolve the conflicts in rele
 has "a merge brief skips the card too" "$out" "the brief says housekeeping"
 out=$(echo "Bring the branch up to date with main" | GUILD_NO_WHY= "$GUILD" quest abc-8-sync --repo "$REPO_A" --why 2>&1)
 has "--why forces the card" "$out" "why card: on the docket"
+has "a housekeeping prompt says how it finishes" "$(cat "$GUILD_HOME/quests/pr12-review-fix/prompt.md")" "Fixed after this report"
+# housekeeping that committed code ends without a wrap-up; its note joins the PR's own wrap-up
+PQ="$GUILD_HOME/quests/pr12-owner"; mkdir -p "$PQ/boards/100000"
+printf 'done\thttps://github.com/o/r/pull/12\t2026-01-01T00:00:00\n' > "$PQ/status"
+echo '{"slug": "pr12-owner"}' > "$PQ/meta.json"
+echo '{"id": "100000", "quest": "pr12-owner", "title": "PR 12", "wrapup": true, "created": "2026-01-01T00:00:00"}' > "$PQ/boards/100000/board.json"
+echo '<html><body><p>owner page</p></body></html>' > "$PQ/boards/100000/content.html"
+WTH=$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/pr12-review-fix/meta.json'))['worktree'])")
+echo r > "$WTH/review.txt"; git -C "$WTH" add review.txt; git -C "$WTH" -c user.email=t@t -c user.name=t commit -qm "review items"
+out=$("$GUILD" status pr12-review-fix done "Rule change: a past start date now blocks the save, https://github.com/o/r/pull/12" 2>&1)
+hasnt "housekeeping that committed code needs no wrap-up page" "$out" "needs a wrap-up board"
+is "and reports done" "$(cut -f1 "$GUILD_HOME/quests/pr12-review-fix/status")" "done"
+has "its note joins the PR's own wrap-up" "$(cat "$PQ/followups.json")" "a past start date now blocks the save"
+owner=$(curl -s "http://127.0.0.1:$PORT/b/pr12-owner/100000/content.html")
+has "the wrap-up shows the fixes after it" "$owner" "Fixed after this report"
+has "and marks a rule change" "$owner" '<div class="lv">rule</div>'
+has "the owner quest logs the follow-up" "$(tail -3 "$GUILD_HOME/events.log")" "fixed after the wrap-up by pr12-review-fix"
+rm -rf "$PQ"
+# an errand runs something and reports: no plan, no contract, no checklist, no wrap-up
+out=$(echo "Run the full test suite locally and report what fails" | GUILD_NO_WHY= GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= "$GUILD" quest suite-check --repo "$REPO_A" 2>&1)
+has "a brief that opens with running the tests is an errand" "$out" "errand: the brief says errand"
+has "meta keeps the kind" "$(cat "$GUILD_HOME/quests/suite-check/meta.json")" '"kind": "errand"'
+has "the errand prompt says how it ends" "$(cat "$GUILD_HOME/quests/suite-check/prompt.md")" "This is an errand"
+hasnt "and it starts with no plan phase" "$(cat "$GUILD_HOME/quests/suite-check/prompt.md")" "You start in the plan phase"
+out=$("$GUILD" status suite-check done 2>&1)
+has "an errand's done needs its result" "$out" "an errand ends in its result"
+out=$("$GUILD" status suite-check done "142 passed, 2 failed in InviteIT" 2>&1)
+is "and with it, done needs nothing else" "$(cut -f1 "$GUILD_HOME/quests/suite-check/status")" "done"
+out=$(echo "Add the pay rate field. Test locally after." | GUILD_NO_WHY= GUILD_NO_PLAN= GUILD_NO_ACCEPTANCE= "$GUILD" quest pay-field --repo "$REPO_A" --no-acceptance "test" 2>&1)
+hasnt "a feature that mentions testing locally is not an errand" "$out" "errand:"
+out=$(echo x | "$GUILD" quest e2 --repo "$REPO_A" --errand --scout 2>&1)
+has "an errand is its own kind" "$out" "pick one"
+"$GUILD" close suite-check --force >/dev/null 2>&1; "$GUILD" close pay-field --force >/dev/null 2>&1
 "$GUILD" close pr12-review-fix --force >/dev/null 2>&1; "$GUILD" close abc-7-sync --force >/dev/null 2>&1; "$GUILD" close abc-8-sync --force >/dev/null 2>&1
 has "the docket lists it" "$(curl -s http://127.0.0.1:$PORT/docket.json)" "Why card: whyq"
 has "a board keeps your picks as a draft until they are sent" "$(curl -s "http://127.0.0.1:$PORT/b/whyq/$wb/")" "restoreDraft();"
