@@ -16,7 +16,8 @@ export HOME="$TMP/home"
 export GUILD_HOME="$HOME/.guild"
 export GUILD_WORKTREES="$TMP/worktrees"
 export GUILD_TMUX_SOCKET="guild-test"
-export GUILD_BOARD_PORT="4899"
+PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"   # a free port per run, so parallel runs never clash
+export GUILD_BOARD_PORT="$PORT"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
 export GUILD_NO_WHY="1"          # the Why card has its own test below
 export GUILD_NO_ACCEPTANCE="test fixture"   # briefs here are one-liners; the refusal has its own test
@@ -142,7 +143,7 @@ has "the count line reads" "$("$GUILD" roster --count)" "working"
 # ── the war table ─────────────────────────────────────────────────────────────
 section "war table"
 out=$(GUILD_QUEST=alpha "$GUILD" ask "Which name?" --option "a=Alpha: first" --option "b=Beta: second" --recommend b --no-open 2>&1)
-has "ask prints a url" "$out" "http://127.0.0.1:4899/b/alpha/"
+has "ask prints a url" "$out" "http://127.0.0.1:$PORT/b/alpha/"
 board=$(ls "$GUILD_HOME/quests/alpha/boards" | head -1)
 q=$(python3 -c "import json;q=json.load(open('$GUILD_HOME/quests/alpha/boards/$board/decisions.json'))['questions'][0];print(q['recommended'], [o['id'] for o in q['options']])")
 has "both options survive" "$q" "['a', 'b']"
@@ -152,7 +153,7 @@ hasnt "the page css is not a format string" "$page" "{{"
 has "the page shows the options" "$page" "Alpha"
 is "the quest is waiting on you" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "needs-decision"
 
-curl -s -X POST "http://127.0.0.1:4899/b/alpha/$board/reply" -d '{"answers":{"choice":"a"},"message":"go with alpha"}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$board/reply" -d '{"answers":{"choice":"a"},"message":"go with alpha"}' >/dev/null
 sleep 1
 is "answering puts the quest back to work" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 has "the answer is stored" "$(cat "$GUILD_HOME/quests/alpha/boards/$board/decision.json")" "go with alpha"
@@ -167,15 +168,15 @@ is "the refused ask leaves no board" "$(ls "$GUILD_HOME/quests/alpha/boards" | w
 out=$(GUILD_QUEST=alpha "$GUILD" ask "Draw the checkbox column Body.png shows?" --option "a=No" --option "b=Yes" --image "$TMP/Html → Body.png=Option A frame" --no-open 2>&1)
 pb=$(ls -t "$GUILD_HOME/quests/alpha/boards" | head -1)
 has "the picture is on the board" "$(cat "$GUILD_HOME/quests/alpha/boards/$pb/content.html")" '<img src="pics/01-html-body.png" alt="Option A frame">'
-has "the picture is served beside the page" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/b/alpha/$pb/pics/01-html-body.png")" "200"
-curl -s -X POST "http://127.0.0.1:4899/b/alpha/$pb/reply" -d '{"answers":{"choice":"a"},"message":"no boxes"}' >/dev/null
+has "the picture is served beside the page" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/b/alpha/$pb/pics/01-html-body.png")" "200"
+curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$pb/reply" -d '{"answers":{"choice":"a"},"message":"no boxes"}' >/dev/null
 sleep 1
 
 # a decision cannot be escalated as plain text
 "$GUILD" status alpha needs-decision "Should we rename the module?" >/dev/null 2>&1
 boards=$(ls "$GUILD_HOME/quests/alpha/boards" | wc -l | tr -d ' ')
 is "plain-text escalation builds a board" "$boards" "3"
-out=$(curl -s "http://127.0.0.1:4899/b/alpha/$board/../../../etc/passwd")
+out=$(curl -s "http://127.0.0.1:$PORT/b/alpha/$board/../../../etc/passwd")
 hasnt "the server refuses path traversal" "$out" "root:"
 
 # ── the trial gate ────────────────────────────────────────────────────────────
@@ -216,12 +217,12 @@ cat > "$TMP/wrap.html" <<'HTML'
 <!doctype html><meta charset=utf-8><h1>What changed</h1><p>before and after</p>
 HTML
 out=$(GUILD_QUEST=alpha "$GUILD" board open --html "$TMP/wrap.html" --wrapup --title "alpha shipped" --no-open 2>&1)
-has "a wrap-up board can be opened" "$out" "http://127.0.0.1:4899/b/alpha/"
+has "a wrap-up board can be opened" "$out" "http://127.0.0.1:$PORT/b/alpha/"
 is "a wrap-up does not park the quest on a decision" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 wb0=$(ls "$GUILD_HOME/quests/alpha/boards" | tail -1)
-has "before done, the wrap-up has no grading panel" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/")" "has not reported done yet"
+has "before done, the wrap-up has no grading panel" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb0/")" "has not reported done yet"
 # the quest's own note may show under Underway; the wrap-up board must not be a docket item
-items=$(curl -s "http://127.0.0.1:4899/docket.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" | ".join(i.get("title","") for i in d.get("open",[])+d.get("held",[])))')
+items=$(curl -s "http://127.0.0.1:$PORT/docket.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" | ".join(i.get("title","") for i in d.get("open",[])+d.get("held",[])))')
 case "$items" in *"alpha shipped"*) bad "and it is not on the docket" "listed" ;; *) ok "and it is not on the docket" ;; esac
 # the impact map: what shipped, by business area, against what the plan expected
 out=$("$GUILD" status alpha done "shipped it" 2>&1)
@@ -243,7 +244,7 @@ cat > "$GUILD_HOME/quests/alpha/impact.json" <<'JSON'
           {"id": "msg", "level": "medium", "area": "Closing error text", "after": "says why", "who": "PMs", "surprise": "found in testing"}],
  "dropped": [{"id": "export", "why": "it already worked"}]}
 JSON
-wpage=$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/content.html")
+wpage=$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb0/content.html")
 has "the wrap-up opens with what this changed" "$wpage" "<h2>What this changed</h2>"
 has "against what the plan expected" "$wpage" "Planned: "
 has "a surprise shows in red" "$wpage" '<span class="tag surprise">not in the plan</span>'
@@ -259,19 +260,19 @@ JSON
 "$GUILD" status alpha done "shipped it" >/dev/null 2>&1
 is "with a wrap-up and scenarios, done goes through" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
 # the reel: what the quest did, as scenes the pixel-art player tells
-reel=$(curl -s "http://127.0.0.1:4899/q/alpha/reel.json")
+reel=$(curl -s "http://127.0.0.1:$PORT/q/alpha/reel.json")
 has "the reel opens on the quest" "$reel" '"kind": "title"'
 has "and ends with where it stands" "$reel" '"kind": "result"'
 has "the proofs come from the checklist" "$reel" '"what": "Your validation"'
-has "the player page is served" "$(curl -s "http://127.0.0.1:4899/q/alpha/reel")" "Save as video"
-has "the wrap-up offers the reel" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/")" "/q/alpha/reel"
+has "the player page is served" "$(curl -s "http://127.0.0.1:$PORT/q/alpha/reel")" "Save as video"
+has "the wrap-up offers the reel" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb0/")" "/q/alpha/reel"
 echo '{"title": "Alpha, told by its knight", "scenes": [{"kind": "pain", "say": "Nobody could find alpha."}, {"kind": "note", "title": "A word", "say": "One more thing."}]}' > "$GUILD_HOME/quests/alpha/reel.json"
-reel=$(curl -s "http://127.0.0.1:4899/q/alpha/reel.json")
+reel=$(curl -s "http://127.0.0.1:$PORT/q/alpha/reel.json")
 has "an adventurer's reel.json tells it in its own words" "$reel" "Nobody could find alpha."
 has "and adds its own scenes" "$reel" "One more thing."
-is "an unknown quest has no reel" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/q/nope/reel.json")" "404"
+is "an unknown quest has no reel" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/q/nope/reel.json")" "404"
 has "done announces the wrap-up" "$(tail -3 "$GUILD_HOME/events.log")" "wrap-up ready"
-vurl="http://127.0.0.1:4899/q/alpha/validate"
+vurl="http://127.0.0.1:$PORT/q/alpha/validate"
 has "the war table shows the checklist" "$(curl -s "$vurl")" "Call the endpoint."
 has "with the command to copy and what to expect" "$(curl -s "$vurl")" '<p class="expect"><b>Expect</b> 200 and <code>ok</code></p>'
 has "a fail needs a note" "$(curl -s -X POST "$vurl/mark" -d '{"id":"A1","status":"fail"}')" "needs a note"
@@ -282,18 +283,18 @@ import json,os,sys
 root=sys.argv[1]
 for b in sorted(os.listdir(root)):
     if json.load(open(os.path.join(root,b,'board.json'))).get('wrapup'): print(b)" "$GUILD_HOME/quests/alpha/boards" | tail -1)
-has "a wrap-up asks for a grade" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" '"id": "grade"'
-has "a board page wears the realm" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'classList.add("realm","rm-dark")'
-has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" 'class="gg-party rm-party"'
-out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}')
+has "a wrap-up asks for a grade" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb/")" '"id": "grade"'
+has "a board page wears the realm" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb/content.html")" 'classList.add("realm","rm-dark")'
+has "with the adventurer on the glance" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb/content.html")" 'class="gg-party rm-party"'
+out=$(curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}')
 has "ready to merge waits for the validation" "$out" "Not ready to merge yet"
 [ -f "$GUILD_HOME/quests/alpha/grade.json" ] && bad "and nothing is recorded" "graded anyway" || ok "and nothing is recorded"
-has "the refusal links to the checklist" "$out" "http://127.0.0.1:4899/q/alpha/validate"
-has "and the page offers to merge without it" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/")" "Merge without the checklist"
-out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge","waive":["waive"],"waiver":"  "},"message":""}')
+has "the refusal links to the checklist" "$out" "http://127.0.0.1:$PORT/q/alpha/validate"
+has "and the page offers to merge without it" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb/")" "Merge without the checklist"
+out=$(curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge","waive":["waive"],"waiver":"  "},"message":""}')
 has "a waiver without a reason is refused" "$out" "needs a one-line reason"
 [ -f "$GUILD_HOME/quests/alpha/scenarios.waived" ] && bad "and nothing is waived" "waived anyway" || ok "and nothing is waived"
-out=$(curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge","waive":["waive"],"waiver":"no docker on this Mac, CI is green"},"message":""}')
+out=$(curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge","waive":["waive"],"waiver":"no docker on this Mac, CI is green"},"message":""}')
 is "merge with a waiver reason is accepted and recorded" "$(echo "$out" | grep -c error)$(grep -c 'no docker on this Mac' "$GUILD_HOME/quests/alpha/scenarios.waived")$(grep -c 'waived by the guildmaster' "$GUILD_HOME/quests/alpha/grade.json")" "011"
 has "and the graded event carries the waiver" "$(grep 'alpha	graded' "$GUILD_HOME/events.log" | tail -1)" "no docker on this Mac"
 rm -f "$GUILD_HOME/quests/alpha/scenarios.waived" "$GUILD_HOME/quests/alpha/grade.json" "$GUILD_HOME/quests/alpha/boards/$wb/decision.json"   # the checklist is run for real below
@@ -304,13 +305,13 @@ has "the checklist has a way back to the report" "$(curl -s "$vurl")" "Back to t
 has "war table pages are never kept stale by the browser" "$(curl -s -D - -o /dev/null "$vurl")" "Cache-Control: no-store"
 has "and the event is logged" "$(cat "$GUILD_HOME/events.log")" "alpha	validated"
 has "the export for the team carries the guildmaster's results" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/scenarios.py" export alpha --out "$TMP/alpha-v.html" && cat "$TMP/alpha-v.html")" "Guildmaster: <b>skip</b>, no auth locally"
-curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$wb/reply" -d '{"answers":{"grade":"4","verdict":"merge"},"message":"clean"}' >/dev/null
 is "the grade is kept beside the quest" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/alpha/grade.json'))['grade'])")" "4"
 is "grading does not reopen a finished quest" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "done"
 has "the grade is in the history" "$(tail -1 "$GUILD_HOME/events.log")" "graded"
 has "the retro reports it by model" "$(GUILD_REPO="$REPO" python3 "$REPO/bin/ledger.py" retro --json)" '"avg": 4.0'
 rm -f "$GUILD_HOME/quests/alpha/boards/$wb/decision.json"
-curl -s -X POST "http://127.0.0.1:4899/b/alpha/$wb/reply" -d '{"answers":{"grade":"2","verdict":"changes"},"message":"the edge case is missing"}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/alpha/$wb/reply" -d '{"answers":{"grade":"2","verdict":"changes"},"message":"the edge case is missing"}' >/dev/null
 is "asking for changes puts the quest back to work" "$(cut -f1 "$GUILD_HOME/quests/alpha/status")" "working"
 "$GUILD" status alpha working "carrying on" >/dev/null   # later sections need it live
 echo fix > "$WT/fix.txt"; git -C "$WT" add fix.txt; git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "fix the edge case"
@@ -336,18 +337,18 @@ is "a diff against the last commit has the right rows" "$(echo "$out" | python3 
 out=$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" diff alpha room.py)
 is "against the base, a new file is all additions" "$(echo "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["add"], d["del"])')" "3 0"
 has "a path outside the worktree is refused" "$(GUILD_HOME=$GUILD_HOME python3 "$REPO/bin/files.py" show alpha ../../etc/passwd 2>/dev/null)" "no such file"
-has "a path that walks out through the worktree is refused" "$(curl -s "http://127.0.0.1:4899/q/alpha/files/show?path=room.py/../../../../etc/passwd")" "no such file"
-has "the war table serves the map room" "$(curl -s "http://127.0.0.1:4899/q/alpha/files")" "The Map Room"
-has "and its file list" "$(curl -s "http://127.0.0.1:4899/q/alpha/files.json")" '"room.py"'
+has "a path that walks out through the worktree is refused" "$(curl -s "http://127.0.0.1:$PORT/q/alpha/files/show?path=room.py/../../../../etc/passwd")" "no such file"
+has "the war table serves the map room" "$(curl -s "http://127.0.0.1:$PORT/q/alpha/files")" "The Map Room"
+has "and its file list" "$(curl -s "http://127.0.0.1:$PORT/q/alpha/files.json")" '"room.py"'
 has "the campaign card links the map room" "$(python3 "$REPO/bin/fleet.py" json)" "/q/alpha/files"
-has "and the wrap-up's glance has a Files tile" "$(curl -s "http://127.0.0.1:4899/b/alpha/$wb/content.html")" "/q/alpha/files"
+has "and the wrap-up's glance has a Files tile" "$(curl -s "http://127.0.0.1:$PORT/b/alpha/$wb/content.html")" "/q/alpha/files"
 git -C "$WT" checkout -q -- room.py     # leave the worktree clean for the sections below
 
 # Pass all: one click to mark everything still to run, for testing the page itself
 mkdir -p "$GUILD_HOME/quests/pall"
 echo '{"slug":"pall","repo":"/tmp/none","worktree":"/tmp/none"}' > "$GUILD_HOME/quests/pall/meta.json"
 echo '{"title":"pall","groups":[{"id":"A","title":"x","scenarios":[{"id":"A1","do":"one","expect":"ok"},{"id":"A2","do":"two","expect":"ok"},{"id":"A3","do":"three","expect":"ok"}]}]}' > "$GUILD_HOME/quests/pall/scenarios.json"
-purl="http://127.0.0.1:4899/q/pall/validate"
+purl="http://127.0.0.1:$PORT/q/pall/validate"
 has "the checklist has a Pass all button" "$(curl -s "$purl")" 'id="passall"'
 curl -s -X POST "$purl/mark" -d '{"id":"A2","status":"fail","note":"it broke"}' >/dev/null
 out=$(curl -s -X POST "$purl/markall" -d '{}')
@@ -487,15 +488,15 @@ has "a board can live outside a quest" "$out" "/b/vision-repo-a/"
 section "board open without --html"
 stop_wartable() {   # only the suite's own daemon, then wait until its port is free
   kill "$(cat "$GUILD_HOME/.wartable-pid")" 2>/dev/null
-  for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:4899/" || return 0; sleep 0.1; done
+  for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:$PORT/" || return 0; sleep 0.1; done
 }
 rb=$(ls "$GUILD_HOME/quests/vision-repo-a/boards" | head -1)
 before=$(cd "$GUILD_HOME/quests/vision-repo-a/boards/$rb" && find . -type f -exec cksum {} + | sort)
 status_before=$(cat "$GUILD_HOME/quests/vision-repo-a/status")
 stop_wartable
 out=$(env -u GUILD_QUEST "$GUILD" board open --quest vision-repo-a "$rb" 2>&1); code=$?
-is "board open reopens an existing board" "$code $out" "0 http://127.0.0.1:4899/b/vision-repo-a/$rb/"
-is "and the page answers again" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:4899/b/vision-repo-a/$rb/")" "200"
+is "board open reopens an existing board" "$code $out" "0 http://127.0.0.1:$PORT/b/vision-repo-a/$rb/"
+is "and the page answers again" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/b/vision-repo-a/$rb/")" "200"
 is "and it writes nothing" "$(cd "$GUILD_HOME/quests/vision-repo-a/boards/$rb" && find . -type f -exec cksum {} + | sort)" "$before"
 is "nor changes the quest" "$(cat "$GUILD_HOME/quests/vision-repo-a/status")" "$status_before"
 out=$(env -u GUILD_QUEST "$GUILD" board open --no-open --quest vision-repo-a nosuchboard 2>&1); code=$?
@@ -510,8 +511,8 @@ out=$(env -u GUILD_QUEST "$GUILD" board open "$rb" 2>&1); code=$?
 is "a board id without a quest is an error, not the docket" "$code" "1"
 stop_wartable
 out=$(env -u GUILD_QUEST "$GUILD" board open 2>&1); code=$?
-is "board open with no quest starts the server and opens the docket" "$code $out" "0 http://127.0.0.1:4899/"
-is "and the docket answers" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/)" "200"
+is "board open with no quest starts the server and opens the docket" "$code $out" "0 http://127.0.0.1:$PORT/"
+is "and the docket answers" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/)" "200"
 
 # ── jira watcher ──────────────────────────────────────────────────────────────
 section "jira watcher"
@@ -551,7 +552,7 @@ hasnt "ticket text never becomes a command" "$brief" "rm -rf"
 hasnt "a project off the list is ignored" "$(cat "$st")" "OTHER-1"
 
 board=$(python3 -c "import json;print(list(json.load(open('$st'))['pending'].values())[0]['board'])")
-curl -s -X POST "http://127.0.0.1:4899/b/jira/$board/reply" -d '{"answers":{"go":"start"}}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/jira/$board/reply" -d '{"answers":{"go":"start"}}' >/dev/null
 "$GUILD" jira once >/dev/null 2>&1
 [ -d "$GUILD_HOME/quests/fair-pay-list" ] && ok "your yes on the war table starts it" || bad "your yes on the war table starts it"
 is "the branch names the ticket once" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/fair-pay-list/meta.json'))['branch'])")" "SARA-9/fair-pay-list"
@@ -621,12 +622,12 @@ out=$(GUILD_QUEST=bonus-export "$GUILD" validate ready 2>&1)
 has "validate ready gives you the checklist" "$out" "/q/bonus-export/validate"
 has "and the quest waits on you" "$(cat "$BQ/status")" "needs-decision	validate before the PR"
 has "wait gives up politely when you are away" "$(GUILD_QUEST=bonus-export "$GUILD" validate wait --timeout 1 2>&1)" "not validated within"
-curl -s -X POST "http://127.0.0.1:4899/q/bonus-export/validate/mark" -d '{"id":"A1","status":"fail","note":"no file"}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/q/bonus-export/validate/mark" -d '{"id":"A1","status":"fail","note":"no file"}' >/dev/null
 out=$(GUILD_QUEST=bonus-export "$GUILD" validate wait --timeout 5 2>&1); rc=$?
 has "a fail sends it back with what you saw" "$out" "no file"
 is "with its own exit code" "$rc" "3"
 is "and the quest is back at work" "$(cut -f1 "$BQ/status")" "working"
-curl -s -X POST "http://127.0.0.1:4899/q/bonus-export/validate/mark" -d '{"id":"A1","status":"pass"}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/q/bonus-export/validate/mark" -d '{"id":"A1","status":"pass"}' >/dev/null
 has "your pass wakes it" "$(GUILD_QUEST=bonus-export "$GUILD" validate wait --timeout 5 2>&1)" "validated: 1/1 passed"
 has "and the PR opens" "$(bshim pr create --body "$bbody")" "REAL GH"
 git -C "$WTB" -c user.email=t@t -c user.name=t commit -q --allow-empty -m more
@@ -657,8 +658,8 @@ has "the board names who has it" "$(cat "$GUILD_HOME/quests/jira/boards/$(pendin
 [ -d "$GUILD_HOME/quests/pay-slips" ] && bad "a ticket with a branch on origin is not started" "started" || ok "a ticket with a branch on origin is not started"
 has "the board names the branch" "$(cat "$GUILD_HOME/quests/jira/boards/$(pending_board SARA-14)/content.html" 2>/dev/null)" "branch SARA-14/old-try already exists on origin"
 "$GUILD" close bonus-export --force >/dev/null 2>&1
-curl -s -X POST "http://127.0.0.1:4899/b/jira/$(pending_board SARA-13)/reply" -d '{"answers":{"go":"start"}}' >/dev/null
-curl -s -X POST "http://127.0.0.1:4899/b/jira/$b/reply" -d '{"answers":{"go":"skip"}}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/jira/$(pending_board SARA-13)/reply" -d '{"answers":{"go":"start"}}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/jira/$b/reply" -d '{"answers":{"go":"skip"}}' >/dev/null
 "$GUILD" jira once >/dev/null 2>&1
 has "start anyway starts it, still guarded" "$(cat "$GUILD_HOME/quests/rate-audit/meta.json" 2>/dev/null)" '"guarded": "started from your !guild comment on SARA-13'
 "$GUILD" close rate-audit --force >/dev/null 2>&1
@@ -1032,14 +1033,14 @@ has "and approving needs every point on Agree" "$page" "approve only when every 
 has "a full plan offers the reel" "$page" "/q/pl/reel"
 has "a plan asked again keeps your agreed points by quest" "$page" 'guild-review:pl"'
 has "and marks new or changed points" "$page" 'class="rv-new"'
-has "the panel refuses Approve until every point is agreed" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" "are not on Agree yet"
+has "the panel refuses Approve until every point is agreed" "$(curl -s "http://127.0.0.1:$PORT/b/pl/$pb/")" "are not on Agree yet"
 has "the adventurer is told to question you and answer each doubt in the plan" "$(cat "$GUILD_HOME/quests/pl/prompt.md" 2>/dev/null || grep -h "Questions for you" "$REPO/bin/guild")" "for each **Not sure**, answer it inside plan.md"
 out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save")
 pb=$(echo "$out" | awk '/board id:/ {print $3}')
 page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
 has "each claim is a numbered point" "$page" 'data-id="1.1"'
 has "and the board knows it carries a review" "$(cat "$GUILD_HOME/quests/pl/boards/$pb/decisions.json")" '"review": true'
-has "the panel sends your marks with the answer" "$(curl -s "http://127.0.0.1:4899/b/pl/$pb/")" 'review.label || "Plan review"'
+has "the panel sends your marks with the answer" "$(curl -s "http://127.0.0.1:$PORT/b/pl/$pb/")" 'review.label || "Plan review"'
 # a small plan: only what will be done and how you will know; no grid, no empty sections
 rm -f "$GUILD_HOME/quests/pl/why.json"
 cat > "$GUILD_HOME/quests/pl/plan.md" <<'MD'
@@ -1152,8 +1153,8 @@ sleep 1
 for n in 1 2 3 4 5; do GUILD_QUEST=pl "$GUILD" ask "Grill question $n?" --option "a=Yes" --option "b=No" >/dev/null 2>&1; sleep 1; done   # board ids are by the second
 out=$(GUILD_QUEST=pl "$GUILD" ask "Grill question 6?" --option "a=Yes" --option "b=No" 2>&1)
 has "the grill stops at five questions" "$out" "the grill's 5 questions are used"
-is "no build yet: the page is told there is none" "$(curl -s http://127.0.0.1:4899/q/pl/video.json)" '{"state": "none"}'
-is "no file yet" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/q/pl/video.mp4)" "404"
+is "no build yet: the page is told there is none" "$(curl -s http://127.0.0.1:$PORT/q/pl/video.json)" '{"state": "none"}'
+is "no file yet" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/q/pl/video.mp4)" "404"
 if command -v ffmpeg >/dev/null && [ -n "$(python3 -c "import sys; sys.path.insert(0, '$REPO/bin'); import shot; print(shot.find_browser() or '')")" ]; then
   python3 - "$GUILD_HOME/quests/pl/video.json" <<'PY'
 import json, sys
@@ -1165,7 +1166,7 @@ PY
   has "it builds into the quest folder" "$out" "video/video.mp4"
   has "and says it is ready" "$("$GUILD" video status pl)" '"state": "ready"'
   has "the file is a real video" "$(ffprobe -v error -show_entries stream=codec_name,width -of csv=p=0 "$GUILD_HOME/quests/pl/video/video.mp4")" "h264,1080"
-  hdr=$(curl -s -D - -o /dev/null -H "Range: bytes=0-99" http://127.0.0.1:4899/q/pl/video.mp4 | tr -d '\r')
+  hdr=$(curl -s -D - -o /dev/null -H "Range: bytes=0-99" http://127.0.0.1:$PORT/q/pl/video.mp4 | tr -d '\r')
   has "it is served in ranges, so a phone plays it" "$hdr" "206 Partial Content"
   has "with the range it sent" "$hdr" "Content-Range: bytes 0-99/"
   has "the same video.json is not built twice" "$(GUILD_VIDEO_VOICE=off GUILD_VIDEO_FPS=4 "$GUILD" video build pl 2>&1)" "already built"
@@ -1190,7 +1191,7 @@ has "with its place in the code" "$fpage" "<code>src/a.ts:12</code>"
 has "and the comment it would leave" "$fpage" "Refunds are not subtracted here."
 has "grouped by how much it matters" "$fpage" "Must fix"
 has "nothing is posted: a draft waits for your word" "$(cat "$GUILD_HOME/quests/pl-review/boards/$fb/decisions.json")" '"id": "draft"'
-has "the marks travel as findings, with the agreed ones listed" "$(curl -s "http://127.0.0.1:4899/b/pl-review/$fb/")" "- [agree]"
+has "the marks travel as findings, with the agreed ones listed" "$(curl -s "http://127.0.0.1:$PORT/b/pl-review/$fb/")" "- [agree]"
 out=$("$GUILD" findings "$TMP/nothing.json" 2>&1)
 has "findings needs a file" "$out" "usage: guild findings"
 
@@ -1319,7 +1320,7 @@ has "--no-plan without a reason is refused" "$out" "needs a reason"
 echo x | GUILD_NO_PLAN= "$GUILD" quest planq3 --repo "$REPO_A" --no-plan "one line fix" >/dev/null 2>&1
 is "with a reason it skips the plan" "$(python3 -c "import json;print(json.load(open('$GUILD_HOME/quests/planq3/meta.json'))['phase'])")" ""
 has "and the reason is kept with the quest" "$(cat "$GUILD_HOME/quests/planq3/meta.json")" "one line fix"
-has "the glance says the step was skipped, and why" "$(curl -s http://127.0.0.1:4899/q/planq3/report 2>/dev/null; python3 -c "
+has "the glance says the step was skipped, and why" "$(curl -s http://127.0.0.1:$PORT/q/planq3/report 2>/dev/null; python3 -c "
 import sys; sys.path.insert(0,'$REPO/bin')
 import os; os.environ['GUILD_HOME']='$GUILD_HOME'
 import wartable; print(wartable.glance('planq3'))")" 'title="skipped: one line fix"'
@@ -1428,45 +1429,45 @@ has "a merge brief skips the card too" "$out" "the brief says housekeeping"
 out=$(echo "Bring the branch up to date with main" | GUILD_NO_WHY= "$GUILD" quest abc-8-sync --repo "$REPO_A" --why 2>&1)
 has "--why forces the card" "$out" "why card: on the docket"
 "$GUILD" close pr12-review-fix --force >/dev/null 2>&1; "$GUILD" close abc-7-sync --force >/dev/null 2>&1; "$GUILD" close abc-8-sync --force >/dev/null 2>&1
-has "the docket lists it" "$(curl -s http://127.0.0.1:4899/docket.json)" "Why card: whyq"
-has "a board keeps your picks as a draft until they are sent" "$(curl -s "http://127.0.0.1:4899/b/whyq/$wb/")" "restoreDraft();"
+has "the docket lists it" "$(curl -s http://127.0.0.1:$PORT/docket.json)" "Why card: whyq"
+has "a board keeps your picks as a draft until they are sent" "$(curl -s "http://127.0.0.1:$PORT/b/whyq/$wb/")" "restoreDraft();"
 is "a card does not park the quest" "$(cut -f1 "$GUILD_HOME/quests/whyq/status")" "working"
-curl -s -X POST "http://127.0.0.1:4899/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null
+curl -s -X POST "http://127.0.0.1:$PORT/b/whyq/$wb/reply" -d '{"answers":{"pain":"finance edits rates by hand","rule":"a past start date is warned","decision":"Kim, no blocking","impact":"rate configs","future":"approvals"}}' >/dev/null
 has "the answer is kept with the quest" "$(cat "$GUILD_HOME/quests/whyq/why.json")" "a past start date is warned"
 has "guild why shows it" "$("$GUILD" why whyq)" "Decision: Kim, no blocking"
-has "and it tops the quest's pages" "$(curl -s "http://127.0.0.1:4899/b/whyq/$wb/content.html" -o /dev/null; GUILD_QUEST=whyq "$GUILD" board open --html "$TMP/wrap.html" --title "whyq page" --no-open >/dev/null 2>&1; b=$(ls "$GUILD_HOME/quests/whyq/boards" | grep -v '^why-' | head -1); curl -s "http://127.0.0.1:4899/b/whyq/$b/content.html")" "written by the guildmaster"
+has "and it tops the quest's pages" "$(curl -s "http://127.0.0.1:$PORT/b/whyq/$wb/content.html" -o /dev/null; GUILD_QUEST=whyq "$GUILD" board open --html "$TMP/wrap.html" --title "whyq page" --no-open >/dev/null 2>&1; b=$(ls "$GUILD_HOME/quests/whyq/boards" | grep -v '^why-' | head -1); curl -s "http://127.0.0.1:$PORT/b/whyq/$b/content.html")" "written by the guildmaster"
 cat > "$GUILD_HOME/quests/whyq/rules.json" <<'JSON'
 {"rules": [{"rule": "A past start date is warned", "before": "no warning", "after": "BACKDATED warning", "where": "RateConfigService.java:40",
   "why": "priced lines do not change", "example": {"given": "a rate starting 2020-03-01", "then": "201 with a BACKDATED warning"}, "tests": "BackdatedIT"}]}
 JSON
 has "the rule book gathers rules from every quest" "$(python3 "$REPO/bin/rulebook.py" list)" "A past start date is warned: BACKDATED warning"
-has "and serves them per area" "$(curl -s http://127.0.0.1:4899/rules.json)" '"tests": "BackdatedIT"'
-wk=$(curl -s http://127.0.0.1:4899/rules/week.json)
+has "and serves them per area" "$(curl -s http://127.0.0.1:$PORT/rules.json)" '"tests": "BackdatedIT"'
+wk=$(curl -s http://127.0.0.1:$PORT/rules/week.json)
 has "the weekly digest lists the rule changed this week" "$wk" '"rule": "A past start date is warned"'
 has "grouped by business area, not by repo" "$wk" '"area": "Pay equations"'
 has "it is due while a fresh rule has no mark" "$wk" '"due": true'
 rk=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])['items'][0]['key'])" "$wk")
-is "a mark must be agree, wrong or unsure" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4899/rules/mark -d "{\"key\":\"$rk\",\"mark\":\"maybe\"}")" "400"
-curl -s -X POST http://127.0.0.1:4899/rules/mark -d "{\"key\":\"$rk\",\"mark\":\"wrong\",\"note\":\"it blocks, it does not warn\"}" >/dev/null
-wk=$(curl -s http://127.0.0.1:4899/rules/week.json)
-has "a Wrong mark keeps your note, and the rule book shows it" "$(curl -s http://127.0.0.1:4899/rules.json)" "it blocks, it does not warn"
+is "a mark must be agree, wrong or unsure" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:$PORT/rules/mark -d "{\"key\":\"$rk\",\"mark\":\"maybe\"}")" "400"
+curl -s -X POST http://127.0.0.1:$PORT/rules/mark -d "{\"key\":\"$rk\",\"mark\":\"wrong\",\"note\":\"it blocks, it does not warn\"}" >/dev/null
+wk=$(curl -s http://127.0.0.1:$PORT/rules/week.json)
+has "a Wrong mark keeps your note, and the rule book shows it" "$(curl -s http://127.0.0.1:$PORT/rules.json)" "it blocks, it does not warn"
 hasnt "and a marked rule leaves the digest" "$wk" '"rule": "A past start date is warned"'
 has "and the digest counts it" "$wk" '"wrong": 1'
-has "the page is served" "$(curl -s http://127.0.0.1:4899/rules/week)" "Rules Changed This Week"
-page=$(curl -s http://127.0.0.1:4899/rules)
+has "the page is served" "$(curl -s http://127.0.0.1:$PORT/rules/week)" "Rules Changed This Week"
+page=$(curl -s http://127.0.0.1:$PORT/rules)
 has "the rule book opens on what changed in a period" "$page" '<button data-v="period">What changed</button>'
 has "and walks back and forth a week or a month" "$page" '<option value="month">a month</option>'
 has "a before that says nothing was there is a new rule" "$page" "const NOTHING = "
-has "the docket says when the digest waits" "$(curl -s http://127.0.0.1:4899/docket)" "Rules changed this week"
+has "the docket says when the digest waits" "$(curl -s http://127.0.0.1:$PORT/docket)" "Rules changed this week"
 has "a rules file can name its own area" "$(python3 -c "import sys;sys.path.insert(0,'$REPO/bin');import rulebook as r;print(r.business_area({'rule':'x','area':'Billing'},'repo'), r.business_area({'rule':'Archive is one-way','where':'src/com/appen/project/X.java'},'repo'), r.business_area({'rule':'Unit of pay','where':'com/appen/project/RateUom.java'},'repo'))")" "Billing Projects repo"
-dj=$(curl -s http://127.0.0.1:4899/drill.json)
+dj=$(curl -s http://127.0.0.1:$PORT/drill.json)
 has "the drill asks from the example" "$dj" "Given a rate starting 2020-03-01: what happens?"
 has "with the truth to compare" "$dj" "201 with a BACKDATED warning"
-has "the docket says the drill is due" "$(curl -s http://127.0.0.1:4899/docket.json)" '"due": true'
+has "the docket says the drill is due" "$(curl -s http://127.0.0.1:$PORT/docket.json)" '"due": true'
 k=$(echo "$dj" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["key"])')
-curl -s -X POST http://127.0.0.1:4899/drill/grade -d "{\"key\":\"$k\",\"right\":false,\"answer\":\"it blocks\"}" >/dev/null
+curl -s -X POST http://127.0.0.1:$PORT/drill/grade -d "{\"key\":\"$k\",\"right\":false,\"answer\":\"it blocks\"}" >/dev/null
 has "a miss is recorded" "$(cat "$GUILD_HOME/drill.json")" '"answer": "it blocks"'
-has "and the drill is done for the week" "$(curl -s http://127.0.0.1:4899/docket.json)" '"due": false'
+has "and the drill is done for the week" "$(curl -s http://127.0.0.1:$PORT/docket.json)" '"due": false'
 "$GUILD" close whyq --force >/dev/null 2>&1
 
 # ── housekeeping ──────────────────────────────────────────────────────────────
@@ -1587,7 +1588,7 @@ cat > "$GUILD_HOME/quests/cur/scenarios.json" <<'JSON'
 {"title": "draft", "groups": [{"id": "A", "title": "x", "scenarios": [{"id": "A1", "do": "x", "expect": "y"}]}]}
 JSON
 wbc=$(ls "$GUILD_HOME/quests/cur/boards" | tail -1)
-out=$(curl -s -X POST "http://127.0.0.1:4899/b/cur/$wbc/reply" -d '{"answers":{"grade":"4","verdict":"merge"}}')
+out=$(curl -s -X POST "http://127.0.0.1:$PORT/b/cur/$wbc/reply" -d '{"answers":{"grade":"4","verdict":"merge"}}')
 case "$out" in *"Not ready to merge"*) bad "a waived checklist does not block the merge" "$out" ;; *) ok "a waived checklist does not block the merge" ;; esac
 "$GUILD" close cur --force >/dev/null 2>&1
 
@@ -1905,18 +1906,18 @@ section "quest console"
 tmux -L "$GUILD_TMUX_SOCKET" has-session -t guild 2>/dev/null || tmux -L "$GUILD_TMUX_SOCKET" new-session -d -s guild -n first "sleep 600"
 tmux -L "$GUILD_TMUX_SOCKET" new-window -d -t guild -n qm-ctest "cat"
 sleep 0.5
-is "the console page is served" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4899/console)" "200"
-has "it lists the open quartermaster tab" "$(curl -s http://127.0.0.1:4899/console.json)" '"name": "qm-ctest"'
-out=$(curl -s -X POST http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","text":"hello"}')
+is "the console page is served" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/console)" "200"
+has "it lists the open quartermaster tab" "$(curl -s http://127.0.0.1:$PORT/console.json)" '"name": "qm-ctest"'
+out=$(curl -s -X POST http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","text":"hello"}')
 has "typing needs the console header, so another site cannot type into a quest" "$out" "missing X-Guild header"
-out=$(curl -s -X POST -H "X-Guild: console" http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","text":"hello from the phone\nsecond line"}')
+out=$(curl -s -X POST -H "X-Guild: console" http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","text":"hello from the phone\nsecond line"}')
 has "a message is sent" "$out" '"did": "sent"'
 sleep 0.5
-has "and shows on the tab's screen, on one line" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=qm-ctest')" "hello from the phone second line"
-has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","key":"C-c"}')" "that key is not allowed"
-has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
-has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:4899/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
-has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:4899/console/screen?tab=..%2Fetc')" "no such tab"
+has "and shows on the tab's screen, on one line" "$(curl -s 'http://127.0.0.1:$PORT/console/screen?tab=qm-ctest')" "hello from the phone second line"
+has "only listed keys can be pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","key":"C-c"}')" "that key is not allowed"
+has "a listed key is pressed" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"qm-ctest","key":"esc"}')" "pressed esc"
+has "a tab that is not open is refused" "$(curl -s -X POST -H 'X-Guild: console' http://127.0.0.1:$PORT/console/send -d '{"tab":"nope","text":"x"}')" "nope has no open tab"
+has "a name with odd characters is refused" "$(curl -s 'http://127.0.0.1:$PORT/console/screen?tab=..%2Fetc')" "no such tab"
 calm=$(python3 - "$REPO" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1] + "/bin")
@@ -1954,7 +1955,7 @@ has "the version grows with the text" "$out" "version 1 8"
 has "a text too long for it is refused" "$out" "long: too long for a QR code here"
 has "it renders as SVG for the page" "$out" "svg True"
 has "guild remote qr says when remote is off" "$("$GUILD" remote qr 2>&1)" "remote is off"
-has "the big QR page says when remote is off" "$(curl -s http://127.0.0.1:4899/remote/qr)" "Remote is off"
+has "the big QR page says when remote is off" "$(curl -s http://127.0.0.1:$PORT/remote/qr)" "Remote is off"
 
 # ── alerts and compaction ─────────────────────────────────────────────────────
 section "alerts and compaction"
@@ -1972,9 +1973,9 @@ while IFS= read -r line; do
   case "$line" in "ok "*) ok "${line#ok }" ;; "FAIL "*) bad "${line#FAIL }" ;; *) bad "shepherd test said: $line" ;; esac
 done < <(mkdir -p "$TMP/shep/local" && GUILD_HOME="$TMP/shep" python3 "$REPO/test/shepherd.py" "$REPO" 2>&1)
 has "guild shepherd says it is off by default" "$("$GUILD" shepherd status)" "PR watch: off"
-has "the docket carries the PR watch note" "$(curl -s http://127.0.0.1:4899/docket.json)" '"shepherd": {"on": false}'
-has "and draws it with an Adopt button" "$(curl -s http://127.0.0.1:4899/docket)" 'data-adopt='
-is "adopt refuses a PR it does not list" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4899/shepherd/adopt -d '{"url":"https://github.com/o/r/pull/1"}')" "400"
+has "the docket carries the PR watch note" "$(curl -s http://127.0.0.1:$PORT/docket.json)" '"shepherd": {"on": false}'
+has "and draws it with an Adopt button" "$(curl -s http://127.0.0.1:$PORT/docket)" 'data-adopt='
+is "adopt refuses a PR it does not list" "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:$PORT/shepherd/adopt -d '{"url":"https://github.com/o/r/pull/1"}')" "400"
 
 section "trial scope check"
 while IFS= read -r line; do
