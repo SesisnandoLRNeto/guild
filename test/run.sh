@@ -275,6 +275,10 @@ has "an adventurer's reel.json tells it in its own words" "$reel" "Nobody could 
 has "and adds its own scenes" "$reel" "One more thing."
 is "an unknown quest has no reel" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/q/nope/reel.json")" "404"
 has "done announces the wrap-up" "$(tail -3 "$GUILD_HOME/events.log")" "wrap-up ready"
+before=$(grep -c "wrap-up ready" "$GUILD_HOME/events.log")
+out=$("$GUILD" status alpha done "shipped it" 2>&1)
+has "the same done again is a no-op" "$out" "nothing new to announce"
+is "and does not announce the wrap-up twice" "$(grep -c "wrap-up ready" "$GUILD_HOME/events.log")" "$before"
 vurl="http://127.0.0.1:$PORT/q/alpha/validate"
 has "the war table shows the checklist" "$(curl -s "$vurl")" "Call the endpoint."
 has "with the command to copy and what to expect" "$(curl -s "$vurl")" '<p class="expect"><b>Expect</b> 200 and <code>ok</code></p>'
