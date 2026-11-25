@@ -1472,6 +1472,16 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   if [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ]; then
     printf '%s\n' "${note% (no*}" > "$(qdir "$slug")/scenarios.waived"
   fi
+  # An adventurer often reports the same "done" two or three times in a row. A repeat changes
+  # nothing, so it must not log, open the wrap-up or send the message again.
+  if [ "$state" = done ] && [ -f "$(qdir "$slug")/status" ]; then
+    local was_state was_note
+    IFS=$'\t' read -r was_state was_note _ < "$(qdir "$slug")/status" || true
+    if [ "$was_state" = done ] && [ "$was_note" = "$note" ]; then
+      echo "guild: $slug already reported done${note:+ ($note)}; nothing new to announce"
+      return 0
+    fi
+  fi
   [ "$state" = working ] && rm -f "$(qdir "$slug")/paused"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
