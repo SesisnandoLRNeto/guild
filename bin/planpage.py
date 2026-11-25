@@ -241,7 +241,7 @@ VIDEO = """<section class="pvideo" data-q="__Q__"><h2>Watch the plan</h2>
 
 
 def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inline, plan_path, kind="full", video=False,
-           diagnosis=""):
+           diagnosis="", impact=""):
     parts = split(md)
     esc = html.escape
     shots = {k: IMG.findall(v) for k, v in parts.items()}
@@ -305,7 +305,7 @@ def render(quest, summary, md, meta, why_card, contract, go, md_to_html, md_inli
              f'{md_to_html(parts["questions"])}</section>') if kit["decide_first"] else ""
     return (PAGE.replace("__QUEST__", esc(quest)).replace("__SUMMARY__", md_inline(summary or "", auto_code=True))
             .replace("__SHAPE__", SHAPE_LEAD[kind] + shown).replace("__REEL__", reel + first)
-            .replace("__MINUTE__", diag_html(diagnosis, md_to_html) + minute)
+            .replace("__MINUTE__", diag_html(diagnosis, md_to_html) + impact + minute)
             .replace("__TA__", ta)
             .replace("__COMPARE__", compare)
             .replace("__CONTRACT__", contract_html)

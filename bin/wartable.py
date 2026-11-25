@@ -311,6 +311,9 @@ def with_glance(body, quest, board=None):
     try:
         strip = glance(quest).encode()
         if board and (load_json_safe(os.path.join(board_dir(quest, board), "board.json")) or {}).get("wrapup"):
+            sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+            import impactmap                        # what shipped, by business area, against the plan
+            strip += impactmap.render(impactmap.load(quest), impactmap.planned(quest), "done").encode()
             strip += standing_html(quest).encode()
     except Exception:
         return body
@@ -1729,6 +1732,22 @@ def cmd_plan(args):
                          "  3. or draw it: guild draw\n"
                          "Then add ![what to look at](path/to/picture.png) to the section. A picture of the result goes in After this plan.\n"
                          "If no screen can be shown, write a line \"No screen picture: <why>\" in The pain.")
+    import impactmap                                # what this will change, by business area, with a level
+    if isinstance(args.get("no_impact_map"), str):
+        impact_html = f'<p class="lead2 warn">No impact map: {_esc(args["no_impact_map"])}.</p>'
+    else:
+        problems = impactmap.check(impactmap.load(quest), "plan")
+        if problems:
+            raise SystemExit(f"guild plan: the plan opens with what it will change, and {os.path.join(qdir, 'impact.json')} is not ready:\n  "
+                             + "\n  ".join(problems)
+                             + "\nOne row per business area (never per file), each high, medium or low:\n"
+                               "  high: a rule's outcome changes (money, permissions, state changes, deleting or migrating data, an API others use)\n"
+                               "  medium: a user sees a different behavior, or code nobody touched uses what changed (\"touched\": false)\n"
+                               "  low: no behavior change (refactor, tests, docs)\n"
+                               "guild impact-map example prints a filled one. Nothing a person or another system would notice? "
+                               "guild plan ready \"...\" --no-impact-map \"<why>\"")
+        impactmap.snapshot(quest)
+        impact_html = impactmap.render(impactmap.load(quest), stage="plan")
     md, pics = plan_pictures(md, qdir, meta)
     import video
     has_video = os.path.exists(os.path.join(qdir, "video.json"))
@@ -1765,7 +1784,7 @@ def cmd_plan(args):
         diagnosis = rootcause.report(quest)
         go.insert(0, "You agree the diagnosis above is the bug, and the fix may start.")
     page = planpage.render(quest, args.get("summary") or "", md, meta, why_card, contract, go,
-                           md_to_html, md_inline, path, kind=kind, video=has_video, diagnosis=diagnosis)
+                           md_to_html, md_inline, path, kind=kind, video=has_video, diagnosis=diagnosis, impact=impact_html)
     decisions = {"questions": [{"id": "choice", "title": "Is the plan clear, and right?", "type": "single", "recommended": "go",
                                 "options": [{"id": "go", "label": "Approve", "why": "it is clear and right: build it as planned"},
                                             {"id": "explain", "label": "Explain more", "why": "something is not clear: your questions go back, it answers here"},

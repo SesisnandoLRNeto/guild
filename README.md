@@ -146,6 +146,7 @@ guild up ~/Workspace
 | `guild decide <spec.json>` | A decision page: options as cards, case table, flows, screens, numbers |
 | `guild treasury` | What the work cost and what it was worth, as charts: spend per day, per story, ticket and model, grades against cost, Jev |
 | `guild harnesses` | The agent CLIs guild knows, and the model each tier maps to |
+| `guild impact-map example\|check <slug> plan\|done` | The impact map: what a change does to the business, one row per area, each high, medium or low. It opens the plan page and the wrap-up, and the wrap-up compares what shipped against the plan |
 | `guild impact [--rules FILE] [--into PAGE]` | Data model, impact and business rule changes, drawn for a backend wrap-up |
 | `guild draw <spec.json> [--into PAGE]` | Draws a picture for a page from a small spec and picks the form: a state machine, a flow, an organogram or a rules table. Each move or rule carries its scene (where it is triggered, who, the scenario, what they see, where in the code), numbered on the arrow and listed under the picture |
 | `guild watch [secs]` | The sidebar renderer (the cockpit runs it for you) |

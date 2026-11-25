@@ -223,6 +223,31 @@ has "before done, the wrap-up has no grading panel" "$(curl -s "http://127.0.0.1
 # the quest's own note may show under Underway; the wrap-up board must not be a docket item
 items=$(curl -s "http://127.0.0.1:4899/docket.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" | ".join(i.get("title","") for i in d.get("open",[])+d.get("held",[])))')
 case "$items" in *"alpha shipped"*) bad "and it is not on the docket" "listed" ;; *) ok "and it is not on the docket" ;; esac
+# the impact map: what shipped, by business area, against what the plan expected
+out=$("$GUILD" status alpha done "shipped it" 2>&1)
+has "a code quest needs its impact map before done" "$out" "impact.json is not ready"
+cat > "$GUILD_HOME/quests/alpha/impact.planned.json" <<'JSON'
+{"rows": [{"id": "pay", "level": "high", "area": "Pay on closure", "before": "b", "after": "a", "who": "PMs"},
+          {"id": "export", "level": "medium", "area": "CSV export", "after": "a", "who": "finance"}]}
+JSON
+cat > "$GUILD_HOME/quests/alpha/impact.json" <<'JSON'
+{"rows": [{"id": "pay", "level": "high", "area": "Pay on closure", "before": "b", "after": "a", "who": "PMs"},
+          {"id": "msg", "level": "medium", "area": "Closing error text", "after": "says why", "who": "PMs"}]}
+JSON
+out=$("$GUILD" status alpha done "shipped it" 2>&1)
+has "a high area without proof is refused" "$out" 'a high area needs its "proof"'
+has "an area the plan did not have needs a reason" "$out" 'row msg: was not in the plan'
+has "a planned area that did not ship needs a reason" "$out" 'planned area export did not ship'
+cat > "$GUILD_HOME/quests/alpha/impact.json" <<'JSON'
+{"rows": [{"id": "pay", "level": "high", "area": "Pay on closure", "before": "b", "after": "a", "who": "PMs", "proof": "scenario A1"},
+          {"id": "msg", "level": "medium", "area": "Closing error text", "after": "says why", "who": "PMs", "surprise": "found in testing"}],
+ "dropped": [{"id": "export", "why": "it already worked"}]}
+JSON
+wpage=$(curl -s "http://127.0.0.1:4899/b/alpha/$wb0/content.html")
+has "the wrap-up opens with what this changed" "$wpage" "<h2>What this changed</h2>"
+has "against what the plan expected" "$wpage" "Planned: "
+has "a surprise shows in red" "$wpage" '<span class="tag surprise">not in the plan</span>'
+has "a dropped area shows with its reason" "$wpage" "Planned but not shipped: it already worked"
 out=$("$GUILD" status alpha done "shipped it" 2>&1)
 has "a code quest needs its validation scenarios before done" "$out" "there is no scenarios.json"
 cat > "$GUILD_HOME/quests/alpha/scenarios.json" <<'JSON'
@@ -906,6 +931,11 @@ rm -f "$GUILD_HOME/.pr-cache.json"
 
 # the plan approval page is an explainer: it needs its sections, and it shows them where they help
 echo x | "$GUILD" quest pl --repo "$REPO_A" --plan >/dev/null 2>&1
+cat > "$GUILD_HOME/quests/pl/impact.json" <<'JSON'
+{"rows": [{"id": "save", "level": "high", "area": "Saving a rate equation", "before": "any text is saved",
+           "after": "a broken equation is refused with its position", "who": "finance", "where": "Rate config screen"},
+          {"id": "list", "level": "medium", "area": "Rate list", "touched": false, "after": "old rows still show", "who": "finance"}]}
+JSON
 printf '# Plan\n\n## Goal\nParse on save.\n\n## Steps\n1. a\n' > "$GUILD_HOME/quests/pl/plan.md"
 out=$(GUILD_QUEST=pl "$GUILD" plan ready "x" 2>&1)
 has "a plan without what its shape needs is refused" "$out" "small plan, and plan.md lacks: What you should expect"
@@ -958,6 +988,22 @@ page=$(cat "$GUILD_HOME/quests/pl/boards/$pb/content.html")
 has "the page opens with the pain, the cause and the expectation in one minute" "$page" '<div class="m pain"><b>The pain</b><p>Finance saves a broken equation'
 has "today and after this plan sit side by side" "$page" '<div class="after"><h3>After this plan</h3>'
 has "a mermaid block draws a diagram" "$page" '<pre class="mermaid">flowchart LR'
+has "the plan opens with what it will change" "$page" '<h2>What this will change</h2>'
+has "with each area's level, high first" "$page" '<div class="lv high">HIGH</div><div><div class="area">Saving a rate equation'
+has "an untouched area that uses the change is marked" "$page" 'not touched, uses what changed'
+[ -f "$GUILD_HOME/quests/pl/impact.planned.json" ] && ok "plan ready keeps the expected impact for the wrap-up" || bad "plan ready keeps the expected impact for the wrap-up"
+mv "$GUILD_HOME/quests/pl/impact.json" "$TMP/impact.keep"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save" 2>&1)
+has "a plan without an impact map is refused" "$out" "impact.json is not ready"
+has "and the refusal says how levels work" "$out" "high: a rule's outcome changes"
+echo '{"rows": [{"id": "a", "level": "big", "area": "x", "after": "y"}]}' > "$GUILD_HOME/quests/pl/impact.json"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save" 2>&1)
+has "a made-up level is refused" "$out" '"level" is high, medium or low'
+rm -f "$GUILD_HOME/quests/pl/impact.json"
+out=$(GUILD_QUEST=pl "$GUILD" plan ready "Parse equations on save" --no-impact-map "only a log line changes" 2>&1)
+nb=$(echo "$out" | awk '/board id:/ {print $3}')
+has "--no-impact-map lets a plan through and says why on the page" "$(cat "$GUILD_HOME/quests/pl/boards/$nb/content.html" 2>/dev/null)" "No impact map: only a log line changes"
+mv "$TMP/impact.keep" "$GUILD_HOME/quests/pl/impact.json"
 has "your Why card sits next to the plan's understanding" "$page" "finance edits rates by hand"
 has "the steps are one numbered list" "$page" "</li><li>"
 has "bold that holds code stays bold" "$page" "<b>Merge <code>#161</code>.</b>"
@@ -1510,6 +1556,7 @@ cat > "$TMP/wrap-b.html" <<'HTML'
 <!--GUILD-IMPACT-->
 </body>
 HTML
+echo '{"rows": [{"id": "cur", "level": "high", "area": "Rate currency", "before": "none", "after": "required", "who": "finance", "proof": "RateServiceTest"}]}' > "$GUILD_HOME/quests/cur/impact.json"
 GUILD_QUEST=cur "$GUILD" board open --html "$TMP/wrap-b.html" --wrapup --title "currency" --no-open >/dev/null 2>&1
 out=$("$GUILD" status cur done "PR" 2>&1)
 has "done is refused without the impact section" "$out" "needs the impact section"
