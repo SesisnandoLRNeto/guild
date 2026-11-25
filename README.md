@@ -118,6 +118,7 @@ guild up ~/Workspace
 | `guild ask "<question>" [--option "id=Label: why"]...` | Turn a question into a board page and open it |
 | `guild ask answer <slug> <id> "<your words>" [--pick OPTION]` | Answer a question from the terminal. Every answer, here or on the docket, is kept as a decision in your words (`decisions.md` beside the quest, and a `decided` event) |
 | `guild ask snooze <slug> <id> --until 7d\|YYYY-MM-DD [--note T]` | Park a question until a date (the docket's Snooze). It comes back under Needs you that day |
+| `guild next` (or `guild ahoy`) | Only the most urgent thing that needs you, in full, with the commands to answer or snooze it and how many wait behind it. Say "ahoy" to the quartermaster to go through them one at a time |
 | `guild sweep [slug]` | Where everything stands, in four sections: Needs you (every open question, most urgent first), Underway, Next (snoozed, by date), Landed (last 7 days). With a slug, that one quest |
 | `guild calm on\|off\|status` | Draw a party walking through a forest instead of tool calls |
 | `guild new [dir] [name] [--harness H] [--tier T]` | A plain agent session in a new cockpit tab (also `Ctrl-g n`, or click `+ claude`) |

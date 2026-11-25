@@ -657,6 +657,49 @@ def standing(quest=None):
                      f"Nothing landed in the last {LANDED_DAYS} days.")))
 
 
+def next_text():
+    """guild next ("ahoy"): only the most urgent thing that needs the guildmaster, in full, with how to
+    answer it, and how many wait behind it. Same order as the docket and guild sweep."""
+    d = docket_items()
+    stuck = [q for q in d["blocked"]]
+    total = len(d["open"]) + len(stuck)
+    if not total:
+        return "Nothing needs you right now.\n"
+    port = ""
+    try:
+        port = open(os.path.join(GUILD_HOME, ".wartable-port")).read().strip()
+    except OSError:
+        pass
+    base = f"http://127.0.0.1:{port}" if port else ""
+    more = f"{total - 1} more waiting after this one." if total > 1 else "This is the last one."
+    if not d["open"]:
+        q = stuck[0]
+        return (f"1 of {total}: {q['quest']} is {q['state']}" + (f": {q['note']}" if q["note"] else "") + "\n"
+                f"  look:  guild peek {q['quest']}     reply:  guild send {q['quest']} \"<your words>\"\n{more}\n")
+    i = d["open"][0]
+    head = f"1 of {total}: {i['quest']}" + (f" ({i['ticket']})" if i["ticket"] else "") + f" #{i['board']}"
+    out = [head, f"  {i['title']}"]
+    if i["subtitle"]:
+        out.append(f"  {i['subtitle']}")
+    if i["held_until"]:
+        out.append(f"  (was snoozed until {i['held_until']}, due now)")
+    if i["wrapup"]:
+        out.append("  A wrap-up to grade: read it on the war table.")
+    else:
+        for q in i["questions"]:
+            out.append(f"  ? {q.get('title') or q.get('id')}")
+            for o in q.get("options") or []:
+                star = "  (suggested)" if o.get("id") == q.get("recommended") else ""
+                why = f": {o['why']}" if o.get("why") else ""
+                out.append(f"      {o.get('id')}  {o.get('label', '')}{why}{star}")
+    out.append(f"  page:    {base}{i['url']}")
+    if not i["wrapup"]:
+        out.append(f"  answer:  guild ask answer {i['quest']} {i['board']} \"<your words>\" [--pick OPTION]")
+        out.append(f"  later:   guild ask snooze {i['quest']} {i['board']} --until 3d")
+    out.append(more)
+    return "\n".join(out) + "\n"
+
+
 def standing_text(quest=None):
     out = []
     for title, rows, empty in standing(quest):
@@ -2022,6 +2065,9 @@ def main():
         return
     if cmd == "sweep":
         sweep()
+        return
+    if cmd == "next":                   # guild next: the one most urgent thing, in full
+        print(next_text(), end="")
         return
     if cmd == "standing":               # guild sweep: the four sections, every open question first
         print(standing_text(rest[0] if rest else None), end="")

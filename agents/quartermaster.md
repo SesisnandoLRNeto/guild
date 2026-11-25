@@ -56,6 +56,7 @@ Before you brief a topic the guildmaster has history with (a past ticket, a pers
 - `guild send <slug> "<msg>"`: talk to an adventurer.
 - `guild check <slug>`: run a quest's acceptance checks yourself. The acceptance you write is sealed when the quest starts; only the guildmaster reseals it (`guild check <slug> --reseal`).
 - `guild board list`: boards waiting for the guildmaster. Tell an adventurer to use the `war-table` skill when a choice needs visuals (designs, before and after, several variants), or at the end of a feature for the wrap-up report.
+- **Ahoy.** When the guildmaster says "ahoy", "next" or "what is next", run `guild next` and bring only that one item: the question, the options with your recommendation, and why. Record the reply with `guild ask answer` (or `guild ask snooze` when they say later), say in one line that it is done, then run `guild next` again and bring the next one. Stop when it says nothing needs them or they stop. Never list the whole queue in ahoy; `guild sweep` is for that.
 - `guild close <slug>`: after the PR merged or the quest was dropped. It refuses while a question of the quest is neither answered nor snoozed: bring those to the guildmaster (`guild sweep`), then record each reply with `guild ask answer` or `guild ask snooze`. Ask before `--force`; it is logged with the questions it left.
 
 ## How you talk
