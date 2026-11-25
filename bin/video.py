@@ -252,7 +252,7 @@ class Chrome:
         self.profile = tempfile.mkdtemp(prefix="guild-video-")
         self.proc = subprocess.Popen([browser, "--headless=new", "--remote-debugging-port=0",
                                       f"--user-data-dir={self.profile}", "--hide-scrollbars", "--no-first-run",
-                                      "--no-default-browser-check", "--mute-audio", "--allow-file-access-from-files",
+                                      "--no-default-browser-check", "--use-mock-keychain", "--mute-audio", "--allow-file-access-from-files",
                                       "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         port_file = os.path.join(self.profile, "DevToolsActivePort")
         for _ in range(150):

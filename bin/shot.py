@@ -74,7 +74,7 @@ def main():
         os.remove(out)
     profile = tempfile.mkdtemp(prefix="guild-shot-")
     cmd = [browser, "--headless", f"--user-data-dir={profile}", "--disable-gpu", "--hide-scrollbars",
-           "--no-first-run", "--no-default-browser-check", f"--window-size={width},{height}",
+           "--no-first-run", "--no-default-browser-check", "--use-mock-keychain", f"--window-size={width},{height}",
            f"--screenshot={os.path.abspath(out)}"]
     if args.get("wait"):
         cmd.append(f"--virtual-time-budget={int(args['wait'])}")

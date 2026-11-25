@@ -1434,11 +1434,34 @@ def sweep():
                 f.write(f"{now()}\t{slug}\tdone\tgraded {verdict}: its tab closed (guild revive {slug} reopens it)\n")
 
 
+def heal_qm_forever():
+    """The quartermaster's tab must not stay gone: once a minute, if the guild session is up and the
+    tab is missing on two checks in a row (not just mid guild up), guild qm heal reopens it in the same
+    conversation. GUILD_QM_HEAL=0 turns it off (the test suite does)."""
+    if os.environ.get("GUILD_QM_HEAL") == "0":
+        return
+    sock = os.environ.get("GUILD_TMUX_SOCKET", "guild")
+    guild = os.path.join(os.path.dirname(os.path.realpath(__file__)), "guild")
+    missing = 0
+    while True:
+        time.sleep(60)
+        try:
+            r = subprocess.run(["tmux", "-L", sock, "list-windows", "-t", "guild", "-F", "#W"],
+                               capture_output=True, text=True, timeout=10)
+            missing = missing + 1 if r.returncode == 0 and "qm" not in r.stdout.split() else 0
+            if missing >= 2:
+                subprocess.run([guild, "qm", "heal"], capture_output=True, timeout=60)
+                missing = 0
+        except Exception:
+            pass
+
+
 def serve():
     """Start the server unless one is already up. Writes the port to ~/.guild/.wartable-port."""
     serve_remote()
     if not os.environ.get("GUILD_NO_PR_SYNC"):
         threading.Thread(target=refresh_prs_forever, daemon=True).start()
+        threading.Thread(target=heal_qm_forever, daemon=True).start()
         threading.Thread(target=compact_forever, daemon=True).start()
     port = int(os.environ.get("GUILD_BOARD_PORT", "4711"))
     for candidate in range(port, port + 20):

@@ -18,6 +18,7 @@ export GUILD_WORKTREES="$TMP/worktrees"
 export GUILD_TMUX_SOCKET="guild-test"
 export GUILD_BOARD_PORT="4899"
 export GUILD_BOARD_NO_OPEN="1"   # a test must never pop a browser tab
+export GUILD_QM_HEAL="0"         # the war table must not open a quartermaster in the test session
 export GUILD_NO_WHY="1"          # the Why card has its own test below
 export GUILD_NO_ACCEPTANCE="test fixture"   # briefs here are one-liners; the refusal has its own test
 export GUILD_NO_PLAN="test fixture"         # the plan phase is default-on; its own tests clear this
@@ -1831,6 +1832,21 @@ new_sid=$(cat "$GUILD_HOME/qm-session")
 [ -n "$new_sid" ] && [ "$new_sid" != "$old_sid" ] && ok "qm reset keeps a new conversation id for guild up" || bad "qm reset keeps a new conversation id for guild up"
 has "and starts the quartermaster fresh on it" "$(cat "$GUILD_HOME/last-claude-args")" "--session-id $new_sid"
 has "told to look at the roster and watch again" "$(cat "$GUILD_HOME/last-claude-args")" "fresh context"
+# the quartermaster's tab must not stay gone: guild qm heal (guild up, the war table) brings it back
+qmw() { tmux -L "$GUILD_TMUX_SOCKET" list-windows -t guild -F '#W' | grep -cx qm; }
+tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm
+is "the test closed the quartermaster's tab" "$(qmw)" "0"
+out=$("$GUILD" qm heal 2>&1); sleep 1
+is "guild qm heal reopens it" "$(qmw)" "1"
+qmcmd() { tmux -L "$GUILD_TMUX_SOCKET" list-panes -t guild:qm -F '#{pane_start_command}'; }
+has "in the same conversation" "$(qmcmd)" "--resume '$new_sid'"
+has "and says so in the history" "$(tail -1 "$GUILD_HOME/events.log")" "its tab was gone: reopened"
+is "with the tab there, heal does nothing" "$("$GUILD" qm heal 2>&1)" ""
+is "and opens no second tab" "$(qmw)" "1"
+tmux -L "$GUILD_TMUX_SOCKET" kill-window -t guild:qm
+"$GUILD" qm reset >/dev/null 2>&1; sleep 1
+is "qm reset with no tab opens one" "$(qmw)" "1"
+has "on a fresh conversation" "$(qmcmd)" "--session-id '$(cat "$GUILD_HOME/qm-session")'"
 
 
 # ── side menus: one per window, never split from an empty id ─────────────────
