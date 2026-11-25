@@ -7,6 +7,8 @@
   why.py wanted <slug> [brief.md]   exit 0 when this quest deserves a card (a feature or an
                          implementation), 1 for housekeeping: a PR review fix, a merge, a CI
                          or conflict chore, a rebase. Prints the reason.
+  why.py errand <slug> [brief.md]   exit 0 when the quest only runs something and reports
+                         (the tests locally, the app, a smoke check). Prints the reason.
 
 Five short answers in the guildmaster's own words: the pain, the rule, the decision, the
 impact, the future. The AI does not fill it in: thinking first is the point. When it is answered,
@@ -73,6 +75,27 @@ CHORE_SLUG = re.compile(r"^pr\d+[-_]|[-_](merge|review|ci|rebase|conflict|confli
 CHORE_WORDS = re.compile(r"\b(review (fix|fixes|items|comments)|requested changes|address(ing)? (the )?review|"
                          r"up to date with main|conflicts? with main|resolve (the )?(merge )?conflicts?|merge only|"
                          r"ci (is|run|job|fails|failing|flak)|flaky test|bump (the )?version|release notes only)\b", re.I)
+
+
+# An errand runs something and reports what it saw: the tests locally, the app, a smoke check.
+# It builds nothing, so it has no plan, no contract, no checklist and no wrap-up.
+ERRAND_SLUG = re.compile(r"(^|[-_])(local-tests?|test-locally|run-tests|run-local|smoke|smoke-tests?|start-app)([-_]|$)")
+ERRAND_WORDS = re.compile(r"\b(run (the )?(full )?(tests?|test suite|suite|app|stack) locally|test (it |this )?locally|"
+                          r"local tests?( run)?|smoke test|start the (app|stack|backend|frontend) (and|to) (check|see|test))\b", re.I)
+
+
+def errand(slug, brief=""):
+    """(True, why) when the quest only runs something and reports; (False, "") otherwise."""
+    m = ERRAND_SLUG.search(slug or "")
+    if m:
+        return True, f"the slug says errand ({m.group(2)})"
+    # only when the brief opens with it: "add X, then test locally" is a feature
+    body = "\n".join(l for l in (brief or "").splitlines() if not l.lstrip().startswith("#"))
+    head = re.sub(r"^\W*(please\s+|just\s+)?", "", body.lstrip(), flags=re.I)
+    m = ERRAND_WORDS.match(head)
+    if m:
+        return True, f"the brief says errand ({m.group(0)})"
+    return False, ""
 
 
 def wanted(slug, brief=""):
@@ -203,6 +226,12 @@ if __name__ == "__main__":
         brief = open(a[2]).read() if len(a) > 2 and os.path.exists(a[2]) else ""
         ok, why_not = wanted(a[1] if len(a) > 1 else "", brief)
         print("why card: a feature or implementation, the card is on" if ok else f"why card: skipped, {why_not}")
+        raise SystemExit(0 if ok else 1)
+    if a and a[0] == "errand":
+        brief = open(a[2]).read() if len(a) > 2 and os.path.exists(a[2]) else ""
+        ok, why = errand(a[1] if len(a) > 1 else "", brief)
+        if ok:
+            print(why)
         raise SystemExit(0 if ok else 1)
     if a == ["prune"]:
         gone = prune()

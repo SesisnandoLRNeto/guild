@@ -37,6 +37,9 @@ guild quest <slug> --repo PATH [--base REF] [--harness NAME] [--model M | --tier
                                     plan board before the fix, and the trial checks it failed before and passes now
                    [--scout]             a scout (ranger): an investigation in its own worktree that ends in
                                     findings.md with evidence and a recommendation; never a trial or a PR
+                   [--errand]            an errand: run the tests, the app or a check and report. No plan,
+                                    contract, checklist or wrap-up; done needs the result as its note.
+                                    Found by itself when the brief opens with "run the tests locally" etc.
                    [--why | --no-why]    the Why card is optional: --why puts one on the docket. Rule
                                     changes are confirmed in the weekly digest (/rules/week)
                    [--effort low|medium|high|xhigh|max] [--budget DOLLARS]
@@ -863,8 +866,9 @@ cmd_quest() {
       --guarded)
         if [ -n "${2:-}" ] && [ "${2#--}" = "${2:-}" ]; then guarded="$2"; shift 2
         else guarded="the guildmaster validates it before the PR"; shift; fi ;;
-      --bug) [ -z "$kind" ] || die "--bug and --scout are two kinds of quest; pick one"; kind=bug; shift ;;
-      --scout) [ -z "$kind" ] || die "--bug and --scout are two kinds of quest; pick one"; kind=scout; shift ;;
+      --bug) [ -z "$kind" ] || die "--bug, --scout and --errand are kinds of quest; pick one"; kind=bug; shift ;;
+      --scout) [ -z "$kind" ] || die "--bug, --scout and --errand are kinds of quest; pick one"; kind=scout; shift ;;
+      --errand) [ -z "$kind" ] || die "--bug, --scout and --errand are kinds of quest; pick one"; kind=errand; shift ;;
       --from-scout) from_scout="$2"; shift 2 ;;
       --effort) effort="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
@@ -934,6 +938,8 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
     noplan="scout: an investigation, nothing to build"
     [ -n "$noaccept" ] || noaccept="scout: ends in findings, not code"
     export GUILD_NO_WHY=1
+  elif [ "$kind" = errand ]; then
+    [ -z "$quick$dagger$guarded$parent$plan" ] || die "--errand runs something and reports: it does not mix with --quick, --epic-dagger, --guarded, --plan or a helper"
   fi
   if [ -n "$dagger" ]; then
     [ -n "$quick" ] || quick="$dagger"
@@ -958,6 +964,18 @@ print(1 if m.get('parent')==sys.argv[3] and s not in ('done','failed') else '')"
   # Housekeeping (a merge, conflicts, a review fix, a CI chore) has nothing to plan, accept or
   # validate: the PR it serves already holds all of that. It gets no plan, no contract and no
   # checklist; the trial stays, so the result is still reviewed and tested. --plan keeps the plan.
+  # An errand (run the tests locally, start the app and look) builds nothing: no plan, no
+  # contract, no checklist, no wrap-up. It ends in a result note.
+  local errand_why=""
+  if [ -z "$kind$plan$quick$dagger$guarded$parent" ] && errand_why=$(python3 "$GUILD_REPO/bin/why.py" errand "$slug" "$brief_tmp" 2>/dev/null); then
+    kind=errand
+  fi
+  if [ "$kind" = errand ]; then
+    errand_why="errand: ${errand_why:-the guildmaster marked it --errand}"
+    noplan="$errand_why"
+    [ -n "$noaccept" ] || noaccept="$errand_why"
+    export GUILD_NO_WHY=1
+  fi
   local light=""
   if [ -z "$plan" ] && [ -z "$kind" ] && [ -z "$guarded" ] && [ -z "$quick" ] && [ -z "$parent" ] && [ -z "${GUILD_WHY:-}" ] \
      && ! light=$(python3 "$GUILD_REPO/bin/why.py" wanted "$slug" "$brief_tmp" 2>/dev/null); then
@@ -1150,6 +1168,26 @@ You are the ranger: you investigate and report. Your worktree and branch \`$bran
 - Finish with \`guild status $slug done "<one line: the answer>"\`. Guild refuses done until findings.md has both sections. The guildmaster may then run \`guild promote $slug\`, which starts a normal quest from a clean base with your findings in its brief. Your code stays behind.
 SCOUT
   fi
+  if [ "$kind" = errand ]; then cat >> "$q/prompt.md" <<ERRAND
+
+## This is an errand: run it and report
+
+You run something and say what you saw: the tests, the app, a check. Nothing is built here.
+- No plan phase, no acceptance contract, no validation checklist, no wrap-up page, no PR.
+- If you find a bug, do not fix it here. Report it in your result, or ask on the war table (\`guild ask\`) when the guildmaster should decide now.
+- Finish with \`guild status $slug done "<result: what you ran, what passed, what failed and where>"\`. Guild refuses done without that note.
+ERRAND
+  fi
+  if [ -n "$light" ]; then cat >> "$q/prompt.md" <<LIGHT
+
+## This is housekeeping on a PR that already exists
+
+($light.) The PR's own quest already has the plan, the impact map and the wrap-up.
+- No plan phase, no acceptance contract, no validation checklist and no wrap-up page. The trial stays.
+- Finish with \`guild status $slug done "<what you fixed, and the PR url>"\`. Guild adds that note to the PR's wrap-up, under "Fixed after this report".
+- If a fix changes what a business rule does (a reviewer asked for different behavior), start the note with \`Rule change:\` and say the before and after in plain words. It is highlighted on the wrap-up.
+LIGHT
+  fi
   if [ -n "$from_scout" ]; then cat >> "$q/prompt.md" <<PROMOTED
 
 ## Promoted from scout \`$from_scout\`
@@ -1212,7 +1250,8 @@ PLAN
       echo "${why_word:-why card: skipped}"
     fi
   fi
-  [ -n "$light" ] && echo "light quest ($light): no plan, no acceptance contract, no checklist; the trial stays"
+  [ -n "$light" ] && echo "light quest ($light): no plan, no acceptance contract, no checklist, no wrap-up; the trial stays"
+  [ "$kind" = errand ] && echo "$errand_why: no plan, no acceptance contract, no checklist, no wrap-up; it ends in a result note"
   echo "quest $slug: $harness${model:+/$model}${effort:+ ($effort effort)}${budget:+, cap \$$budget} on $(basename "$repo") [$base] branch=$branch identity=${email:-git default}"
 }
 
@@ -1398,7 +1437,16 @@ cmd_status() {
   done
   need_quest "$slug"
   [ -n "$(quest_quick "$slug")" ] && export GUILD_NO_SCENARIOS=1
-  [ -n "$(quest_light "$slug")" ] && export GUILD_NO_SCENARIOS=1
+  # Housekeeping and errands have no wrap-up of their own (and so no impact map): a housekeeping
+  # note joins the PR's own wrap-up, an errand ends in its result note.
+  local light_why; light_why=$(quest_light "$slug")
+  [ -n "$light_why" ] && export GUILD_NO_SCENARIOS=1
+  [ -n "$light_why" ] && [ -z "$(wrapup_of "$slug")" ] && export GUILD_NO_WRAPUP=1
+  if [ "$(quest_kind "$slug")" = errand ]; then
+    export GUILD_NO_SCENARIOS=1
+    [ -z "$(wrapup_of "$slug")" ] && export GUILD_NO_WRAPUP=1
+    [ "$state" = done ] && [ -z "$note" ] && die "an errand ends in its result: guild status $slug done \"<what you ran, what passed, what failed and where>\""
+  fi
   if [ -n "$(quest_dagger "$slug")" ]; then
     export GUILD_NO_WRAPUP=1 GUILD_NO_SCENARIOS=1
     [ "$state" = needs-decision ] && dagger_guard "$slug"
@@ -1470,7 +1518,7 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   [ "$state" = done ] && [ -n "${GUILD_NO_IMPACT:-}" ] && note="$note (no impact section)"
   [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ] && note="$note (no validation scenarios)"
   if [ "$state" = done ] && [ -n "${GUILD_NO_SCENARIOS:-}" ]; then
-    printf '%s\n' "${note% (no*}" > "$(qdir "$slug")/scenarios.waived"
+    printf '%s\n' "${note%% (no*}" > "$(qdir "$slug")/scenarios.waived"
   fi
   # An adventurer often reports the same "done" two or three times in a row. A repeat changes
   # nothing, so it must not log, open the wrap-up or send the message again.
@@ -1485,6 +1533,15 @@ $(printf '%s\n' "$problems" | sed 's/^/     - /')
   [ "$state" = working ] && rm -f "$(qdir "$slug")/paused"
   printf '%s\t%s\t%s\n' "$state" "$note" "$(now)" > "$(qdir "$slug")/status"
   event "$slug" "$state" "$note"
+  # A housekeeping fix joins the wrap-up of the quest that opened the PR. That page is not
+  # reopened: the guildmaster sees it there next time, with the rule changes marked.
+  if [ "$state" = done ] && [ -n "$light_why" ] && [ -z "$(wrapup_of "$slug")" ]; then
+    local served; served=$(python3 "$GUILD_REPO/bin/followups.py" add "$slug" "${note%% (no*}" 2>/dev/null || true)
+    if [ -n "$served" ]; then
+      local surl; surl="$(python3 "$GUILD_REPO/bin/wartable.py" url)b/$served/$(wrapup_of "$served")/"
+      event "$served" "followup" "fixed after the wrap-up by $slug: ${note%% (no*} -> $surl"
+    fi
+  fi
   # The wrap-up waits hidden until the end: it opens now, when the quest really is done.
   if [ "$state" = done ] && [ -z "${GUILD_NO_WRAPUP:-}" ]; then
     local w; w=$(wrapup_of "$slug")
